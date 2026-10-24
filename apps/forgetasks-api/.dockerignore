@@ -1,0 +1,38 @@
+# Build context exclusions for ForgeTasks API
+# Exclude version control and metadata
+.git/
+.gitignore
+.gitattributes
+
+# Exclude secrets, credentials and local environment files
+.env
+.env.*
+*.key
+*.pem
+*.secret
+secrets/
+
+# Exclude local build artifacts and caches
+target/
+dependency-reduced-pom.xml
+release.properties
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.tag
+pom.xml.next
+
+# Exclude IDE and editor configurations
+.idea/
+.vscode/
+*.iml
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Exclude documentation and logs
+*.md
+*.log
+logs/
+reports/
+coverage/
