@@ -1,0 +1,64 @@
+﻿# Dependabot configuration for ForgeOps
+# Gate G03: Supply Chain Security — Automated Dependency Updates
+#
+# Scope:
+#   - GitHub Actions workflow action versions (weekly)
+#   - Maven Java dependencies (weekly)
+#   - Docker base image digests (weekly via ecosystem: docker)
+#
+# All updates target master branch and require a pull request (never auto-merge).
+# The CI workflow acts as the mandatory status check before any merge.
+
+version: 2
+
+updates:
+  # GitHub Actions version updates
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "build(deps)"
+    reviewers:
+      - ${{ github.repository_owner }}
+
+  # Maven dependency updates for ForgeTasks API
+  - package-ecosystem: maven
+    directory: /apps/forgetasks-api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - java
+    commit-message:
+      prefix: "build(deps)"
+    ignore:
+      # Do not auto-update Spring Boot major versions; those require manual ADR review
+      - dependency-name: "org.springframework.boot:*"
+        update-types: ["version-update:semver-major"]
+
+  # Docker base image updates
+  - package-ecosystem: docker
+    directory: /apps/forgetasks-api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "build(deps)"

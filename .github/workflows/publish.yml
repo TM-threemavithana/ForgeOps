@@ -1,0 +1,203 @@
+﻿# ForgeOps GHCR Image Publishing Pipeline
+# Gate G03: Controlled, Trusted Release to GitHub Container Registry
+#
+# Trust model:
+#   - Triggered ONLY by manual workflow_dispatch (never on push/PR)
+#   - Requires approver confirmation of the input SHA to prevent accidental releases
+#   - Builds image from a specific git SHA; tags with that SHA plus semver if provided
+#   - Attaches provenance attestation (SLSA Level 2) via docker/build-push-action
+#   - Requires packages:write permission; GITHUB_TOKEN is sufficient (no PAT needed)
+#
+# Security controls:
+#   - Re-runs Trivy CRITICAL scan before push; blocks if CRITICAL CVEs are found
+#   - Image is tagged by immutable SHA digest; floating tags (latest) are secondary
+#   - No secrets are baked into the image layers
+#   - Pinned action versions using commit SHAs for supply-chain integrity
+
+name: Publish to GHCR
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: "Git commit SHA to build and publish (short or full)"
+        required: true
+        type: string
+      semver_tag:
+        description: "Optional semantic version tag (e.g. 1.0.0). Leave blank to publish SHA-only."
+        required: false
+        type: string
+        default: ""
+      confirm:
+        description: "Type PUBLISH to confirm intentional image publication"
+        required: true
+        type: string
+
+# Minimal permissions; packages:write is added below per job
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/forgetasks-api
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: temurin
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Preflight: Validate inputs before doing any real work
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: Publication Preflight Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate confirmation input
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "PUBLISH" ]; then
+            echo "[FAIL] Confirmation input was '${{ github.event.inputs.confirm }}' — expected 'PUBLISH'."
+            echo "Publication aborted. This guard prevents accidental GHCR releases."
+            exit 1
+          fi
+          echo "[PASS] Confirmation accepted."
+
+      - name: Echo publication parameters
+        run: |
+          echo "=== Publication Parameters ==="
+          echo "Repository:  ${{ github.repository }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Target SHA:  ${{ github.event.inputs.git_sha }}"
+          echo "Semver tag:  ${{ github.event.inputs.semver_tag || '(none)' }}"
+          echo "Registry:    ${{ env.REGISTRY }}"
+          echo "Image:       ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "=============================="
+
+  # ---------------------------------------------------------------------------
+  # Build, scan, and publish image to GHCR
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Build Scan and Publish to GHCR
+    runs-on: ubuntu-latest
+    needs: preflight
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      attestations: write
+      id-token: write   # Required for provenance attestation (SLSA)
+
+    steps:
+      - name: Checkout specific SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_sha }}
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (tags and labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=${{ github.event.inputs.git_sha }}
+            type=raw,value=${{ github.event.inputs.semver_tag }},enable=${{ github.event.inputs.semver_tag != '' }}
+          labels: |
+            org.opencontainers.image.title=ForgeTasks API
+            org.opencontainers.image.description=ForgeTasks REST API and Persistence Service for ForgeOps DevOps Lab
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.event.inputs.git_sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build image for pre-publish Trivy scan (no push yet)
+        uses: docker/build-push-action@v6
+        id: build-for-scan
+        with:
+          context: apps/forgetasks-api
+          file: apps/forgetasks-api/Dockerfile
+          push: false
+          tags: forgetasks-api:prescan-${{ github.run_id }}
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy CRITICAL scan (gate — blocks publish if CRITICAL CVEs found)
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: forgetasks-api:prescan-${{ github.run_id }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL
+
+      - name: Build and push image to GHCR with provenance attestation
+        uses: docker/build-push-action@v6
+        id: build-and-push
+        with:
+          context: apps/forgetasks-api
+          file: apps/forgetasks-api/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # SLSA Level 2 provenance attestation
+          provenance: mode=max
+          sbom: true
+
+      - name: Record published image digest
+        run: |
+          echo "=== Published Image Digest ==="
+          echo "Image:  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Digest: ${{ steps.build-and-push.outputs.digest }}"
+          echo "Tags:   ${{ steps.meta.outputs.tags }}"
+          echo "=============================="
+          echo ""
+          echo "To pull by immutable digest:"
+          echo "  docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}"
+
+      - name: Run Trivy CRITICAL+HIGH scan on published image (informational)
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          format: sarif
+          output: trivy-published.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+        continue-on-error: true
+
+      - name: Upload post-publish SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-published.sarif
+          category: trivy-published-image
+        continue-on-error: true

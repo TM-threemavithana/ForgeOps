@@ -4,7 +4,9 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
-[![Gate Status](https://img.shields.io/badge/Gate%20G02-PASSED-success.svg)](docs/evidence/G02/acceptance.md)
+[![Gate G02](https://img.shields.io/badge/Gate%20G02-PASSED-success.svg)](docs/evidence/G02/acceptance.md)
+[![Gate G03](https://img.shields.io/badge/Gate%20G03-PASSED-success.svg)](docs/evidence/G03/acceptance.md)
+[![CI](https://github.com/TM-threemavithana/ForgeOps/actions/workflows/ci.yml/badge.svg)](https://github.com/TM-threemavithana/ForgeOps/actions/workflows/ci.yml)
 
 ForgeOps is a professional, production-grade local DevOps and Platform Engineering portfolio project. It is designed to demonstrate the complete, robust software delivery lifecycle:
 
@@ -51,7 +53,7 @@ Implementation progress is governed by strict gated reviews (Gates G00 through G
 | **G00** | Preflight, Hardware Feasibility & Architecture Baseline | **PASSED** | [G00 Preflight Report](docs/evidence/G00-preflight.md) |
 | **G01** | ForgeTasks API Backend & PostgreSQL Schema Correctness | **PASSED** | [G01 Acceptance Report](docs/evidence/G01/acceptance.md) |
 | **G02** | Multi-Stage Containerization & Docker Compose Stack | **PASSED** | [G02 Acceptance Report](docs/evidence/G02/acceptance.md) |
-| **G03** | Local & GitHub Actions CI Pipelines | *Planned* | Deferred to Gate G03 |
+| **G03** | Local & GitHub Actions CI Pipelines, Trust Boundaries & GHCR | **PASSED** | [G03 Acceptance Report](docs/evidence/G03/acceptance.md) |
 | **G04** | Ansible Linux Host Configuration Management | *Planned* | Deferred to Gate G04 |
 | **G05** | Terraform Local Docker Lab Fixture | *Planned* | Deferred to Gate G05 |
 | **G06** | Local Kind Kubernetes Cluster & CNI | *Planned* | Deferred to Gate G06 |
@@ -66,7 +68,7 @@ Implementation progress is governed by strict gated reviews (Gates G00 through G
 | **G15** | Final Project Showcase, Architectural Portfolio & Video | *Planned* | Deferred to Gate G15 |
 
 > [!NOTE]
-> Future gates G03–G15 are planned in the [Master Implementation Plan](docs/FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md) and will be implemented sequentially upon review approval.
+> Gates G04–G15 are planned in the [Master Implementation Plan](docs/FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md) and will be implemented sequentially upon review approval.
 
 ---
 
@@ -87,7 +89,65 @@ make doctor
 
 ---
 
+## CI/CD Pipeline (Gate G03)
+
+G03 implements a secure, layered CI/CD system with an explicit trust boundary between automated CI and controlled CD.
+
+### CI — Automatic (Push & Pull Request)
+
+Every push to `master` and every pull request automatically triggers:
+
+| Job | What it does |
+|---|---|
+| **Build & Test** | `./mvnw clean verify` — 43 tests, JaCoCo ≥80% coverage gate |
+| **Docker Build Validate** | Multi-stage build (no push), non-root UID 10001 check, label inspection |
+| **Trivy Scan** | Zero CRITICAL unfixed CVEs gate; SARIF uploaded to GitHub Code Scanning |
+| **Gitleaks** | Full repository history secret leak detection |
+| **CI Gate** | Aggregated required status check — blocks merge if any job fails |
+
+The CI workflow **never** pushes to GHCR. All jobs run with `contents: read` minimum permissions.
+
+### CD — Controlled Publish to GHCR
+
+Image publishing requires **manual** `workflow_dispatch` with explicit confirmation:
+
+```
+Actions → Publish to GHCR → Run workflow
+  git_sha:    <full commit SHA>
+  semver_tag: 1.0.0        (optional)
+  confirm:    PUBLISH      (must type this exactly)
+```
+
+The publish workflow re-runs Trivy before any push. Published images include SLSA Level 2 provenance attestation and SBOM.
+
+```bash
+# Pull by immutable SHA256 digest (never use floating :latest in production):
+docker pull ghcr.io/TM-threemavithana/forgetasks-api@sha256:<digest>
+```
+
+### Local CI Replication
+
+```bash
+# Full local CI (Maven verify + Docker build + optional Trivy/Gitleaks)
+make ci-local
+
+# Standalone Trivy scan (requires trivy installed)
+make trivy-scan
+
+# Lint workflow YAML files (requires actionlint installed)
+make actionlint
+```
+
+### Branch Protection Setup
+
+Configure in GitHub → Settings → Branches → `master`:
+- [x] Require status checks: **CI Gate**
+- [x] Require branches to be up to date before merging
+
+---
+
 ## Building and Testing
+
 
 The project uses a project-local Maven Wrapper (`mvnw`) requiring no pre-installed Maven.
 
