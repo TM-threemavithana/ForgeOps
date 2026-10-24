@@ -1,0 +1,82 @@
+# ForgeOps Repository .gitignore
+# Strictly prevents accidental secret leaks, state files, and build artifacts
+
+# --- Secrets, Environment and Private Config ---
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.crt
+*.p12
+*.jks
+*.pfx
+secrets/
+private/
+credentials/
+*.secret
+id_rsa*
+id_ed25519*
+
+# --- Kubernetes & Clusters ---
+*kubeconfig*
+.kube/
+*.k8s-context
+
+# --- Terraform State & Local Caches ---
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl.tmp
+crash.log
+
+# --- Ansible ---
+*.retry
+.ansible/
+inventory.override.yml
+hosts.local.yml
+
+# --- Database & Backups ---
+*.dump
+*.sql.gz
+*.bak
+backups/
+data/
+*.rdb
+
+# --- Java / Maven ---
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Docker & Compose Overrides ---
+docker-compose.override.yml
+
+# --- Logs & Test Artifacts ---
+*.log
+logs/
+reports/
+coverage/
+.scannerwork/
+trivy-results.json
+gitleaks-report.json
+
+# --- OS & IDE Metadata ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+*.iml
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*~

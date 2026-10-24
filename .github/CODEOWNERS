@@ -1,0 +1,24 @@
+# ForgeOps Codeowners
+# Defines review responsibilities across components
+
+# Default owner for entire repository
+* @User
+
+# Infrastructure & IaC
+/infrastructure/terraform/ @User
+/infrastructure/ansible/ @User
+
+# Kubernetes & GitOps
+/platform/kind/ @User
+/platform/charts/ @User
+/platform/argocd/ @User
+
+# Observability
+/observability/ @User
+
+# Security & Policies
+/security/ @User
+/.github/workflows/ @User
+
+# Core Application
+/apps/forgetasks-api/ @User
