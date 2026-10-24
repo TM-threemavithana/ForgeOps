@@ -155,7 +155,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           vuln-type: os,library
-          severity: CRITICAL
+          severity: CRITICAL,HIGH
 
       - name: Build and push image to GHCR with provenance attestation
         uses: docker/build-push-action@v6
