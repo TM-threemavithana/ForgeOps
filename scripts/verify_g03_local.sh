@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # ForgeOps — G03 Local CI Verification Script
 # Replicates the GitHub Actions CI pipeline steps that can run locally.
 # Run from the repository root (WSL Ubuntu recommended).
@@ -98,12 +98,12 @@ else
           --ignore-unfixed \
           --vuln-type os,library \
           --scanners vuln \
-          --severity CRITICAL \
+          --severity CRITICAL,HIGH \
           --quiet \
           "$IMAGE_TAG"; then
-          step_pass "Trivy scan: zero CRITICAL unfixed vulnerabilities"
+          step_pass "Trivy scan: zero CRITICAL/HIGH unfixed vulnerabilities"
         else
-          step_fail "Trivy scan: CRITICAL vulnerabilities found (see output above)"
+          step_fail "Trivy scan: CRITICAL or HIGH vulnerabilities found (see output above)"
         fi
       else
         step_warn "Trivy not installed — skipping local scan."
@@ -143,6 +143,14 @@ if command -v actionlint > /dev/null 2>&1; then
 else
   step_warn "actionlint not installed — skipping workflow lint."
   step_warn "Install: https://github.com/rhysd/actionlint#installation"
+fi
+
+# ---- Step 7: GHCR Publishing Security Hardening Validation ---------------
+step_info "Validating GHCR publishing workflow security hardening..."
+if python3 scripts/test_publish_hardening.py > /dev/null 2>&1; then
+  step_pass "GHCR publishing workflow security hardening verified (40 checks passed)"
+else
+  step_fail "GHCR publishing workflow security hardening check failed"
 fi
 
 # ---- Summary -------------------------------------------------------------
