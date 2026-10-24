@@ -148,7 +148,7 @@ fi
 # ---- Step 7: GHCR Publishing Security Hardening Validation ---------------
 step_info "Validating GHCR publishing workflow security hardening..."
 if python3 scripts/test_publish_hardening.py > /dev/null 2>&1; then
-  step_pass "GHCR publishing workflow security hardening verified (40 checks passed)"
+  step_pass "GHCR publishing workflow security hardening verified (70 checks passed)"
 else
   step_fail "GHCR publishing workflow security hardening check failed"
 fi

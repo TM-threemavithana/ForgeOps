@@ -3,7 +3,7 @@
 **Date:** 2026-10-24
 **Evaluator:** Principal DevOps Engineer, CI/CD Architect & Container Security Reviewer
 **Gate:** G03 — Local & GitHub Actions CI Pipelines, Trust Boundaries and GHCR Publishing
-**Status:** PASSED (Local verification complete; GitHub Actions pending repository push)
+**Status:** CONDITIONAL / PENDING 1.0.1 VERIFICATION (Local verification complete; First GHCR release run 40121874920 completed with registry push, but post-push digest check failed; workflow fix verified with 70 automated tests)
 **Repository Working Tree:** Clean at local verification
 **Execution Profile:** Core Profile (Local-First, Zero Cloud Dependencies)
 
@@ -91,9 +91,10 @@ Key deliverables:
 | Build-once integrity | Build once, load locally, zero rebuild | `publish` step 4 (`load: true`, `push: false`) |
 | Tamper verification | Candidate Image ID verified pre/post scan | `publish` step 5 & 10 (`docker inspect`) |
 | Pre-push Trivy gate | Zero CRITICAL or HIGH unfixed CVEs | `publish` step 6 (`exit-code: 1`, `severity: CRITICAL,HIGH`) |
-| Provenance | SLSA Build Provenance attestation | `publish` step 13 (`actions/attest-build-provenance@v2`) |
+| Digest verification | Authoritative GHCR query (`imagetools`) across all tags | `publish` step 12 (`buildx imagetools inspect --format '{{.Manifest.Digest}}'`) |
+| Config ID match | Remote config digest matches scanned candidate ID | `publish` step 12 (`buildx imagetools inspect --raw`) |
+| Provenance | Mandatory SLSA Build Provenance attestation | `publish` step 13 (`actions/attest-build-provenance@v2`, no continue-on-error) |
 | SBOM | CycloneDX SBOM generated and retained | `publish` step 8 & 9 (Trivy + `upload-artifact@v4`) |
-| Digest recording | Captured from `.RepoDigests` | `publish` step 12 |
 | Scoped permissions | `packages:write` scoped strictly to `publish` | Workflow job permission blocks |
 
 ### A-303: Local CI counterpart
@@ -224,13 +225,45 @@ additional configuration is required beyond the workflow file permissions.
 
 Actions → "Publish to GHCR" → Run workflow:
 - **git_sha**: `<full commit SHA to release>`
-- **semver_tag**: `1.0.0` (or leave blank for SHA-only tagging)
+- **semver_tag**: `1.0.1` (or leave blank for SHA-only tagging; do NOT reuse `1.0.0`)
 - **confirm**: `PUBLISH`
 
 Pull the published image by its immutable digest:
 ```bash
 docker pull ghcr.io/<owner>/forgetasks-api@sha256:<digest>
 ```
+
+### 8.5 Post-Release Incident Record (Run 40121874920) & Remediation
+
+On October 24, 2026, the first controlled publication was executed against master commit `995a92954000f987736875be6881912a74b8b07e` (GitHub Actions Run `40121874920`).
+
+**Observed Incident:**
+1. All preflight validations (commit format, master HEAD, passing CI Gate) succeeded.
+2. The manual `release` environment approval succeeded.
+3. Docker successfully built the candidate image once, verified the candidate ID, passed Trivy CRITICAL and HIGH gates (0 vulnerabilities), and pushed all three tags:
+   - `ghcr.io/tm-threemavithana/forgetasks-api:sha-995a929`
+   - `ghcr.io/tm-threemavithana/forgetasks-api:995a92954000f987736875be6881912a74b8b07e`
+   - `ghcr.io/tm-threemavithana/forgetasks-api:1.0.0`
+4. Published registry manifest digest confirmed by GHCR:
+   `sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba`
+5. The workflow then aborted at step `Record and verify published image digest`:
+   `Error: Could not determine published repository digest from Docker daemon.`
+6. Downstream consequence: The workflow terminated before step 13 (`Attest build provenance`), leaving the published `1.0.0` image without an attestation record.
+
+**Root Causes:**
+1. *Case Mismatch in Pattern Matching:* `REGISTRY_IMAGE` in the workflow contained `ghcr.io/TM-threemavithana/forgetasks-api` (preserving GitHub repository casing), but GHCR and `docker/metadata-action` automatically lowercase registry image references (`ghcr.io/tm-threemavithana/forgetasks-api`). The pattern `grep "^${REGISTRY_IMAGE}@"` failed to match in `.RepoDigests`.
+2. *Fragile Local Daemon Reliance:* Relying on local daemon `.RepoDigests` rather than querying the registry directly is brittle and prone to caching/formatting discrepancies.
+
+**Remediation Applied on branch `g03-registry-digest-fix`:**
+1. Canonical lowercase image normalization in `validate-release` (`canonical_image` output).
+2. Authoritative registry manifest digest lookup via `docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag"` across every published tag.
+3. Multi-tag consistency validation ensuring all tags resolve to the identical 64-char sha256 digest.
+4. Remote manifest configuration digest comparison to pre-push scanned candidate image ID.
+5. Mandatory SLSA build provenance attestation: removed `continue-on-error: true`.
+6. Expanded automated regression test suite to 70 checks in `scripts/test_publish_hardening.py` with 100% pass rate.
+
+**Registry Immutability & Next Release Procedure:**
+Tag `1.0.0` is already published in GHCR and must NOT be overwritten. The next controlled publication after this fix is merged to master must use version `1.0.1` (or SHA-only tags).
 
 ---
 
@@ -239,15 +272,15 @@ docker pull ghcr.io/<owner>/forgetasks-api@sha256:<digest>
 | Acceptance Test | Result | Evidence |
 |---|---|---|
 | A-301: CI workflow syntax and trust model | PASS | File inspection, local verification |
-| A-302: Publish workflow safety controls | PASS | File inspection |
+| A-302: Publish workflow safety controls | PASS | 70 automated regression tests in `test_publish_hardening.py` |
 | A-303: Local CI counterpart (`make ci-local`) | PASS | `verify_g03_local.sh` output |
 | Maven verify (43 tests, JaCoCo ≥80%) | PASS | Local run included in A-303 |
 | Docker non-root validation | PASS | Local run included in A-303 |
 | No secrets in workflow files | PASS | No PATs; GITHUB_TOKEN only |
 | Dependabot supply-chain coverage | PASS | `.github/dependabot.yml` |
 | G01 regression | PASS | 43/43 tests, BUILD SUCCESS |
+| Production Release Verification | CONDITIONAL | Run `40121874920` pushed `1.0.0` to GHCR (`sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba`); post-push digest check failed; fix implemented and verified locally; awaiting release of `1.0.1` on master |
 
-**G03 Status: PASSED (Local verification complete)**
+**G03 Status: CONDITIONAL / PENDING 1.0.1 VERIFICATION**
 
-Awaiting user-controlled `git push origin master` to activate GitHub Actions CI.
-Once pushed, the `ci-gate` status check automatically governs all future merges.
+Full gate acceptance requires merging branch `g03-registry-digest-fix` to `master`, verifying the master `CI Gate`, and executing a controlled GHCR release for `1.0.1` with successful authoritative digest verification and SLSA provenance attestation.
