@@ -12,12 +12,22 @@ help:
 	@echo "  make doctor         - Inspect environment, toolchain, hardware & execution profile"
 	@echo "  make lint           - Lint manifests, shell scripts, and documentation"
 	@echo "  make g00-evidence   - Verify G00 preflight evidence files and integrity"
+	@echo "  make build-api      - [G01] Build ForgeTasks API package"
+	@echo "  make test-api       - [G01] Run ForgeTasks API unit & integration tests"
 	@echo "  make compose-up     - [G02] Run local Docker Compose API + DB stack"
 	@echo "  make compose-down   - [G02] Stop local Docker Compose stack (preserves volumes)"
 	@echo "  make cluster-create - [G06] Create Kind Kubernetes cluster"
 	@echo "  make cluster-delete - [G06] Scoped Kind cluster deletion (requires CONFIRM=yes)"
 	@echo "  make tf-plan        - [G05] Run Terraform plan for local Docker lab"
 	@echo "  make ansible-check  - [G04] Run Ansible syntax check and dry-run on lab inventory"
+
+# --- ForgeTasks API Build & Test Targets ---
+.PHONY: build-api test-api
+build-api:
+	@cd apps/forgetasks-api && ./mvnw clean package -DskipTests
+
+test-api:
+	@cd apps/forgetasks-api && ./mvnw clean verify
 
 # --- Doctor / Diagnostics ---
 .PHONY: doctor
