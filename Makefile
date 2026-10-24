@@ -16,6 +16,9 @@ help:
 	@echo "  make test-api       - [G01] Run ForgeTasks API unit & integration tests"
 	@echo "  make compose-up     - [G02] Run local Docker Compose API + DB stack"
 	@echo "  make compose-down   - [G02] Stop local Docker Compose stack (preserves volumes)"
+	@echo "  make ci-local       - [G03] Run full local CI gate (build, test, Docker, Trivy)"
+	@echo "  make trivy-scan     - [G03] Run Trivy vulnerability scan on local Docker image"
+	@echo "  make actionlint     - [G03] Lint GitHub Actions workflow YAML files"
 	@echo "  make cluster-create - [G06] Create Kind Kubernetes cluster"
 	@echo "  make cluster-delete - [G06] Scoped Kind cluster deletion (requires CONFIRM=yes)"
 	@echo "  make tf-plan        - [G05] Run Terraform plan for local Docker lab"
@@ -28,6 +31,30 @@ build-api:
 
 test-api:
 	@cd apps/forgetasks-api && ./mvnw clean verify
+
+# --- G03 CI Targets ---
+.PHONY: ci-local trivy-scan actionlint
+ci-local:
+	@./scripts/verify_g03_local.sh
+
+trivy-scan:
+	@if ! command -v trivy > /dev/null 2>&1; then \
+		echo "[FAIL] trivy not installed. See https://aquasecurity.github.io/trivy/latest/getting-started/installation/"; \
+		exit 1; \
+	fi
+	@IMAGE_TAG="forgetasks-api:trivy-scan-local-$$(date +%s)"; \
+	 docker build -t "$$IMAGE_TAG" apps/forgetasks-api/ && \
+	 trivy image --exit-code 1 --ignore-unfixed --vuln-type os,library \
+	             --scanners vuln --severity CRITICAL,HIGH "$$IMAGE_TAG" && \
+	 docker rmi "$$IMAGE_TAG" 2>/dev/null || true
+
+actionlint:
+	@if command -v actionlint > /dev/null 2>&1; then \
+		echo "Linting GitHub Actions workflow files..."; \
+		actionlint .github/workflows/*.yml && echo "[PASS] All workflow files valid"; \
+	else \
+		echo "[WARN] actionlint not installed. Install: https://github.com/rhysd/actionlint"; \
+	fi
 
 # --- Docker Compose Lifecycle (G02) ---
 .PHONY: setup-secrets compose-build compose-up compose-down compose-ps compose-logs

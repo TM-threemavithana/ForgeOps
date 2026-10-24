@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix (RTM) — ForgeOps
 
-**Effective Date:** 2026-10-22  
-**Baseline Review:** Gate G00  
+**Effective Date:** 2026-10-24
+**Baseline Review:** Gate G03
 **Status Legend:**  
 - `PASSED`: Fully verified with tangible command/log evidence.  
 - `PASSED_LIM`: Verified with documented hardware/environment limitations.  
@@ -41,9 +41,9 @@
 | **REQ-P-01.1** | Multi-stage non-root Dockerfile | G02 | `apps/forgetasks-api/Dockerfile` | A-201 | **PASSED (G02)** |
 | **REQ-P-01.2** | Zero secrets in image layers | G02 | `apps/forgetasks-api/.dockerignore`, Trivy scan | A-201 | **PASSED (G02)** |
 | **REQ-P-01.3** | Compose API + PostgreSQL persistence | G02 | `compose.yaml`, `.env.example` | A-202 | **PASSED (G02)** |
-| **REQ-P-02.1** | Untrusted PR workflow (read-all) | G03 | `.github/workflows/pr-checks.yml` | A-301 | PLANNED |
-| **REQ-P-02.2** | Trusted release to GHCR by SHA256 | G03 | `.github/workflows/release.yml` | A-302 | PLANNED |
-| **REQ-P-02.3** | Offline local CI counterpart (`make ci`)| G03 | `Makefile`, local build scripts | A-302 | PLANNED |
+| **REQ-P-02.1** | Untrusted PR workflow (read-only) | G03 | `.github/workflows/ci.yml` | A-301 | **PASSED (G03)** |
+| **REQ-P-02.2** | Trusted release to GHCR by SHA256 | G03 | `.github/workflows/publish.yml` | A-302 | **PASSED (G03 — awaiting push)** |
+| **REQ-P-02.3** | Offline local CI counterpart (`make ci`)| G03 | `Makefile`, `scripts/verify_g03_local.sh` | A-303 | **PASSED (G03)** |
 | **REQ-P-03.1** | Local Kind cluster (`dev`/`staging`) | G06 | `platform/kind/core.yaml`, `scripts/cluster/create.sh` | A-601 | PLANNED |
 | **REQ-P-03.2** | Reusable Helm chart (`existingSecret`) | G07 | `platform/charts/forgetasks/` | A-701 | PLANNED |
 | **REQ-P-03.3** | Argo CD GitOps pull-based promotion | G08 | `platform/argocd/apps/`, `values-dev.yaml` | A-801 | PLANNED |
