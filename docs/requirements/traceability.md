@@ -14,22 +14,23 @@
 
 | Req ID | Requirement Summary | Gate | Primary Implementing File(s) | Verification Test ID | Current Status |
 |---|---|---|---|---|---|
-| **REQ-F-01.1** | Local user accounts & BCrypt hash | G01 | `apps/forgetasks-api/src/main/java/.../domain/Account.java` | A-101 | PLANNED |
-| **REQ-F-01.2** | Test bootstrap user fixture | G01 | `apps/forgetasks-api/src/test/resources/data-test.sql` | A-101 | PLANNED |
-| **REQ-F-01.3** | Owner-level isolation (404 on cross-user) | G01 | `apps/forgetasks-api/src/main/java/.../security/ProjectSecurity.java` | A-102 | PLANNED |
-| **REQ-F-02.1** | Project creation & validation | G01 | `apps/forgetasks-api/src/main/java/.../api/ProjectController.java` | A-101 | PLANNED |
-| **REQ-F-02.2** | Paginated & sorted project list | G01 | `apps/forgetasks-api/src/main/java/.../service/ProjectService.java` | A-101 | PLANNED |
-| **REQ-F-02.3** | Project conditional requests (`If-Match`/428/412/409) | G01 | `apps/forgetasks-api/src/main/java/.../domain/Project.java` | A-101 | PLANNED |
-| **REQ-F-03.1** | Task creation under owned project | G01 | `apps/forgetasks-api/src/main/java/.../api/TaskController.java` | A-101 | PLANNED |
-| **REQ-F-03.2** | Task status & priority enum validation | G01 | `apps/forgetasks-api/src/main/java/.../domain/Task.java` | A-101 | PLANNED |
-| **REQ-F-03.3** | Task filter, search & pagination | G01 | `apps/forgetasks-api/src/main/java/.../repository/TaskRepository.java`| A-101 | PLANNED |
-| **REQ-F-03.4** | Task conditional requests (`If-Match`/428/412/409) | G01 | `apps/forgetasks-api/src/main/java/.../service/TaskService.java` | A-101 | PLANNED |
-| **REQ-F-04.1** | Flyway relational schema migrations | G01 | `apps/forgetasks-api/src/main/resources/db/migration/V1__*.sql` | A-103 | PLANNED |
-| **REQ-F-04.2** | Expand/contract migration compatibility | G01, G10 | `docs/adr/ADR-0010*.md`, Flyway migration scripts | A-103 | PLANNED |
-| **REQ-F-04.4** | Prod migration vs dev seed data separation | G01 | `db/migration/` vs `db/dev-data/` / seeder bean | A-103 | PLANNED |
-| **REQ-F-05.1** | `/api/v1/` REST endpoint structure | G01 | `apps/forgetasks-api/src/main/java/.../api/` | A-101 | PLANNED |
-| **REQ-F-05.2** | RFC 9457 error model with `requestId` | G01 | `apps/forgetasks-api/src/main/java/.../api/GlobalExceptionHandler.java`| A-101 | PLANNED |
-| **REQ-F-05.3** | Actuator liveness/readiness & endpoint protection | G01 | `apps/forgetasks-api/src/main/resources/application.yml` | A-101 | PLANNED |
+| **REQ-F-01.1** | Local user accounts & BCrypt hash | G01 | `Account.java`, `AccountService.java`, `SecurityConfig.java` | `AccountApiIntegrationTest`, `SecurityIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-01.2** | Test bootstrap user fixture | G01 | `AbstractIntegrationTest.java`, `V1_1__dev_seed.sql` | `AccountApiIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-01.3** | Owner-level isolation (404 on cross-user) | G01 | `ProjectRepository.java`, `TaskRepository.java`, `ProjectService.java` | `ProjectApiIntegrationTest`, `TaskApiIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-02.1** | Project creation & validation | G01 | `ProjectController.java`, `ProjectService.java` | `ProjectApiIntegrationTest`, `ProjectServiceTest` | **PASSED (G01)** |
+| **REQ-F-02.2** | Paginated & sorted project list | G01 | `ProjectService.java`, `ProjectRepository.java` | `ProjectApiIntegrationTest`, `ProjectServiceTest` | **PASSED (G01)** |
+| **REQ-F-02.3** | Project conditional requests (`If-Match`/428/412/409) | G01 | `ProjectController.java`, `ETagUtils.java`, `GlobalExceptionHandler.java` | `ConcurrencyLockingIntegrationTest`, `ProjectApiIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-03.1** | Task creation under owned project | G01 | `TaskController.java`, `TaskService.java` | `TaskApiIntegrationTest`, `TaskServiceTest` | **PASSED (G01)** |
+| **REQ-F-03.2** | Task status & priority enum validation | G01 | `Task.java`, `TaskStatus.java`, `TaskPriority.java` | `TaskServiceTest`, `TaskApiIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-03.3** | Task filter, search & pagination | G01 | `TaskRepository.java`, `TaskService.java` | `TaskApiIntegrationTest`, `TaskServiceTest` | **PASSED (G01)** |
+| **REQ-F-03.4** | Task conditional requests (`If-Match`/428/412/409) | G01 | `TaskController.java`, `ETagUtils.java`, `TaskService.java` | `ConcurrencyLockingIntegrationTest`, `TaskApiIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-04.1** | Flyway relational schema migrations | G01 | `V1__init_schema.sql` | `FlywayMigrationIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-04.2** | Expand/contract migration compatibility | G01, G10 | `ADR-0010`, `V1__init_schema.sql` | `FlywayMigrationIntegrationTest` | **PASSED (G01 baseline verified)** |
+| **REQ-F-04.4** | Prod migration vs dev seed data separation | G01 | `db/migration/` vs `db/dev-data/` | `FlywayMigrationIntegrationTest` | **PASSED (G01)** |
+| **REQ-F-05.1** | `/api/v1/` REST endpoint structure | G01 | `AccountController.java`, `ProjectController.java`, `TaskController.java` | All Integration Tests & `verify_runtime.sh` | **PASSED (G01)** |
+| **REQ-F-05.2** | RFC 9457 error model with `requestId` | G01 | `GlobalExceptionHandler.java`, `RequestCorrelationFilter.java` | `GlobalExceptionHandler`, Integration Tests | **PASSED (G01)** |
+| **REQ-F-05.3** | Actuator liveness/readiness & endpoint protection | G01 | `application.yml`, `SecurityConfig.java` | `ObservabilityIntegrationTest`, `SecurityIntegrationTest` | **PASSED (G01)** |
+
 
 ---
 
@@ -73,7 +74,7 @@
 | **NFR-PERF-01**| p95 latency < 500 ms under k6 load | G12 | k6 report, Prometheus histogram, `A-1201`, `DR-05` | PLANNED |
 | **NFR-REL-01** | Stateless pod failure replacement | G06, G12 | Pod kill test, `A-602`, `DR-01` | PLANNED |
 | **NFR-RES-01** | Core profile memory & disk governance | G00–G15 | `docs/evidence/G00-preflight.md`, `A-001` | **PASSED_LIM (6.6 GB free SSD limitation)** |
-| **NFR-COV-01** | Jacoco test coverage ≥ 80% | G01 | Maven test report, Jacoco XML in CI | PLANNED |
+| **NFR-COV-01** | Jacoco test coverage ≥ 80% | G01 | Maven JaCoCo report (`target/site/jacoco/index.html`) | **PASSED (G01: 94.09% instruction, 91.23% branch)** |
 | **GOV-001** | Zero paid cloud dependency | G00–G15 | Zero cloud SDKs / credentials required | **PASSED** |
 | **GOV-002** | Single owner per resource | G00–G15 | `docs/adr/ADR-0003*.md`, System topology | **PASSED (G00 baseline verified)** |
 | **GOV-003** | Upstream version compatibility verified | G00 | `docs/compatibility-matrix.md` | **PASSED** |

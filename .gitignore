@@ -62,6 +62,7 @@ docker-compose.override.yml
 
 # --- Logs & Test Artifacts ---
 *.log
+!docs/evidence/**/*.log
 logs/
 reports/
 coverage/

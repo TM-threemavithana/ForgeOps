@@ -1,0 +1,189 @@
+=== ForgeTasks Local Runtime Curl Verification ===
+Sat Oct 24 14:00:31 +0530 2026
+
+--- 1. Liveness Probe ---
+HTTP/1.1 200 
+X-Request-ID: f5d795d2-8f70-4a04-80de-02fc244b029e
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/vnd.spring-boot.actuator.v3+json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:32 GMT
+
+{"status":"UP"}
+
+--- 2. Readiness Probe ---
+HTTP/1.1 200 
+X-Request-ID: 37fddff7-c000-492c-9d23-1d9b7aa54526
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/vnd.spring-boot.actuator.v3+json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:32 GMT
+
+{"status":"UP"}
+
+--- 3. Prometheus Metrics Scrape ---
+http_server_requests_seconds_count{application="forgetasks-api",error="none",exception="none",method="GET",outcome="SUCCESS",status="200",uri="/actuator/health/**"} 2
+jvm_memory_used_bytes{application="forgetasks-api",area="heap",id="G1 Eden Space"} 2.62144E7
+jvm_memory_used_bytes{application="forgetasks-api",area="heap",id="G1 Old Gen"} 4.3982336E7
+jvm_memory_used_bytes{application="forgetasks-api",area="heap",id="G1 Survivor Space"} 4292608.0
+jvm_memory_used_bytes{application="forgetasks-api",area="nonheap",id="CodeHeap 'non-nmethods'"} 1829248.0
+jvm_memory_used_bytes{application="forgetasks-api",area="nonheap",id="CodeHeap 'non-profiled nmethods'"} 6537984.0
+jvm_memory_used_bytes{application="forgetasks-api",area="nonheap",id="CodeHeap 'profiled nmethods'"} 1.4575616E7
+jvm_memory_used_bytes{application="forgetasks-api",area="nonheap",id="Compressed Class Space"} 1.405008E7
+jvm_memory_used_bytes{application="forgetasks-api",area="nonheap",id="Metaspace"} 9.8103344E7
+
+
+--- 4. Account Registration ---
+HTTP/1.1 201 
+X-Request-ID: 38c53c2e-4cd7-476c-b887-249c9a4a49d6
+Location: http://127.0.0.1:8080/api/v1/accounts/dcb9c2b7-4779-4b4b-bfcf-0db3c2f06f0f
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:33 GMT
+
+{"id":"dcb9c2b7-4779-4b4b-bfcf-0db3c2f06f0f","username":"lead_engineer","role":"ROLE_USER","createdAt":"2026-10-24T08:30:32.941061647Z"}
+
+--- 5. Duplicate Account Registration (409 Conflict) ---
+HTTP/1.1 409 
+X-Request-ID: f5035b20-5dd1-4199-a101-438124530580
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/problem+json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:33 GMT
+
+{"detail":"Username 'lead_engineer' is already registered.","instance":"/api/v1/accounts","status":409,"title":"Conflict","type":"https://forgeops.local/errors/conflict","timestamp":"2026-10-24T08:30:33.079584037Z","correlationId":"f5035b20-5dd1-4199-a101-438124530580"}
+
+--- 6. Project Creation with ETag ---
+HTTP/1.1 201 
+X-Request-ID: 644803e1-4144-464c-9a85-a727f2d741f0
+Location: http://127.0.0.1:8080/api/v1/projects/2e117e4a-44fb-41d9-9f4a-871d265a8af4
+ETag: "0"
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:33 GMT
+
+{"id":"2e117e4a-44fb-41d9-9f4a-871d265a8af4","name":"ForgeOps Core Platform","description":"Self-hosted local DevOps engineering lab","version":0,"createdAt":"2026-10-24T08:30:33.796968902Z","updatedAt":"2026-10-24T08:30:33.796969075Z","archivedAt":null}
+
+
+Created Project ID: 2e117e4a-44fb-41d9-9f4a-871d265a8af4
+--- 7. Mutating Project Without If-Match (428 Precondition Required) ---
+HTTP/1.1 428 
+X-Request-ID: 38a76c36-7c23-4aa5-b783-ace8d5f6d515
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/problem+json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:34 GMT
+
+{"detail":"Header 'If-Match' is required for mutating project updates.","instance":"/api/v1/projects/2e117e4a-44fb-41d9-9f4a-871d265a8af4","status":428,"title":"Precondition Required","type":"https://forgeops.local/errors/precondition-required","timestamp":"2026-10-24T08:30:34.149607644Z","correlationId":"38a76c36-7c23-4aa5-b783-ace8d5f6d515"}
+
+--- 8. Mutating Project With Stale If-Match (412 Precondition Failed) ---
+HTTP/1.1 412 
+X-Request-ID: 4bf06274-6667-49d3-a062-48f15b720f73
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/problem+json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:34 GMT
+
+{"detail":"Supplied If-Match version 5 does not match current resource version 0.","instance":"/api/v1/projects/2e117e4a-44fb-41d9-9f4a-871d265a8af4","status":412,"title":"Precondition Failed","type":"https://forgeops.local/errors/precondition-failed","timestamp":"2026-10-24T08:30:34.468525613Z","correlationId":"4bf06274-6667-49d3-a062-48f15b720f73"}
+
+--- 9. Mutating Project With Matching If-Match (200 OK, New ETag) ---
+HTTP/1.1 200 
+X-Request-ID: 462810f0-21c0-445e-9ef7-aef82d228ff9
+ETag: "1"
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:34 GMT
+
+{"id":"2e117e4a-44fb-41d9-9f4a-871d265a8af4","name":"ForgeOps Core Platform v2","description":"Self-hosted local DevOps engineering lab","version":1,"createdAt":"2026-10-24T08:30:33.796969Z","updatedAt":"2026-10-24T08:30:34.810449804Z","archivedAt":null}
+
+--- 10. Task Creation Under Project ---
+HTTP/1.1 201 
+X-Request-ID: 72655ff5-2704-466d-a17c-4cad1c32dd38
+Location: http://127.0.0.1:8080/api/v1/tasks/bf38c99e-b162-41eb-9c56-58c595abe868
+ETag: "0"
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:35 GMT
+
+{"id":"bf38c99e-b162-41eb-9c56-58c595abe868","projectId":"2e117e4a-44fb-41d9-9f4a-871d265a8af4","assignedAccountId":null,"title":"Implement G01 Spring Boot API","description":null,"status":"TODO","priority":"HIGH","dueDate":null,"version":0,"createdAt":"2026-10-24T08:30:35.155873922Z","updatedAt":"2026-10-24T08:30:35.155873990Z"}
+
+
+--- 11. Retrieve Task with ETag ---
+HTTP/1.1 200 
+X-Request-ID: 7c072bb8-5976-4954-8e0f-66056d9375b3
+ETag: "0"
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:35 GMT
+
+{"id":"bf38c99e-b162-41eb-9c56-58c595abe868","projectId":"2e117e4a-44fb-41d9-9f4a-871d265a8af4","assignedAccountId":null,"title":"Implement G01 Spring Boot API","description":null,"status":"TODO","priority":"HIGH","dueDate":null,"version":0,"createdAt":"2026-10-24T08:30:35.155874Z","updatedAt":"2026-10-24T08:30:35.155874Z"}
+
+--- 12. Cross-Tenant Anti-Enumeration (404 Not Found) ---
+HTTP/1.1 404 
+X-Request-ID: cd8371ab-efe2-4769-a881-21b8e1e16b94
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/problem+json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 08:30:36 GMT
+
+{"detail":"Project not found with id: 2e117e4a-44fb-41d9-9f4a-871d265a8af4","instance":"/api/v1/projects/2e117e4a-44fb-41d9-9f4a-871d265a8af4","status":404,"title":"Resource Not Found","type":"https://forgeops.local/errors/resource-not-found","timestamp":"2026-10-24T08:30:36.049158184Z","correlationId":"cd8371ab-efe2-4769-a881-21b8e1e16b94"}
