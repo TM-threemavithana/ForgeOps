@@ -139,6 +139,7 @@ Full HTTP traces with headers and JSON bodies are preserved in:
 
 1. **Local Authentication:** HTTP Basic authentication is implemented for the G01 local-first baseline. Any future external exposure requires transport encryption (TLS) or OAuth2/OIDC.
 2. **Scope Boundaries:** G01 covers only the application backend, database schema, and test suite. No Docker Compose stack, Kind Kubernetes cluster, Helm chart, Argo CD GitOps, or full monitoring stack was deployed in this phase. Those capabilities are deferred to gates G02 through G14 as defined in the master plan.
+3. **Quality Review & Warning Remediation:** Detailed investigation and resolution of Surefire JVM shutdown, Java 21 Mockito agent loading, and Testcontainers 2.x API deprecation are recorded in [G01 Quality Review](quality-review.md).
 
 ---
 
