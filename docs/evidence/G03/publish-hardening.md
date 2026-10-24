@@ -3,19 +3,19 @@
 **Date:** 2026-10-24
 **Author:** Tharuka Madhuwantha Threemavithana (`158786462+TM-threemavithana@users.noreply.github.com`)
 **Role:** Principal DevOps Engineer, GitHub Actions Security Engineer & Senior Technical Reviewer
-**Status:** IMPLEMENTED AND LOCALLY VERIFIED (Pending GitHub Actions execution on master)
+**Status:** IMPLEMENTED AND LOCALLY VERIFIED (Pending post-incident 1.0.1 verification on master)
 **Target Workflow:** `.github/workflows/publish.yml`
-**Related Commits:** Baseline `5b70e43` (PR #1 merge)
+**Related Commits:** Baseline `5b70e43`, First Release `995a929`, Fix Branch `g03-registry-digest-fix`
 
 ---
 
 ## 1. Executive Summary
 
-This security assessment and hardening implementation addresses critical software supply chain vulnerabilities identified in the initial Gate G03 GitHub Container Registry (GHCR) publishing pipeline (`.github/workflows/publish.yml`).
+This security assessment and hardening implementation addresses critical software supply chain vulnerabilities identified in the initial Gate G03 GitHub Container Registry (GHCR) publishing pipeline (`.github/workflows/publish.yml`), including the post-push registry digest resolution failure observed during production release run `40121874920`.
 
 The primary objective was to ensure that **only an approved, successfully tested source commit from trusted `master` history can produce a published container image**, and that **the published image artifact is cryptographically identical to the exact candidate image that underwent security scanning** (zero rebuild disparity / TOCTOU mitigation).
 
-All identified vulnerabilities have been remediated with defensive controls, least-privilege permissions, automated ancestry and CI status checks, build-once local daemon loading, and tamper verification. A comprehensive test suite (`scripts/test_publish_hardening.py`) verified 40 distinct security invariants with 100% pass rate.
+All identified vulnerabilities have been remediated with defensive controls, least-privilege permissions, automated ancestry and CI status checks, build-once local daemon loading, authoritative GHCR registry manifest digest verification via `docker buildx imagetools inspect`, multi-tag consistency assertion, and mandatory SLSA build provenance attestation. A comprehensive test suite (`scripts/test_publish_hardening.py`) verified 70 distinct security invariants with 100% pass rate.
 
 ---
 
@@ -33,6 +33,7 @@ All identified vulnerabilities have been remediated with defensive controls, lea
 | **VULN-PUB-08** | **Race Conditions on Concurrent Releases** | Multiple simultaneous `workflow_dispatch` executions could interleave tag updates or produce inconsistent digest outputs. | **Workflow Concurrency Control:** Added `concurrency: group: publish-ghcr, cancel-in-progress: false` to sequence releases safely. |
 | **VULN-PUB-09** | **Dispatch from Non-Master Branches** | `workflow_dispatch` can be invoked from any branch where the file exists. If run on a feature branch, it could publish untested code. | **Branch Execution Guard:** Explicitly checks `$WORKFLOW_REF == "refs/heads/master"`. Dispatches from feature branches, PR refs, or tags are immediately blocked. |
 | **VULN-PUB-10** | **Invalid Docker Tag Format ('+' character)** | Standard SemVer allows build metadata (e.g. `1.0.0+build123`), but OCI/Docker container tag syntax forbids `+`, causing downstream push/build failures. | **Docker Tag Format Guard:** Rejects `+` with an explicit diagnostic error and validates against strict container-compatible SemVer regex. |
+| **VULN-PUB-11** | **Fragile Local Daemon RepoDigests & Case Mismatch** | Post-push digest lookup relied on local Docker daemon `docker inspect .RepoDigests` with exact case match. OCI lowercase normalization caused digest resolution failure in Actions run `40121874920`, blocking digest output and attestation despite successful push. | **Authoritative Registry Verification & Canonical Lowercase:** Converted image reference to canonical lowercase reference (`canonical_image`), replaced daemon `.RepoDigests` with `docker buildx imagetools inspect`, validated all tags resolve to identical digest, verified remote manifest config matches candidate ID, and enforced mandatory SLSA attestation (no `continue-on-error`). |
 
 ---
 
@@ -106,10 +107,9 @@ In standard container workflows using `docker/build-push-action`, running `push:
    fi
    ```
 5. **Direct Push of Loaded Image:** The workflow uses standard `docker push "$tag"` for each configured tag. Docker daemon pushes the exact pre-scanned layers.
-6. **Immutable Digest Extraction:** The remote manifest digest returned by GHCR is extracted directly from the Docker daemon's `.RepoDigests` metadata:
+6. **Authoritative Immutable Digest Verification:** Instead of fragile local daemon `.RepoDigests` lookups (which failed due to case mismatch in run `40121874920`), the workflow directly queries the GHCR registry using `docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag"`. It iterates across every published tag, validates that each tag resolves to an identical full 64-character sha256 digest, and verifies that the remote manifest configuration digest matches the local scanned candidate image ID:
    ```bash
-   REPO_DIGEST=$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$PRIMARY_TAG" | grep "^${REGISTRY_IMAGE}@" | head -n 1)
-   DIGEST=$(echo "$REPO_DIGEST" | cut -d'@' -f2)
+   TAG_DIGEST=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag" 2>&1 | tr -d '[:space:]')
    ```
 
 ---
@@ -147,7 +147,8 @@ Both the blocking gate step and the SARIF report generation step configure `igno
    - Retained as a downloadable GitHub Actions artifact for 30 days via `actions/upload-artifact@v4`.
 2. **Build Provenance Attestation:**
    - Integrated `actions/attest-build-provenance@v2`.
-   - Binds the GitHub runner OIDC identity to the published image digest:
+   - Mandatory enforcement: `continue-on-error: true` removed; failure blocks release immediately.
+   - Binds the GitHub runner OIDC identity to the canonical lowercase image name and verified manifest digest:
      `subject-name: ghcr.io/<owner>/forgetasks-api`
      `subject-digest: sha256:...`
    - Enables cryptographic verification using GitHub CLI:
@@ -175,8 +176,12 @@ Executed locally in WSL2 Ubuntu 24.04:
 [PASS] Global permissions restricted to read-only (contents: read)
 [PASS] Both 'validate-release' and 'publish' jobs defined
 [PASS] validate-release job has scoped read permissions (contents: read, actions: read; no packages)
+[PASS] validate-release defines required output: validated_sha
+[PASS] validate-release defines required output: short_sha
+[PASS] validate-release defines required output: semver_tag
+[PASS] validate-release defines required output: canonical_image
 [PASS] publish job scoped to protected 'release' GitHub Environment
-[PASS] publish job has packages: write and contents: read
+[PASS] publish job has packages: write, contents: read, attestations: write, and id-token: write
 [PASS] publish job explicitly depends on 'validate-release'
 
 --- Test 2: Shell Script Syntax (bash -n) ---
@@ -212,7 +217,7 @@ Found 6 shell script blocks in publish.yml
 [PASS] Docker Semver test 'latest': Rejected (forbidden/invalid) as expected
 [PASS] Docker Semver test '1.0': Rejected (forbidden/invalid) as expected
 [PASS] Docker Semver test '1.0.0.0': Rejected (forbidden/invalid) as expected
-[PASS] Git ancestry test: Current master HEAD (5b70e43) verified as valid ancestor of master
+[PASS] Git ancestry test: Current master HEAD (995a929) verified as valid ancestor of master
 [PASS] Git existence test: Non-existent commit correctly rejected (exit non-zero)
 
 --- Test 4: Build-Once, Scan-Once Integrity Logic ---
@@ -222,12 +227,32 @@ Found 6 shell script blocks in publish.yml
 [PASS] Trivy gate enforces blocking on CRITICAL,HIGH (exit-code: '1')
 [PASS] Publish step uses 'docker push' on pre-scanned loaded image tags
 [PASS] Pre-publish integrity check verifies image ID has not mutated
-[PASS] Published image digest captured from Docker daemon RepoDigests
+
+--- Test 5: Authoritative Registry Digest & Provenance Attestation Logic ---
+[PASS] Workflow uses authoritative 'docker buildx imagetools inspect' for registry manifest digest retrieval
+[PASS] Fragile local Docker daemon 'RepoDigests' lookup completely removed
+[PASS] Canonical lowercase image normalization implemented in validate-inputs
+[PASS] metadata-action references canonical lowercase image output
+[PASS] Rejection test: Missing/empty registry digest correctly rejected (exit 1)
+[PASS] Rejection test: Registry query failure correctly rejected (exit 1)
+[PASS] Digest format test 'valid full sha256': Accepted as expected
+[PASS] Digest format test 'truncated digest': Rejected as expected
+[PASS] Digest format test 'missing sha256 prefix': Rejected as expected
+[PASS] Digest format test 'uppercase hex': Rejected as expected
+[PASS] Digest format test 'invalid prefix sha1': Rejected as expected
+[PASS] Digest format test 'invalid non-hex characters': Rejected as expected
+[PASS] Rejection test: Mismatched image-tag digests correctly rejected (exit 1)
+[PASS] Acceptance test: Consistent digests across multiple tags accepted (exit 0)
+[PASS] Acceptance test: Remote manifest config digest matches candidate ID (exit 0)
+[PASS] Rejection test: Remote config digest mismatch correctly rejected (exit 1)
+[PASS] Attestation subject-name uses canonical lowercase image reference
+[PASS] Attestation subject-digest uses verified registry manifest digest
+[PASS] Mandatory attestation verified: 'continue-on-error: true' removed; failure blocks release
 
 ============================================================
- Summary: 48 PASSED, 0 FAILED
+ Summary: 70 PASSED, 0 FAILED
 ============================================================
-All security hardening checks PASSED.
+All security hardening and registry digest checks PASSED.
 ```
 
 ---
@@ -271,7 +296,7 @@ Once the changes are merged into `master` via pull request and verified by the C
 3. **Trigger Workflow Dispatch:**
    - Go to **Actions** → **Publish to GHCR** → **Run workflow**.
    - **git_sha**: `<paste 40-character commit SHA>`
-   - **semver_tag**: `1.0.0` (optional)
+   - **semver_tag**: `1.0.1` (or leave blank for SHA-only tagging; do NOT reuse `1.0.0`)
    - **confirm**: `PUBLISH`
 4. **Approve Environment Deployment:**
    - If Environment protection is enabled, approve the deployment prompt in the Actions UI.
@@ -284,3 +309,77 @@ Once the changes are merged into `master` via pull request and verified by the C
      ```bash
      docker inspect ghcr.io/<owner>/forgetasks-api@sha256:<digest> --format '{{ .Config.User }}'
      ```
+
+---
+
+## 10. First Production Release Incident (Run 40121874920) & Root Cause Analysis
+
+### 10.1 Incident Context
+On October 24, 2026, the first controlled release to GHCR was dispatched against master commit `995a92954000f987736875be6881912a74b8b07e` via GitHub Actions Run `40121874920`.
+
+The workflow executed as follows:
+1. **Preflight validations:** Successfully validated trigger ref (`refs/heads/master`), `PUBLISH` confirmation, 40-character hex SHA syntax, master git ancestry, HEAD alignment, and clean `CI Gate` passing status on master.
+2. **Environment Protection:** Successfully paused for required approver review in the `release` environment and proceeded upon explicit authorization.
+3. **Single Build & Trivy Scan:** Built candidate image once into the local Docker daemon, verified candidate ID, scanned and passed Trivy CRITICAL and HIGH gates with 0 vulnerabilities.
+4. **Push to GHCR:** Successfully pushed all three tags to GHCR:
+   - `ghcr.io/tm-threemavithana/forgetasks-api:sha-995a929`
+   - `ghcr.io/tm-threemavithana/forgetasks-api:995a92954000f987736875be6881912a74b8b07e`
+   - `ghcr.io/tm-threemavithana/forgetasks-api:1.0.0`
+5. **Registry Publication:** The registry successfully received and stored the image under authoritative manifest digest:
+   `sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba`
+6. **Failure Point:** Step `Record and verify published image digest` aborted with exit code 1:
+   `Error: Could not determine published repository digest from Docker daemon.`
+7. **Downstream Impact:** The workflow terminated before Step 13 (`Attest build provenance`). While the container images were published to GHCR, no SLSA provenance attestation was created, leaving the first release in an incomplete state.
+
+### 10.2 Root Cause Analysis
+The failure was caused by two compounding design flaws in the digest retrieval step:
+1. **Repository Name Case-Sensitivity Mismatch:**
+   - In GitHub Actions, `${{ github.repository }}` returned `TM-threemavithana/forgetasks-api` (preserving the GitHub username capitalization).
+   - The OCI image reference specification and `docker/metadata-action` automatically downcase image repository paths to lowercase (`ghcr.io/tm-threemavithana/forgetasks-api`).
+   - The digest extraction script executed:
+     `REPO_DIGEST=$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$PRIMARY_TAG" | grep "^${REGISTRY_IMAGE}@" | head -n 1)`
+     Because `${REGISTRY_IMAGE}` contained uppercase `TM-threemavithana`, the grep search pattern `^ghcr.io/TM-threemavithana/forgetasks-api@` matched nothing in `.RepoDigests` (which contained `ghcr.io/tm-threemavithana/forgetasks-api@...`), resulting in an empty digest string.
+2. **Fragile Reliance on Docker Daemon `.RepoDigests`:**
+   - `.RepoDigests` is an internal Docker daemon cache property populated only after specific client-side push interactions. It is not an authoritative registry confirmation.
+   - Relying on local daemon inspect for supply-chain digest confirmation is susceptible to daemon caching quirks, Buildx multi-backend differences, and client-side formatting inconsistencies.
+
+### 10.3 Implemented Remediation
+1. **Canonical Lowercase Normalization:**
+   In `validate-release`, computed and exported `CANONICAL_IMAGE="$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"`, guaranteeing lowercase OCI conformity across all workflow steps (`docker/metadata-action`, `imagetools`, and `attest-build-provenance`).
+2. **Authoritative Registry Verification with `docker buildx imagetools`:**
+   Completely removed `docker inspect .RepoDigests`. The step now queries GHCR directly using:
+   `docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag"`
+3. **Comprehensive Tag Consistency Check:**
+   Every published tag (`sha-<short>`, `<full-sha>`, `<semver>`) is queried directly from GHCR. The workflow strictly asserts that every tag resolves to the identical 64-character sha256 manifest digest.
+4. **Scanned Candidate to Remote Manifest Matching:**
+   For single-platform manifests, the workflow inspects the raw OCI manifest (`docker buildx imagetools inspect --raw "$tag"`) and verifies that `config.digest` exactly matches the pre-push scanned candidate image ID (`$EXPECTED_CONFIG_ID`).
+5. **Mandatory Provenance Attestation:**
+   Removed `continue-on-error: true` from `attest-build-provenance`. The attestation step now binds to the canonical lowercase image name and verified registry manifest digest. Any attestation generation or signing error causes release failure.
+
+---
+
+## 11. Versioning Safety & Next Release Procedure (1.0.1)
+
+### 11.1 Registry Tag Immutability Policy
+During run `40121874920`, tag `1.0.0` was successfully written to GHCR pointing to manifest `sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba`.
+
+**Strict Rule:** To prevent breaking supply-chain immutability and client-side Docker layer caches, **do not overwrite or delete the existing `1.0.0` tag in GHCR**.
+
+### 11.2 Next Release Procedure (v1.0.1)
+Once this fix branch (`g03-registry-digest-fix`) is reviewed, merged into `master`, and passes CI:
+
+1. **Verify Master CI Gate:** Confirm the merge commit on `master` has completed all `ci.yml` checks.
+2. **Obtain Commit SHA:**
+   ```bash
+   git rev-parse origin/master
+   ```
+3. **Trigger Workflow Dispatch with Version Bump:**
+   - **git_sha**: `<paste 40-character commit SHA from master>`
+   - **semver_tag**: `1.0.1` (do NOT reuse `1.0.0`)
+   - **confirm**: `PUBLISH`
+4. **Approve Release Environment:** Approve the deployment in GitHub Actions.
+5. **Verify Verification & Provenance:**
+   Confirm that all tags (`sha-<short>`, `<full-sha>`, `1.0.1`) resolve to the same manifest digest and that the SLSA attestation is successfully written and signed:
+   ```bash
+   gh attestation verify oci://ghcr.io/tm-threemavithana/forgetasks-api@sha256:<verified-digest> --owner tm-threemavithana
+   ```

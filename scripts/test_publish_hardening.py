@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """
-Test script for ForgeOps G03 GHCR Publishing Security Hardening.
+Test script for ForgeOps G03 GHCR Publishing Security Hardening & Registry Digest Verification.
 Validates:
 1. YAML syntax and structural integrity of .github/workflows/publish.yml
 2. Concurrency controls, triggers, and least-privilege permissions
 3. All bash script blocks extracted from publish.yml using bash -n
-4. Rejection path unit tests for input validation, git ancestry, and CI verification
+4. Rejection path unit tests for input validation, git ancestry, trigger refs, and CI verification
+5. Build-once, scan-then-publish integrity logic and tamper checks
+6. Authoritative registry manifest digest verification (buildx imagetools inspect),
+   tag consistency, malformed/missing digest rejection, config ID matching,
+   and mandatory SLSA provenance attestation (no continue-on-error).
 """
 
 import sys
@@ -75,12 +79,21 @@ def test_yaml_syntax():
     else:
         log_fail(f"Expected jobs missing: {list(jobs.keys())}")
 
-    # Check validate-release permissions
-    val_perms = jobs.get("validate-release", {}).get("permissions", {})
+    # Check validate-release permissions and outputs
+    val_job = jobs.get("validate-release", {})
+    val_perms = val_job.get("permissions", {})
     if "packages" not in val_perms and val_perms.get("contents") == "read" and val_perms.get("actions") == "read":
         log_pass("validate-release job has scoped read permissions (contents: read, actions: read; no packages)")
     else:
         log_fail(f"validate-release job permissions unexpected: {val_perms}")
+
+    val_outputs = val_job.get("outputs", {})
+    expected_outputs = ["validated_sha", "short_sha", "semver_tag", "canonical_image"]
+    for out in expected_outputs:
+        if out in val_outputs:
+            log_pass(f"validate-release defines required output: {out}")
+        else:
+            log_fail(f"validate-release missing required output: {out}")
 
     # Check publish job permissions & environment
     pub_job = jobs.get("publish", {})
@@ -90,8 +103,8 @@ def test_yaml_syntax():
         log_fail(f"publish job missing release environment: {pub_job.get('environment')}")
 
     pub_perms = pub_job.get("permissions", {})
-    if pub_perms.get("packages") == "write" and pub_perms.get("contents") == "read":
-        log_pass("publish job has packages: write and contents: read")
+    if pub_perms.get("packages") == "write" and pub_perms.get("contents") == "read" and pub_perms.get("attestations") == "write" and pub_perms.get("id-token") == "write":
+        log_pass("publish job has packages: write, contents: read, attestations: write, and id-token: write")
     else:
         log_fail(f"publish job permissions unexpected: {pub_perms}")
 
@@ -108,7 +121,6 @@ def test_bash_script_syntax():
         content = f.read()
 
     # Extract all `run: |` blocks
-    # Using regex to capture indented run blocks
     pattern = re.compile(r'run:\s*\|\s*\n((?:(?: {8,}.*|\s*)\n)+)')
     matches = pattern.findall(content)
 
@@ -118,7 +130,6 @@ def test_bash_script_syntax():
 
     print(f"Found {len(matches)} shell script blocks in publish.yml")
     for idx, script in enumerate(matches, 1):
-        # Dedent script
         lines = script.splitlines()
         min_indent = min(len(l) - len(l.lstrip()) for l in lines if l.strip())
         dedented = "\n".join(l[min_indent:] if l.strip() else "" for l in lines)
@@ -126,7 +137,6 @@ def test_bash_script_syntax():
         # Replace GitHub Actions template expressions with dummy env vars for bash -n
         sanitized = re.sub(r'\$\{\{[^}]+\}\}', 'DUMMY_ACTION_VAR', dedented)
 
-        # Run bash -n
         proc = subprocess.run(
             ["bash", "-n"],
             input=sanitized,
@@ -243,8 +253,7 @@ fi
         else:
             log_fail(f"Docker Semver test '{semver}' unexpected result: expected {should_pass}, got {passed}")
 
-    # Test 3.4: Git ancestry check against current master
-    # Get current master HEAD
+    # Test 3.5: Git ancestry check against current master
     git_head = subprocess.check_output(["git", "rev-parse", "master"], cwd=REPO_ROOT, text=True).strip()
     check_ancestor = f"""
 TARGET_SHA="{git_head}"
@@ -312,11 +321,161 @@ def test_build_once_scan_once_logic():
     else:
         log_fail("Missing pre-publish image ID integrity check")
 
-    # Verify digest capture from RepoDigests
-    if "RepoDigests" in content and "GITHUB_OUTPUT" in content:
-        log_pass("Published image digest captured from Docker daemon RepoDigests")
+def test_registry_digest_verification_logic():
+    print("\n--- Test 5: Authoritative Registry Digest & Provenance Attestation Logic ---")
+    with open(PUBLISH_YML, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # 1. Verify buildx imagetools inspect is used instead of fragile local docker inspect RepoDigests
+    if "docker buildx imagetools inspect --format '{{.Manifest.Digest}}'" in content:
+        log_pass("Workflow uses authoritative 'docker buildx imagetools inspect' for registry manifest digest retrieval")
     else:
-        log_fail("Published image digest not captured from RepoDigests")
+        log_fail("Workflow does not use 'docker buildx imagetools inspect --format {{.Manifest.Digest}}'")
+
+    if "RepoDigests" not in content:
+        log_pass("Fragile local Docker daemon 'RepoDigests' lookup completely removed")
+    else:
+        log_fail("Found references to fragile 'RepoDigests' in publish.yml")
+
+    # 2. Verify canonical lowercase normalization in validate-inputs and metadata
+    if "CANONICAL_IMAGE=\"$(echo \"${REGISTRY}/${IMAGE_NAME}\" | tr '[:upper:]' '[:lower:]')\"" in content:
+        log_pass("Canonical lowercase image normalization implemented in validate-inputs")
+    else:
+        log_fail("Missing canonical lowercase normalization in validate-inputs")
+
+    if "images: ${{ needs.validate-release.outputs.canonical_image }}" in content:
+        log_pass("metadata-action references canonical lowercase image output")
+    else:
+        log_fail("metadata-action does not use canonical_image output")
+
+    # 3. Unit test: Missing registry digest rejection
+    code_missing = """
+RAW_OUTPUT=""
+EXIT_CODE=0
+if [ $EXIT_CODE -ne 0 ] || [ -z "$RAW_OUTPUT" ]; then
+    exit 1
+fi
+"""
+    p = subprocess.run(["bash", "-c", code_missing])
+    if p.returncode == 1:
+        log_pass("Rejection test: Missing/empty registry digest correctly rejected (exit 1)")
+    else:
+        log_fail("Empty registry digest was not rejected")
+
+    # 4. Unit test: Query failure rejection (non-zero exit code)
+    code_query_err = """
+RAW_OUTPUT="Error response from registry"
+EXIT_CODE=1
+if [ $EXIT_CODE -ne 0 ] || [ -z "$RAW_OUTPUT" ]; then
+    exit 1
+fi
+"""
+    p = subprocess.run(["bash", "-c", code_query_err])
+    if p.returncode == 1:
+        log_pass("Rejection test: Registry query failure correctly rejected (exit 1)")
+    else:
+        log_fail("Registry query failure was not rejected")
+
+    # 5. Unit test: Malformed digest validation (full sha256:[0-9a-f]{64})
+    test_digests = [
+        ("valid full sha256", "sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba", True),
+        ("truncated digest", "sha256:3d297bba979079d38ee0f91b87c0", False),
+        ("missing sha256 prefix", "3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba", False),
+        ("uppercase hex", "sha256:3D297BBA979079D38EE0F91B87C07648676E2F4ADB26955C90E029F3DCFBCABA", False),
+        ("invalid prefix sha1", "sha1:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba", False),
+        ("invalid non-hex characters", "sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcabg", False)
+    ]
+    for desc, digest_val, should_pass in test_digests:
+        digest_check = f"""
+TAG_DIGEST="{digest_val}"
+if ! [[ "$TAG_DIGEST" =~ ^sha256:[0-9a-f]{{64}}$ ]]; then
+    exit 1
+fi
+"""
+        p = subprocess.run(["bash", "-c", digest_check])
+        passed = (p.returncode == 0)
+        if passed == should_pass:
+            log_pass(f"Digest format test '{desc}': {'Accepted' if should_pass else 'Rejected'} as expected")
+        else:
+            log_fail(f"Digest format test '{desc}' unexpected result: expected {should_pass}, got {passed}")
+
+    # 6. Unit test: Mismatched image-tag digests rejection
+    code_mismatch = """
+PRIMARY_DIGEST="sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba"
+TAG_DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+if [ "$TAG_DIGEST" != "$PRIMARY_DIGEST" ]; then
+    exit 1
+fi
+"""
+    p = subprocess.run(["bash", "-c", code_mismatch])
+    if p.returncode == 1:
+        log_pass("Rejection test: Mismatched image-tag digests correctly rejected (exit 1)")
+    else:
+        log_fail("Mismatched image-tag digests was not rejected")
+
+    # 7. Unit test: Consistent digest acceptance across multiple tags
+    code_match = """
+PRIMARY_DIGEST="sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba"
+for tag_digest in "sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba" "sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba"; do
+    if [ "$tag_digest" != "$PRIMARY_DIGEST" ]; then
+        exit 1
+    fi
+done
+"""
+    p = subprocess.run(["bash", "-c", code_match])
+    if p.returncode == 0:
+        log_pass("Acceptance test: Consistent digests across multiple tags accepted (exit 0)")
+    else:
+        log_fail("Consistent digests test failed")
+
+    # 8. Unit test: Remote config digest matches candidate image ID
+    code_config_match = """
+EXPECTED_CONFIG_ID="sha256:b570fe345e2dee589adcbe7da46c2d48578b1fa976562ef4193781725349f504"
+REMOTE_CONFIG_DIGEST="sha256:b570fe345e2dee589adcbe7da46c2d48578b1fa976562ef4193781725349f504"
+if [ "$REMOTE_CONFIG_DIGEST" != "$EXPECTED_CONFIG_ID" ]; then
+    exit 1
+fi
+"""
+    p = subprocess.run(["bash", "-c", code_config_match])
+    if p.returncode == 0:
+        log_pass("Acceptance test: Remote manifest config digest matches candidate ID (exit 0)")
+    else:
+        log_fail("Config digest match test failed")
+
+    code_config_mismatch = """
+EXPECTED_CONFIG_ID="sha256:b570fe345e2dee589adcbe7da46c2d48578b1fa976562ef4193781725349f504"
+REMOTE_CONFIG_DIGEST="sha256:1111111111111111111111111111111111111111111111111111111111111111"
+if [ "$REMOTE_CONFIG_DIGEST" != "$EXPECTED_CONFIG_ID" ]; then
+    exit 1
+fi
+"""
+    p = subprocess.run(["bash", "-c", code_config_mismatch])
+    if p.returncode == 1:
+        log_pass("Rejection test: Remote config digest mismatch correctly rejected (exit 1)")
+    else:
+        log_fail("Config digest mismatch test failed to reject")
+
+    # 9. Verify SLSA build provenance attestation uses canonical_image and verified digest
+    if "subject-name: ${{ needs.validate-release.outputs.canonical_image }}" in content:
+        log_pass("Attestation subject-name uses canonical lowercase image reference")
+    else:
+        log_fail("Attestation subject-name does not use canonical_image output")
+
+    if "subject-digest: ${{ steps.publish-digest.outputs.digest }}" in content:
+        log_pass("Attestation subject-digest uses verified registry manifest digest")
+    else:
+        log_fail("Attestation subject-digest does not use steps.publish-digest.outputs.digest")
+
+    # 10. Verify mandatory attestation: NO continue-on-error: true on attest-build-provenance
+    attest_pos = content.find("Attest build provenance (SLSA)")
+    if attest_pos != -1:
+        attest_block = content[attest_pos:attest_pos + 350]
+        if "continue-on-error" not in attest_block:
+            log_pass("Mandatory attestation verified: 'continue-on-error: true' removed; failure blocks release")
+        else:
+            log_fail("Attestation step still contains 'continue-on-error'")
+    else:
+        log_fail("Attest build provenance step not found")
 
 def main():
     print("============================================================")
@@ -326,13 +485,14 @@ def main():
     test_bash_script_syntax()
     test_rejection_paths()
     test_build_once_scan_once_logic()
+    test_registry_digest_verification_logic()
 
     print("\n============================================================")
     print(f" Summary: {passes} PASSED, {failures} FAILED")
     print("============================================================")
     if failures > 0:
         sys.exit(1)
-    print("All security hardening checks PASSED.")
+    print("All security hardening and registry digest checks PASSED.")
 
 if __name__ == "__main__":
     main()

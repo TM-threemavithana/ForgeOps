@@ -64,6 +64,7 @@ jobs:
       validated_sha: ${{ steps.validate-commit.outputs.validated_sha }}
       short_sha: ${{ steps.validate-commit.outputs.short_sha }}
       semver_tag: ${{ steps.validate-inputs.outputs.semver_tag }}
+      canonical_image: ${{ steps.validate-inputs.outputs.canonical_image }}
 
     steps:
       - name: Validate workflow trigger ref, inputs, and confirmation guard
@@ -118,6 +119,11 @@ jobs:
           else
             echo "[INFO] No semver tag provided. Publishing will use immutable SHA tags only."
           fi
+
+          # 5. Compute canonical lowercase image reference
+          CANONICAL_IMAGE="$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"
+          echo "canonical_image=$CANONICAL_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "[PASS] Canonical lowercase image reference: $CANONICAL_IMAGE"
 
           echo "clean_sha=$CLEAN_SHA" >> "$GITHUB_OUTPUT"
           echo "semver_tag=$CLEAN_SEMVER" >> "$GITHUB_OUTPUT"
@@ -249,7 +255,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ needs.validate-release.outputs.canonical_image }}
           tags: |
             type=raw,value=sha-${{ needs.validate-release.outputs.short_sha }}
             type=raw,value=${{ needs.validate-release.outputs.validated_sha }}
@@ -286,10 +292,10 @@ jobs:
           echo "============================================================"
           echo " CANDIDATE CONTAINER ARTIFACT BUILT ONCE"
           echo "============================================================"
-          echo "Candidate Tag:  $CANDIDATE_TAG"
-          echo "Candidate ID:   $CANDIDATE_ID"
-          echo "Source Commit:  ${{ needs.validate-release.outputs.validated_sha }}"
-          echo "Target Registry: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Candidate Tag:   $CANDIDATE_TAG"
+          echo "Candidate ID:    $CANDIDATE_ID"
+          echo "Source Commit:   ${{ needs.validate-release.outputs.validated_sha }}"
+          echo "Target Registry: ${{ needs.validate-release.outputs.canonical_image }}"
           echo "Configured Tags:"
           echo "${{ steps.meta.outputs.tags }}"
           echo "============================================================"
@@ -365,41 +371,105 @@ jobs:
           done
           echo "[PASS] All verified image tags pushed to GHCR."
 
-      - name: Record and verify published image digest
+      - name: Authoritatively verify published registry digests and image integrity
         id: publish-digest
         env:
-          PRIMARY_TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ needs.validate-release.outputs.short_sha }}
-          REGISTRY_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          CANONICAL_IMAGE: ${{ needs.validate-release.outputs.canonical_image }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_CONFIG_ID: ${{ steps.candidate.outputs.candidate_id }}
+          PRIMARY_TAG: ${{ needs.validate-release.outputs.canonical_image }}:sha-${{ needs.validate-release.outputs.short_sha }}
         run: |
-          # Retrieve repo digests populated by docker push
-          REPO_DIGEST=$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$PRIMARY_TAG" | grep "^${REGISTRY_IMAGE}@" | head -n 1)
+          echo "============================================================"
+          echo " AUTHORITATIVE REGISTRY MANIFEST DIGEST VERIFICATION"
+          echo "============================================================"
+          echo "Canonical Image:    $CANONICAL_IMAGE"
+          echo "Candidate Image ID: $EXPECTED_CONFIG_ID"
+          echo "Published Tags:"
+          echo "$TAGS"
+          echo "============================================================"
 
-          if [ -z "$REPO_DIGEST" ]; then
-            echo "::error::Could not determine published repository digest from Docker daemon."
+          PRIMARY_DIGEST=""
+
+          # Iterate through every published tag and verify via docker buildx imagetools inspect
+          for tag in $TAGS; do
+            echo ""
+            echo "--- Querying GHCR registry for tag: $tag ---"
+
+            # 1. Authoritative registry query using buildx imagetools
+            RAW_OUTPUT=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag" 2>&1)
+            EXIT_CODE=$?
+
+            if [ $EXIT_CODE -ne 0 ] || [ -z "$RAW_OUTPUT" ]; then
+              echo "::error::Failed to query registry for tag '$tag' (exit code: $EXIT_CODE). Output: $RAW_OUTPUT"
+              exit 1
+            fi
+
+            # Extract clean digest (trim whitespace)
+            TAG_DIGEST=$(echo "$RAW_OUTPUT" | tr -d '[:space:]')
+            echo "Registry returned manifest digest: $TAG_DIGEST"
+
+            # 2. Strict syntax validation: must be full sha256:[0-9a-f]{64}
+            if ! [[ "$TAG_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Malformed registry digest '$TAG_DIGEST' for tag '$tag'. Expected full 64-character sha256 hex digest."
+              exit 1
+            fi
+
+            # 3. Tag consistency check: all tags must resolve to the exact same manifest digest
+            if [ -z "$PRIMARY_DIGEST" ]; then
+              PRIMARY_DIGEST="$TAG_DIGEST"
+              echo "[PASS] Initialized verified primary digest: $PRIMARY_DIGEST"
+            else
+              if [ "$TAG_DIGEST" != "$PRIMARY_DIGEST" ]; then
+                echo "::error::Tag digest mismatch! Tag '$tag' resolved to '$TAG_DIGEST', but expected '$PRIMARY_DIGEST'."
+                echo "All tags published from a single build must resolve to the identical manifest digest."
+                exit 1
+              fi
+              echo "[PASS] Tag '$tag' matches primary digest: $TAG_DIGEST"
+            fi
+
+            # 4. Remote image configuration digest vs candidate image ID check
+            # For single-platform images, inspect raw manifest to verify config.digest == candidate_id
+            RAW_MANIFEST=$(docker buildx imagetools inspect --raw "$tag" 2>/dev/null || echo "")
+            if [ -n "$RAW_MANIFEST" ]; then
+              REMOTE_CONFIG_DIGEST=$(echo "$RAW_MANIFEST" | python3 -c "import sys, json; data=json.load(sys.stdin) if sys.stdin else {}; print(data.get('config', {}).get('digest', ''))" 2>/dev/null || echo "")
+
+              if [ -n "$REMOTE_CONFIG_DIGEST" ]; then
+                echo "Remote manifest config digest: $REMOTE_CONFIG_DIGEST"
+                if [ "$REMOTE_CONFIG_DIGEST" != "$EXPECTED_CONFIG_ID" ]; then
+                  echo "::error::Remote configuration digest mismatch for tag '$tag'! Remote has '$REMOTE_CONFIG_DIGEST', but local scanned candidate was '$EXPECTED_CONFIG_ID'."
+                  exit 1
+                fi
+                echo "[PASS] Remote configuration digest cryptographically matches scanned candidate image ID."
+              else
+                echo "[INFO] Multi-platform index or custom manifest format detected; manifest digest verified."
+              fi
+            fi
+          done
+
+          if [ -z "$PRIMARY_DIGEST" ]; then
+            echo "::error::No digests could be verified from the registry."
             exit 1
           fi
 
-          DIGEST=$(echo "$REPO_DIGEST" | cut -d'@' -f2)
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "digest=$PRIMARY_DIGEST" >> "$GITHUB_OUTPUT"
 
+          echo ""
           echo "============================================================"
-          echo " GHCR PUBLICATION VERIFIED"
+          echo " GHCR PUBLICATION & REGISTRY INTEGRITY VERIFIED"
           echo "============================================================"
-          echo "Registry:          ${{ env.REGISTRY }}"
-          echo "Image Name:        ${{ env.IMAGE_NAME }}"
-          echo "Source Commit:     ${{ needs.validate-release.outputs.validated_sha }}"
-          echo "Candidate ID:      ${{ steps.candidate.outputs.candidate_id }}"
-          echo "Published Digest:  $DIGEST"
-          echo "Canonical Ref:     ${REGISTRY_IMAGE}@${DIGEST}"
+          echo "Canonical Image:   $CANONICAL_IMAGE"
+          echo "Candidate ID:      $EXPECTED_CONFIG_ID"
+          echo "Verified Digest:   $PRIMARY_DIGEST"
+          echo "Canonical Ref:     ${CANONICAL_IMAGE}@${PRIMARY_DIGEST}"
+          echo "All Tags Verified: PASSED"
           echo "============================================================"
           echo ""
           echo "Immutable deployment reference for GitOps (Argo CD):"
-          echo "  ${REGISTRY_IMAGE}@${DIGEST}"
+          echo "  ${CANONICAL_IMAGE}@${PRIMARY_DIGEST}"
 
       - name: Attest build provenance (SLSA)
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-name: ${{ needs.validate-release.outputs.canonical_image }}
           subject-digest: ${{ steps.publish-digest.outputs.digest }}
           push-to-registry: true
-        continue-on-error: true
