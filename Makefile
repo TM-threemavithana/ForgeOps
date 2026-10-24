@@ -29,6 +29,26 @@ build-api:
 test-api:
 	@cd apps/forgetasks-api && ./mvnw clean verify
 
+# --- Docker Compose Lifecycle (G02) ---
+.PHONY: setup-secrets compose-build compose-up compose-down compose-ps compose-logs
+setup-secrets:
+	@./scripts/setup_secrets.sh
+
+compose-build: setup-secrets
+	@docker compose build
+
+compose-up: setup-secrets
+	@docker compose up -d
+
+compose-down:
+	@docker compose down
+
+compose-ps:
+	@docker compose ps
+
+compose-logs:
+	@docker compose logs
+
 # --- Doctor / Diagnostics ---
 .PHONY: doctor
 doctor:
