@@ -38,9 +38,9 @@
 
 | Req ID | Requirement Summary | Gate | Primary Implementing File(s) | Verification Test ID | Current Status |
 |---|---|---|---|---|---|
-| **REQ-P-01.1** | Multi-stage non-root Dockerfile | G02 | `apps/forgetasks-api/Dockerfile` | A-201 | PLANNED |
-| **REQ-P-01.2** | Zero secrets in image layers | G02 | `apps/forgetasks-api/.dockerignore`, Trivy scan | A-201 | PLANNED |
-| **REQ-P-01.3** | Compose API + PostgreSQL persistence | G02 | `docker-compose.yml`, `.env.example` | A-202 | PLANNED |
+| **REQ-P-01.1** | Multi-stage non-root Dockerfile | G02 | `apps/forgetasks-api/Dockerfile` | A-201 | **PASSED (G02)** |
+| **REQ-P-01.2** | Zero secrets in image layers | G02 | `apps/forgetasks-api/.dockerignore`, Trivy scan | A-201 | **PASSED (G02)** |
+| **REQ-P-01.3** | Compose API + PostgreSQL persistence | G02 | `compose.yaml`, `.env.example` | A-202 | **PASSED (G02)** |
 | **REQ-P-02.1** | Untrusted PR workflow (read-all) | G03 | `.github/workflows/pr-checks.yml` | A-301 | PLANNED |
 | **REQ-P-02.2** | Trusted release to GHCR by SHA256 | G03 | `.github/workflows/release.yml` | A-302 | PLANNED |
 | **REQ-P-02.3** | Offline local CI counterpart (`make ci`)| G03 | `Makefile`, local build scripts | A-302 | PLANNED |
@@ -69,8 +69,8 @@
 | Req ID | Requirement Summary | Gate | Evidence Document / Target | Status |
 |---|---|---|---|---|
 | **NFR-SEC-01** | Zero secrets in git repository | G00–G15 | `.gitignore`, Gitleaks CI scan, `A-1101` | **PASSED (G00 baseline verified)** |
-| **NFR-SEC-02** | Containers run non-root UID | G02, G11 | Dockerfile user, Trivy report, `A-201` | PLANNED |
-| **NFR-SEC-03** | Local loopback binding (`127.0.0.1`) | G02, G06 | Docker Compose port mappings, `kubectl port-forward` | PLANNED |
+| **NFR-SEC-02** | Containers run non-root UID | G02, G11 | Dockerfile user, Trivy report, `A-201` | **PASSED (G02)** |
+| **NFR-SEC-03** | Local loopback binding (`127.0.0.1`) | G02, G06 | Docker Compose port mappings, `kubectl port-forward` | **PASSED (G02)** |
 | **NFR-PERF-01**| p95 latency < 500 ms under k6 load | G12 | k6 report, Prometheus histogram, `A-1201`, `DR-05` | PLANNED |
 | **NFR-REL-01** | Stateless pod failure replacement | G06, G12 | Pod kill test, `A-602`, `DR-01` | PLANNED |
 | **NFR-RES-01** | Core profile memory & disk governance | G00–G15 | `docs/evidence/G00-preflight.md`, `A-001` | **PASSED_LIM (6.6 GB free SSD limitation)** |

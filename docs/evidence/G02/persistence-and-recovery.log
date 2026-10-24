@@ -1,0 +1,67 @@
+=== ForgeOps Gate G02 Reliability & Persistence Verification ===
+Date (UTC): 2026-10-24T11:49:47Z
+
+Using Test Project ID: 8754399b-a35a-4e05-bcfe-416e705cf280
+Using Test Task ID: 77e269b7-d709-4682-8588-2e73c4da1b32
+
+--- Part 1: Inspecting PostgreSQL Records Before Stack Recreation ---
+                  id                  |             name              | version 
+--------------------------------------+-------------------------------+---------
+ 8754399b-a35a-4e05-bcfe-416e705cf280 | ForgeOps Core Platform Lab v2 |       1
+(1 row)
+
+[PASS] Project record verified in PostgreSQL container
+
+--- Part 2: Graceful Stack Shutdown (docker compose down WITHOUT -v) ---
+ Container forgeops-api Stopping 
+ Container forgeops-api Stopped 
+ Container forgeops-api Removing 
+ Container forgeops-api Removed 
+ Container forgeops-postgres Stopping 
+ Container forgeops-postgres Stopped 
+ Container forgeops-postgres Removing 
+ Container forgeops-postgres Removed 
+ Network forgeops-g02-net Removing 
+ Network forgeops-g02-net Removed 
+[PASS] Compose stack stopped gracefully
+[PASS] Dedicated PostgreSQL volume 'forgeops-g02-postgres-data' preserved on host
+
+--- Part 3: Recreating Stack Containers From Preserved Volume ---
+ Network forgeops-g02-net Creating 
+ Network forgeops-g02-net Created 
+ Container forgeops-postgres Creating 
+ Container forgeops-postgres Created 
+ Container forgeops-api Creating 
+ Container forgeops-api Created 
+ Container forgeops-postgres Starting 
+ Container forgeops-postgres Started 
+ Container forgeops-postgres Waiting 
+ Container forgeops-postgres Healthy 
+ Container forgeops-api Starting 
+ Container forgeops-api Started 
+Waiting for services to become healthy...
+[PASS] forgeops-api transitioned to healthy after recreation (attempt 12)
+[PASS] Verified data persistence: Project survived container recreation (HTTP 200)
+{"id":"8754399b-a35a-4e05-bcfe-416e705cf280","name":"ForgeOps Core Platform Lab v2","description":"Self-hosted local DevOps engineering platform","version":1,"createdAt":"2026-10-24T11:49:13.799067Z","updatedAt":"2026-10-24T11:49:15.019157Z","archivedAt":null}
+
+[PASS] Verified data persistence: Task survived container recreation (HTTP 200)
+{"id":"77e269b7-d709-4682-8588-2e73c4da1b32","projectId":"8754399b-a35a-4e05-bcfe-416e705cf280","assignedAccountId":null,"title":"Implement G02 Docker Compose Stack","description":null,"status":"TODO","priority":"HIGH","dueDate":null,"version":0,"createdAt":"2026-10-24T11:49:15.330317Z","updatedAt":"2026-10-24T11:49:15.330318Z"}
+
+--- Part 4: Restarting API Container Only ---
+ Container forgeops-api Restarting 
+ Container forgeops-api Started 
+Waiting for API container to recover health...
+[PASS] forgeops-api healthy after standalone restart (attempt 12)
+[PASS] API container restart test passed: project accessible after restart
+
+--- Part 5: Controlled Database Restart & Connection Pool Recovery ---
+ Container forgeops-postgres Restarting 
+ Container forgeops-postgres Started 
+Waiting for PostgreSQL to become healthy...
+[PASS] PostgreSQL service recovered and reported healthy (attempt 4)
+Verifying API readiness recovery...
+[PASS] API readiness recovered to UP following PostgreSQL restart (attempt 1)
+[PASS] Database restart recovery passed: HikariCP reconnected and served request
+
+=== Reliability & Recovery Summary ===
+All Persistence, API Restart, and Database Recovery tests passed cleanly.

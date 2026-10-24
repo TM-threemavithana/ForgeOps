@@ -1,0 +1,115 @@
+=== ForgeOps Gate G02 Live API Verification ===
+Date (UTC): 2026-10-24T11:49:11Z
+Target Base URL: http://127.0.0.1:18080
+
+--- 1. Application Liveness Probe ---
+[PASS] Liveness probe reports UP (HTTP 200)
+{"status":"UP"}
+
+--- 2. Application Readiness Probe ---
+[PASS] Readiness probe reports UP (HTTP 200)
+{"status":"UP"}
+
+--- 3. Prometheus Metrics Scrape ---
+[PASS] Prometheus metrics scrape (HTTP 200)
+http_server_requests_seconds_count{application="forgetasks-api",error="none",exception="none",method="GET",outcome="SUCCESS",status="200",uri="/actuator/health/**"} 11
+jvm_memory_used_bytes{application="forgetasks-api",area="heap",id="Eden Space"} 3.018616E7
+jvm_memory_used_bytes{application="forgetasks-api",area="heap",id="Survivor Space"} 7774304.0
+jvm_memory_used_bytes{application="forgetasks-api",area="heap",id="Tenured Gen"} 2.97928E7
+jvm_memory_used_bytes{application="forgetasks-api",area="nonheap",id="CodeHeap 'non-nmethods'"} 1509504.0
+jvm_memory_used_bytes{application="forgetasks-api",area="nonheap",id="CodeHeap 'non-profiled nmethods'"} 4450944.0
+
+
+--- 4. Account Registration (User A) ---
+[PASS] Account registration for User A (HTTP 201)
+{"id":"1c51d816-3c25-4af8-af97-547011d446df","username":"lead_eng_1792842551","role":"ROLE_USER","createdAt":"2026-10-24T11:49:12.630212080Z"}
+
+--- 5. Duplicate Account Registration Conflict ---
+[PASS] Duplicate registration returns 409 Conflict (HTTP 409)
+{"detail":"Username 'lead_eng_1792842551' is already registered.","instance":"/api/v1/accounts","status":409,"title":"Conflict","type":"https://forgeops.local/errors/conflict","timestamp":"2026-10-24T11:49:12.796084672Z","correlationId":"12f4b65c-d79e-4c71-99c4-93d55112d48d"}
+
+--- 6. Account Registration (User B) ---
+[PASS] Account registration for User B (HTTP 201)
+{"id":"ad56705d-d488-48ab-880d-47bbf38d699c","username":"audit_user_1792842551","role":"ROLE_USER","createdAt":"2026-10-24T11:49:13.074417902Z"}
+
+--- 7. Project Creation with ETag ---
+[PASS] Project creation returns 201 Created (HTTP 201)
+HTTP/1.1 201 
+X-Request-ID: 561a3e60-ec96-4a03-bdc3-980019c01ae9
+Location: http://127.0.0.1:18080/api/v1/projects/8754399b-a35a-4e05-bcfe-416e705cf280
+ETag: "0"
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 11:49:13 GMT
+
+{"id":"8754399b-a35a-4e05-bcfe-416e705cf280","name":"ForgeOps Core Platform Lab","description":"Self-hosted local DevOps engineering platform","version":0,"createdAt":"2026-10-24T11:49:13.799067246Z","updatedAt":"2026-10-24T11:49:13.799067337Z","archivedAt":null}
+
+Created Project ID: 8754399b-a35a-4e05-bcfe-416e705cf280, Initial ETag: "0"
+--- 8. Project Retrieval with ETag ---
+[PASS] Project retrieval returns 200 OK (HTTP 200)
+{"id":"8754399b-a35a-4e05-bcfe-416e705cf280","name":"ForgeOps Core Platform Lab","description":"Self-hosted local DevOps engineering platform","version":0,"createdAt":"2026-10-24T11:49:13.799067Z","updatedAt":"2026-10-24T11:49:13.799067Z","archivedAt":null}
+
+--- 9. Mutating Project Without If-Match (428 Precondition Required) ---
+[PASS] Mutation without If-Match returns 428 Precondition Required (HTTP 428)
+{"detail":"Header 'If-Match' is required for mutating project updates.","instance":"/api/v1/projects/8754399b-a35a-4e05-bcfe-416e705cf280","status":428,"title":"Precondition Required","type":"https://forgeops.local/errors/precondition-required","timestamp":"2026-10-24T11:49:14.450798074Z","correlationId":"6e7f4c76-9b30-4380-84bb-42af40f36fad"}
+
+--- 10. Mutating Project With Stale If-Match (412 Precondition Failed) ---
+[PASS] Mutation with stale If-Match returns 412 Precondition Failed (HTTP 412)
+{"detail":"Supplied If-Match version 999 does not match current resource version 0.","instance":"/api/v1/projects/8754399b-a35a-4e05-bcfe-416e705cf280","status":412,"title":"Precondition Failed","type":"https://forgeops.local/errors/precondition-failed","timestamp":"2026-10-24T11:49:14.727083896Z","correlationId":"6eb07156-4232-40aa-9995-4234c11c4d5f"}
+
+--- 11. Mutating Project With Valid If-Match (200 OK, New ETag) ---
+[PASS] Mutation with valid If-Match returns 200 OK (HTTP 200)
+HTTP/1.1 200 
+X-Request-ID: 5342c8c3-22fb-4b01-b922-ff9abb85ceb3
+ETag: "1"
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 11:49:15 GMT
+
+{"id":"8754399b-a35a-4e05-bcfe-416e705cf280","name":"ForgeOps Core Platform Lab v2","description":"Self-hosted local DevOps engineering platform","version":1,"createdAt":"2026-10-24T11:49:13.799067Z","updatedAt":"2026-10-24T11:49:15.019157037Z","archivedAt":null}
+
+Updated Project ETag: "1"
+--- 12. Task Creation Under Owned Project ---
+[PASS] Task creation returns 201 Created (HTTP 201)
+HTTP/1.1 201 
+X-Request-ID: 291ea0ef-8751-428d-808e-be973a4055c5
+Location: http://127.0.0.1:18080/api/v1/tasks/77e269b7-d709-4682-8588-2e73c4da1b32
+ETag: "0"
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 24 Oct 2026 11:49:15 GMT
+
+{"id":"77e269b7-d709-4682-8588-2e73c4da1b32","projectId":"8754399b-a35a-4e05-bcfe-416e705cf280","assignedAccountId":null,"title":"Implement G02 Docker Compose Stack","description":null,"status":"TODO","priority":"HIGH","dueDate":null,"version":0,"createdAt":"2026-10-24T11:49:15.330317421Z","updatedAt":"2026-10-24T11:49:15.330317512Z"}
+
+Created Task ID: 77e269b7-d709-4682-8588-2e73c4da1b32
+--- 13. Task Retrieval with ETag ---
+[PASS] Task retrieval returns 200 OK (HTTP 200)
+{"id":"77e269b7-d709-4682-8588-2e73c4da1b32","projectId":"8754399b-a35a-4e05-bcfe-416e705cf280","assignedAccountId":null,"title":"Implement G02 Docker Compose Stack","description":null,"status":"TODO","priority":"HIGH","dueDate":null,"version":0,"createdAt":"2026-10-24T11:49:15.330317Z","updatedAt":"2026-10-24T11:49:15.330318Z"}
+
+--- 14. Cross-Tenant Authorization Isolation (Anti-Enumeration 404) ---
+[PASS] Cross-user project access rejected with 404 Not Found (HTTP 404)
+{"detail":"Project not found with id: 8754399b-a35a-4e05-bcfe-416e705cf280","instance":"/api/v1/projects/8754399b-a35a-4e05-bcfe-416e705cf280","status":404,"title":"Resource Not Found","type":"https://forgeops.local/errors/resource-not-found","timestamp":"2026-10-24T11:49:15.919450433Z","correlationId":"efddf365-6d04-4562-af3e-509717dfd327"}
+
+[PASS] Cross-user task access rejected with 404 Not Found (HTTP 404)
+{"detail":"Task not found with id: 77e269b7-d709-4682-8588-2e73c4da1b32","instance":"/api/v1/tasks/77e269b7-d709-4682-8588-2e73c4da1b32","status":404,"title":"Resource Not Found","type":"https://forgeops.local/errors/resource-not-found","timestamp":"2026-10-24T11:49:16.203386046Z","correlationId":"fe9fb064-7bc7-43d1-9f6b-8dfa8d2b80ed"}
+
+=== Smoke Test Summary ===
+Passed: 15 | Failed: 0

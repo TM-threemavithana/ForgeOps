@@ -4,7 +4,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
-[![Gate Status](https://img.shields.io/badge/Gate%20G01-PASSED-success.svg)](docs/evidence/G01/acceptance.md)
+[![Gate Status](https://img.shields.io/badge/Gate%20G02-PASSED-success.svg)](docs/evidence/G02/acceptance.md)
 
 ForgeOps is a professional, production-grade local DevOps and Platform Engineering portfolio project. It is designed to demonstrate the complete, robust software delivery lifecycle:
 
@@ -18,7 +18,7 @@ Operating under a strict **zero paid cloud dependency** model, the entire platfo
 
 **ForgeTasks** is the core backend service of ForgeOps. Built with **Java 21 LTS** and **Spring Boot 4.1.2**, it provides a multi-tenant task and project management REST API backed by **PostgreSQL 16**.
 
-### Architectural Highlights (Phase G01)
+### Architectural Highlights (Phase G01 & G02)
 
 - **Domain Model:** Multi-tenant hierarchy (`Account` $\to$ `Project` $\to$ `Task`) with strict UUID primary keys and database foreign-key constraints.
 - **Tenant Isolation:** Enforced at the repository query level. Accessing a non-owned project or task strictly returns `HTTP 404 Not Found` to prevent resource enumeration attacks.
@@ -29,6 +29,11 @@ Operating under a strict **zero paid cloud dependency** model, the entire platfo
   - Stale precondition returns `HTTP 412 Precondition Failed`.
 - **Standardized Error Handling (RFC 9457):** All API errors and validation failures produce `application/problem+json` `ProblemDetail` structures enriched with correlation tracking.
 - **Traceability & Correlation:** `RequestCorrelationFilter` extracts or generates an `X-Request-ID`, propagating it into SLF4J MDC logs and response headers.
+- **Hardened Multi-Stage Containerization:**
+  - Minimal JRE runtime on Alpine Linux (`eclipse-temurin:21-jre-alpine`).
+  - Strict non-root execution (`10001:10001`), `no-new-privileges:true`, and `cap_drop: [ALL]`.
+  - Secure out-of-band secret injection using Docker Compose secrets and Spring Boot configuration trees (`optional:configtree:/run/secrets/`).
+  - Scoped loopback exposure (`127.0.0.1:18080:8080`) with internal-only PostgreSQL connectivity.
 - **Observability Foundations:**
   - Liveness probe at `/actuator/health/liveness` (JVM state, decoupled from database).
   - Readiness probe at `/actuator/health/readiness` (PostgreSQL connectivity check).
@@ -45,7 +50,7 @@ Implementation progress is governed by strict gated reviews (Gates G00 through G
 |---|---|---|---|
 | **G00** | Preflight, Hardware Feasibility & Architecture Baseline | **PASSED** | [G00 Preflight Report](docs/evidence/G00-preflight.md) |
 | **G01** | ForgeTasks API Backend & PostgreSQL Schema Correctness | **PASSED** | [G01 Acceptance Report](docs/evidence/G01/acceptance.md) |
-| **G02** | Multi-Stage Containerization & Docker Compose Stack | *Planned* | Deferred to Gate G02 |
+| **G02** | Multi-Stage Containerization & Docker Compose Stack | **PASSED** | [G02 Acceptance Report](docs/evidence/G02/acceptance.md) |
 | **G03** | Local & GitHub Actions CI Pipelines | *Planned* | Deferred to Gate G03 |
 | **G04** | Ansible Linux Host Configuration Management | *Planned* | Deferred to Gate G04 |
 | **G05** | Terraform Local Docker Lab Fixture | *Planned* | Deferred to Gate G05 |
@@ -61,7 +66,7 @@ Implementation progress is governed by strict gated reviews (Gates G00 through G
 | **G15** | Final Project Showcase, Architectural Portfolio & Video | *Planned* | Deferred to Gate G15 |
 
 > [!NOTE]
-> Future gates G02–G15 are planned in the [Master Implementation Plan](docs/FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md) and will be implemented sequentially upon review approval.
+> Future gates G03–G15 are planned in the [Master Implementation Plan](docs/FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md) and will be implemented sequentially upon review approval.
 
 ---
 
@@ -113,11 +118,73 @@ make build-api
 cd apps/forgetasks-api && ./mvnw clean package -DskipTests
 ```
 
+## Docker Compose Stack (Phase G02)
+
+The primary local development and verification environment runs ForgeTasks API and PostgreSQL 16 via Docker Compose in an isolated namespace (`forgeops-g02`).
+
+### 1. Initialize Local Secrets
+Generate an untracked local database credential (permissions 0600) into `secrets/db_password.txt`:
+
+```bash
+make setup-secrets
+# Or directly:
+./scripts/setup_secrets.sh
+```
+
+### 2. Build the Multi-Stage Container Image
+Build the hardened, non-root `forgetasks-api:1.0.0` image:
+
+```bash
+make compose-build
+# Or directly:
+docker compose build
+```
+
+### 3. Start the Local Compose Stack
+Start PostgreSQL and ForgeTasks API in background mode:
+
+```bash
+make compose-up
+# Or directly:
+docker compose up -d
+```
+
+The stack initializes the dedicated network (`forgeops-g02-net`), waits for PostgreSQL to become healthy via `pg_isready`, and starts ForgeTasks API bound strictly to loopback (`127.0.0.1:18080:8080`).
+
+### 4. Inspect Status and Logs
+```bash
+make compose-ps
+make compose-logs
+```
+
+### 5. Run Automated Live Verification
+```bash
+# 15-point live API contract, concurrency, and security verification
+./scripts/verify_g02_stack.sh
+
+# Persistence, container recreation, API restart & DB recovery drill
+./scripts/verify_g02_reliability.sh
+```
+
+### 6. Vulnerability Scanning (Trivy)
+Scan the runtime image using official Trivy without installing untrusted host binaries:
+
+```bash
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:latest image --pkg-types os --severity CRITICAL,HIGH,MEDIUM,LOW forgetasks-api:1.0.0
+```
+
+### 7. Gracefully Stop the Stack (Preserve Data)
+```bash
+make compose-down
+# Or directly:
+docker compose down
+```
+*Note: Persistent data is preserved in the named Docker volume `forgeops-g02-postgres-data`. Never use `-v` unless a complete destructive reset is intended.*
+
 ---
 
-## Local Execution & Verification
-
-### 1. Launch Local PostgreSQL Database
+## Standalone Local Execution (Phase G01 Legacy)
 
 Run an isolated PostgreSQL 16 database instance:
 
