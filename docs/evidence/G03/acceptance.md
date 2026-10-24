@@ -1,10 +1,11 @@
 # Gate G03 Acceptance Report — GitHub Actions CI/CD, Supply Chain Security & GHCR Publishing
 
-**Date:** 2026-10-24
-**Evaluator:** Principal DevOps Engineer, CI/CD Architect & Container Security Reviewer
+**Date:** 2026-10-25
+**Evaluator:** Tharuka Madhuwantha Threemavithana (`157876462+TM-threemavithana@users.noreply.github.com`)
+**Role:** Principal DevOps Engineer, CI/CD Architect & Container Security Reviewer
 **Gate:** G03 — Local & GitHub Actions CI Pipelines, Trust Boundaries and GHCR Publishing
-**Status:** CONDITIONAL / PENDING 1.0.1 VERIFICATION (Local verification complete; First GHCR release run 40121874920 completed with registry push, but post-push digest check failed; workflow fix verified with 70 automated tests)
-**Repository Working Tree:** Clean at local verification
+**Status:** PASSED — VERIFIED
+**Repository Working Tree:** Clean at verification
 **Execution Profile:** Core Profile (Local-First, Zero Cloud Dependencies)
 
 ---
@@ -13,9 +14,11 @@
 
 Gate G03 implements a secure, layered CI/CD system that separates untrusted CI (triggered on
 push/PR to master) from a manually controlled, approver-gated CD publishing workflow. All locally
-verifiable steps have been executed. GitHub Actions steps (Trivy SARIF upload, Gitleaks scan,
-GHCR publishing) require the repository to be pushed and are documented for user-controlled
-execution.
+verifiable steps and GitHub Actions CI/CD workflows have been executed and verified.
+
+Following the merge of PR #13 (commit `7adeec6fddda8c2e15f2f390e99f56c5b35d2fe2`), master CI run `40127142460` passed all validation checks including Maven verify (43 tests, JaCoCo ≥80%), Docker non-root build validation, Gitleaks secret detection, and Trivy security scanning. The required `ci-gate` status check succeeded.
+
+The production release workflow was subsequently executed in Run `40127622068`, successfully publishing version `1.0.1` to GitHub Container Registry (GHCR) under verified digest `sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691` with validated CycloneDX 1.6 SBOM and cryptographically verified SLSA build provenance.
 
 Key deliverables:
 
@@ -26,9 +29,9 @@ Key deliverables:
 
 2. **Publish Workflow** (`.github/workflows/publish.yml`): `workflow_dispatch` ONLY. Requires
    manual git SHA input, a semver tag (optional), and the literal string "PUBLISH" as a
-   confirmation guard. Runs Trivy CRITICAL scan before any push; on pass builds and pushes to
-   GHCR with SLSA Level 2 provenance attestation and SBOM. Image is referenced by immutable
-   SHA256 digest.
+   confirmation guard. Runs Trivy scan (zero CRITICAL/HIGH unfixed CVEs at configured threshold)
+   before any push; on pass builds and pushes to GHCR with signed SLSA build provenance attestation
+   and CycloneDX SBOM. Image is referenced by immutable SHA256 digest.
 
 3. **Dependabot** (`.github/dependabot.yml`): Monitors GitHub Actions, Maven, and Docker
    base images weekly. All updates target master via pull request — never auto-merged.
@@ -39,11 +42,11 @@ Key deliverables:
 
 5. **Trust Boundary Enforced**: No workflow pushes to GHCR on PR or push events. The
    publish workflow requires `packages:write` permission granted only to the triggering actor
-   (repository owner or invited collaborator).
+   and protected environment approval.
 
 6. **Supply Chain Controls**: Action versions pinned to stable major tags (v4, v3, v6).
-   Dependabot monitors these for updates. SLSA Level 2 provenance attached to every published
-   image. SBOM generated alongside each push.
+   Dependabot monitors these for updates. Signed SLSA build provenance attached to published
+   images. CycloneDX SBOM generated alongside each push.
 
 ---
 
@@ -55,6 +58,8 @@ Key deliverables:
 - **Docker Engine:** 29.5.3
 - **Trivy:** (optional local; enforced in CI runner)
 - **actionlint:** (optional local; documented)
+- **GitHub Actions Runner:** `ubuntu-latest`
+- **GitHub CLI:** `gh` 2.60+
 
 ---
 
@@ -67,11 +72,11 @@ Key deliverables:
 | Trigger | push and pull_request to master | `.github/workflows/ci.yml` L12–17 |
 | Permissions | `contents: read`, `security-events: write` | `.github/workflows/ci.yml` L19–22 |
 | No GHCR push | CI never calls `docker/login-action` or `build-push-action` with `push: true` | Confirmed by file inspection |
-| Build and test | `./mvnw clean verify -B -e` with JaCoCo gate | Job `build-and-test` |
-| Non-root check | Docker inspect verifies UID 10001 | Job `docker-build-validate` |
-| Trivy gate | Zero CRITICAL unfixed CVEs enforced with `exit-code: 1` | Job `trivy-scan` |
-| Gitleaks | Full history scan on each run | Job `gitleaks-scan` |
-| Required status | `ci-gate` job aggregates all results | `.github/workflows/ci.yml` L200+ |
+| Build and test | `./mvnw clean verify -B -e` with JaCoCo gate | Job `build-and-test` (Run `40127142460`) |
+| Non-root check | Docker inspect verifies UID 10001 | Job `docker-build-validate` (Run `40127142460`) |
+| Trivy gate | Zero CRITICAL unfixed CVEs enforced with `exit-code: 1` | Job `trivy-scan` (Run `40127142460`) |
+| Gitleaks | Full history scan on each run (`fetch-depth: 0`) | Job `gitleaks-scan` (Run `40127142460`) |
+| Required status | `ci-gate` job aggregates all results | `.github/workflows/ci.yml` L200+ (Run `40127142460`: success) |
 
 ### A-302: Trusted release to GHCR by SHA256 (Hardened)
 
@@ -87,11 +92,11 @@ Key deliverables:
 | Head alignment | Must match current `origin/master` HEAD | `validate-release` step 2 HEAD check |
 | CI run verification | Real-time query of `ci.yml` run | `validate-release` step 3 (`gh api`) |
 | CI Gate check | Mandatory `CI Gate` job completed:success | `validate-release` step 3 (`gh api`) |
-| Protected environment | Approval required via `release` environment | `publish` job `environment: release` |
+| Protected environment | Approval required via `release` environment | `publish` job `environment: release` (Run `40127622068`) |
 | Build-once integrity | Build once, load locally, zero rebuild | `publish` step 4 (`load: true`, `push: false`) |
 | Tamper verification | Candidate Image ID verified pre/post scan | `publish` step 5 & 10 (`docker inspect`) |
-| Pre-push Trivy gate | Zero CRITICAL or HIGH unfixed CVEs | `publish` step 6 (`exit-code: 1`, `severity: CRITICAL,HIGH`) |
-| Digest verification | Authoritative GHCR query (`imagetools`) across all tags | `publish` step 12 (`buildx imagetools inspect --format '{{.Manifest.Digest}}'`) |
+| Pre-push Trivy gate | Zero CRITICAL or HIGH unfixed CVEs at configured threshold | `publish` step 6 (`exit-code: 1`, `severity: CRITICAL,HIGH`) |
+| Digest verification | Authoritative GHCR query (`imagetools`) across all tags | `publish` step 12 (`sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691`) |
 | Config ID match | Remote config digest matches scanned candidate ID | `publish` step 12 (`buildx imagetools inspect --raw`) |
 | Provenance | Mandatory SLSA Build Provenance attestation | `publish` step 13 (`actions/attest-build-provenance@v2`, no continue-on-error) |
 | SBOM | CycloneDX SBOM generated and retained | `publish` step 8 & 9 (Trivy + `upload-artifact@v4`) |
@@ -240,9 +245,9 @@ On October 24, 2026, the first controlled publication was executed against maste
 **Observed Incident:**
 1. All preflight validations (commit format, master HEAD, passing CI Gate) succeeded.
 2. The manual `release` environment approval succeeded.
-3. Docker successfully built the candidate image once, verified the candidate ID, passed Trivy CRITICAL and HIGH gates (0 vulnerabilities), and pushed all three tags:
+3. Docker successfully built the candidate image once, verified the candidate ID, passed Trivy CRITICAL and HIGH gates (0 vulnerabilities at configured threshold), and pushed all three tags:
    - `ghcr.io/tm-threemavithana/forgetasks-api:sha-995a929`
-   - `ghcr.io/tm-threemavithana/forgetasks-api:995a92954000f987736875be6881912a74b8b07e`
+   - `ghcr.io/tm-threemavithana/forgetasks-api:<commit-sha>`
    - `ghcr.io/tm-threemavithana/forgetasks-api:1.0.0`
 4. Published registry manifest digest confirmed by GHCR:
    `sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba`
@@ -265,22 +270,69 @@ On October 24, 2026, the first controlled publication was executed against maste
 **Registry Immutability & Next Release Procedure:**
 Tag `1.0.0` is already published in GHCR and must NOT be overwritten. The next controlled publication after this fix is merged to master must use version `1.0.1` (or SHA-only tags).
 
+### 8.6 Verified Production Release (v1.0.1) & Cryptographic Attestation Evidence
+
+Following the merge of PR #13 on commit `7adeec6fddda8c2e15f2f390e99f56c5b35d2fe2`:
+
+1. **Master CI Run (`40127142460`):**
+   - Verified commit: `7adeec6fddda8c2e15f2f390e99f56c5b35d2fe2`
+   - URL: `https://github.com/TM-threemavithana/ForgeOps/actions/runs/40127142460`
+   - Maven verify (43 tests, JaCoCo instruction 94.09%, branch 91.23%): PASSED.
+   - Docker non-root check (UID 10001): PASSED.
+   - Gitleaks full-history scan (`fetch-depth: 0`): PASSED (0 secrets detected).
+   - Trivy vulnerability scan: PASSED (0 CRITICAL unfixed CVEs at configured threshold).
+   - `ci-gate` aggregate status: SUCCESS.
+
+2. **GHCR Release Run (`40127622068`):**
+   - URL: `https://github.com/TM-threemavithana/ForgeOps/actions/runs/40127622068`
+   - Target version: `1.0.1`
+   - Protected environment: `release` (manual deployment approval completed).
+   - Pre-push Trivy gate: PASSED (0 CRITICAL or HIGH unfixed CVEs at configured threshold).
+   - Published tags: `1.0.1`, `sha-7adeec6`, and commit tag.
+   - Authoritative manifest digest verified from GHCR across all tags:
+     `sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691`
+   - Remote manifest config digest verified against scanned candidate image ID.
+
+3. **CycloneDX 1.6 SBOM Validation:**
+   - Artifact: `forgetasks-api-sbom.cdx.json`
+   - Local evidence: `/home/tharuka/forgeops-g03-verification/forgetasks-api-sbom.cdx.json`
+   - Specification: CycloneDX v1.6
+   - Inventory: 124 components, 125 dependency entries.
+   - Note: The SBOM provides an auditable component inventory for ongoing dependency tracking; having zero vulnerability entries in the SBOM does not equate to vulnerability scanning, which is independently evaluated by Trivy.
+
+4. **Cryptographic Build Provenance Verification:**
+   - Generated via `actions/attest-build-provenance@v2` signed by GitHub Actions OIDC.
+   - Verified using GitHub CLI:
+     ```bash
+     gh attestation verify oci://ghcr.io/tm-threemavithana/forgetasks-api@sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691 --owner TM-threemavithana
+     ```
+   - Exit code: `0` (Success, 1 matching signed attestation).
+   - Local evidence: `/home/tharuka/forgeops-g03-verification/provenance-verification.json`
+   - Predicate type: `https://slsa.dev/provenance/v1`
+   - Subject: `ghcr.io/tm-threemavithana/forgetasks-api` @ `sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691`
+   - Note: Proves non-forgeable build origin from the repository workflow via GitHub Actions OIDC; does not constitute external commercial SLSA certification.
+
+5. **Nonblocking Maintenance Observations:**
+   - Local scan tools (Trivy, Gitleaks, actionlint) are optional on local workstation and authoritatively enforced in GitHub Actions runner.
+   - Trivy `ignore-unfixed: true` threshold policy avoids blocking on unpatchable upstream OS packages.
+   - Initial `1.0.0` image remains in GHCR without attestation under immutability policy; superseded by fully attested release `1.0.1`.
+
 ---
 
 ## 9. Gate Result
 
 | Acceptance Test | Result | Evidence |
 |---|---|---|
-| A-301: CI workflow syntax and trust model | PASS | File inspection, local verification |
-| A-302: Publish workflow safety controls | PASS | 70 automated regression tests in `test_publish_hardening.py` |
+| A-301: CI workflow syntax and trust model | PASS | File inspection, local verification; verified in CI run 40127142460 |
+| A-302: Publish workflow safety controls | PASS | 70 automated regression tests in `test_publish_hardening.py`; verified in release run 40127622068 |
 | A-303: Local CI counterpart (`make ci-local`) | PASS | `verify_g03_local.sh` output |
-| Maven verify (43 tests, JaCoCo ≥80%) | PASS | Local run included in A-303 |
-| Docker non-root validation | PASS | Local run included in A-303 |
-| No secrets in workflow files | PASS | No PATs; GITHUB_TOKEN only |
+| Maven verify (43 tests, JaCoCo ≥80%) | PASS | Local run included in A-303; passed in CI run 40127142460 |
+| Docker non-root validation | PASS | Local run included in A-303; UID 10001 verified in CI run 40127142460 |
+| No secrets in workflow files | PASS | No PATs; GITHUB_TOKEN only; Gitleaks scan passed in CI |
 | Dependabot supply-chain coverage | PASS | `.github/dependabot.yml` |
 | G01 regression | PASS | 43/43 tests, BUILD SUCCESS |
-| Production Release Verification | CONDITIONAL | Run `40121874920` pushed `1.0.0` to GHCR (`sha256:3d297bba979079d38ee0f91b87c07648676e2f4adb26955c90e029f3dcfbcaba`); post-push digest check failed; fix implemented and verified locally; awaiting release of `1.0.1` on master |
+| Production Release Verification | PASS | Run `40127622068` published `1.0.1` to GHCR (`sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691`); authoritative digest and signed SLSA provenance verified |
 
-**G03 Status: CONDITIONAL / PENDING 1.0.1 VERIFICATION**
+**G03 Status: PASSED — VERIFIED**
 
-Full gate acceptance requires merging branch `g03-registry-digest-fix` to `master`, verifying the master `CI Gate`, and executing a controlled GHCR release for `1.0.1` with successful authoritative digest verification and SLSA provenance attestation.
+Gate G03 has met all acceptance criteria across local and GitHub Actions environments. The software supply chain is secured, release 1.0.1 is published and cryptographically attested, and the pipeline is verified for GitOps promotion in Gate G04.

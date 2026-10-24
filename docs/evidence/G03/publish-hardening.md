@@ -1,11 +1,11 @@
 # Gate G03 Evidence — GHCR Publishing Security Hardening & Artifact Integrity
 
-**Date:** 2026-10-24
-**Author:** Tharuka Madhuwantha Threemavithana (`158786462+TM-threemavithana@users.noreply.github.com`)
+**Date:** 2026-10-25
+**Author:** Tharuka Madhuwantha Threemavithana (`157876462+TM-threemavithana@users.noreply.github.com`)
 **Role:** Principal DevOps Engineer, GitHub Actions Security Engineer & Senior Technical Reviewer
-**Status:** IMPLEMENTED AND LOCALLY VERIFIED (Pending post-incident 1.0.1 verification on master)
+**Status:** VERIFIED AND CLOSED (Release 1.0.1 verified on master via Run 40127622068)
 **Target Workflow:** `.github/workflows/publish.yml`
-**Related Commits:** Baseline `5b70e43`, First Release `995a929`, Fix Branch `g03-registry-digest-fix`
+**Related Commits:** Baseline `5b70e43`, First Release `995a929`, PR #13 Release `7adeec6`
 
 ---
 
@@ -365,21 +365,20 @@ During run `40121874920`, tag `1.0.0` was successfully written to GHCR pointing 
 
 **Strict Rule:** To prevent breaking supply-chain immutability and client-side Docker layer caches, **do not overwrite or delete the existing `1.0.0` tag in GHCR**.
 
-### 11.2 Next Release Procedure (v1.0.1)
-Once this fix branch (`g03-registry-digest-fix`) is reviewed, merged into `master`, and passes CI:
+### 11.2 Verified Release Execution (v1.0.1 — Run 40127622068)
+Following the merge of PR #13 into `master` at commit `7adeec6fddda8c2e15f2f390e99f56c5b35d2fe2` (verified in CI run `40127142460`), the controlled release workflow was successfully dispatched and verified in Run `40127622068`:
 
-1. **Verify Master CI Gate:** Confirm the merge commit on `master` has completed all `ci.yml` checks.
-2. **Obtain Commit SHA:**
-   ```bash
-   git rev-parse origin/master
+1. **Master CI Gate Verified:** Run `40127142460` confirmed green `CI Gate` on commit `7adeec6`.
+2. **Release Authorization & Approval:** Passed preflight validation guards and completed manual deployment approval in GitHub Environment `release`.
+3. **Build Once, Scan Then Publish:** Built once into local daemon, passed pre-push Trivy CRITICAL and HIGH scan (0 CRITICAL or HIGH unfixed CVEs at configured threshold), and pushed tags `1.0.1`, `sha-7adeec6`, and commit tag.
+4. **Authoritative Registry Verification:** Direct GHCR inspection via `docker buildx imagetools inspect` confirmed manifest digest:
+   ```text
+   sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691
    ```
-3. **Trigger Workflow Dispatch with Version Bump:**
-   - **git_sha**: `<paste 40-character commit SHA from master>`
-   - **semver_tag**: `1.0.1` (do NOT reuse `1.0.0`)
-   - **confirm**: `PUBLISH`
-4. **Approve Release Environment:** Approve the deployment in GitHub Actions.
-5. **Verify Verification & Provenance:**
-   Confirm that all tags (`sha-<short>`, `<full-sha>`, `1.0.1`) resolve to the same manifest digest and that the SLSA attestation is successfully written and signed:
-   ```bash
-   gh attestation verify oci://ghcr.io/tm-threemavithana/forgetasks-api@sha256:<verified-digest> --owner tm-threemavithana
-   ```
+   All tags verified to resolve to this identical digest. Remote manifest config digest verified to match candidate image ID.
+5. **Cryptographic Build Provenance & SBOM:**
+   - CycloneDX SBOM v1.6 generated with 124 components.
+   - SLSA build provenance verified via `gh attestation verify` with exit code 0 and 1 matching signed attestation:
+     ```bash
+     gh attestation verify oci://ghcr.io/tm-threemavithana/forgetasks-api@sha256:629436fe1cc2d585ac3bae2e62db2b09fd19ed00fb7b1d83bd891e5d3346b691 --owner TM-threemavithana
+     ```
