@@ -1,11 +1,11 @@
 # Gate G03 Evidence — GHCR Publishing Security Hardening & Artifact Integrity
 
-**Date:** 2026-10-24  
-**Author:** Tharuka Madhuwantha Threemavithana (`158786462+TM-threemavithana@users.noreply.github.com`)  
-**Role:** Principal DevOps Engineer, GitHub Actions Security Engineer & Senior Technical Reviewer  
-**Status:** IMPLEMENTED AND LOCALLY VERIFIED (Pending GitHub Actions execution on master)  
-**Target Workflow:** `.github/workflows/publish.yml`  
-**Related Commits:** Baseline `5b70e43` (PR #1 merge)  
+**Date:** 2026-10-24
+**Author:** Tharuka Madhuwantha Threemavithana (`158786462+TM-threemavithana@users.noreply.github.com`)
+**Role:** Principal DevOps Engineer, GitHub Actions Security Engineer & Senior Technical Reviewer
+**Status:** IMPLEMENTED AND LOCALLY VERIFIED (Pending GitHub Actions execution on master)
+**Target Workflow:** `.github/workflows/publish.yml`
+**Related Commits:** Baseline `5b70e43` (PR #1 merge)
 
 ---
 
