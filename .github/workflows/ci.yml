@@ -208,7 +208,7 @@ jobs:
           cache-from: type=gha
 
       - name: Run Trivy scan (SARIF output for Code Scanning)
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: ${{ env.IMAGE_NAME }}:trivy-${{ github.sha }}
           format: sarif
@@ -225,7 +225,7 @@ jobs:
           category: trivy-image-scan
 
       - name: Enforce zero CRITICAL vulnerabilities (gate)
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: ${{ env.IMAGE_NAME }}:trivy-${{ github.sha }}
           format: table
