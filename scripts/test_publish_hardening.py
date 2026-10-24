@@ -141,7 +141,29 @@ def test_bash_script_syntax():
 def test_rejection_paths():
     print("\n--- Test 3: Trusted Commit & Input Rejection Paths ---")
 
-    # Test 3.1: Confirmation guard
+    # Test 3.1: Trigger ref check (must be refs/heads/master)
+    test_refs = [
+        ("refs/heads/master", True),
+        ("refs/heads/feature/branch", False),
+        ("refs/heads/g03-publish-hardening", False),
+        ("refs/pull/1/merge", False),
+        ("refs/tags/v1.0.0", False)
+    ]
+    for ref_str, should_pass in test_refs:
+        ref_check = f"""
+WORKFLOW_REF="{ref_str}"
+if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+    exit 1
+fi
+"""
+        p = subprocess.run(["bash", "-c", ref_check])
+        passed = (p.returncode == 0)
+        if passed == should_pass:
+            log_pass(f"Trigger ref test '{ref_str}': {'Accepted' if should_pass else 'Rejected'} as expected")
+        else:
+            log_fail(f"Trigger ref test '{ref_str}' unexpected result: expected {should_pass}, got {passed}")
+
+    # Test 3.2: Confirmation guard
     code = """
 CONFIRM_INPUT="INVALID"
 if [ "$CONFIRM_INPUT" != "PUBLISH" ]; then
@@ -166,7 +188,7 @@ fi
     else:
         log_fail("Confirmation guard failed on valid input")
 
-    # Test 3.2: 40-character hex SHA regex
+    # Test 3.3: 40-character hex SHA regex
     test_shas = [
         ("short sha", "5b70e43", False),
         ("branch name", "master", False),
@@ -191,28 +213,35 @@ fi
         else:
             log_fail(f"SHA regex test '{name}' unexpected result: expected {should_pass}, got {passed}")
 
-    # Test 3.3: Semver regex
+    # Test 3.4: Docker-compatible Semver regex (strictly rejecting '+' build metadata)
     test_semvers = [
         ("1.0.0", True),
         ("0.1.0-rc.1", True),
-        ("v1.0.0", False), # v prefix not strict semver
-        ("latest", False),
-        ("1.0", False),
-        ("1.0.0+build123", True)
+        ("2.0.0-beta.2", True),
+        ("1.0.0+build123", False),  # Rejected: Docker forbids '+'
+        ("1.0.0+20130313144700", False),  # Rejected: Docker forbids '+'
+        ("v1.0.0", False),          # Rejected: Leading 'v'
+        ("latest", False),          # Rejected: Floating string
+        ("1.0", False),             # Rejected: Incomplete version
+        ("1.0.0.0", False)          # Rejected: Too many segments
     ]
     for semver, should_pass in test_semvers:
         check = f"""
 SEMVER="{semver}"
-if ! [[ "$SEMVER" =~ ^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*))?(\\+([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*))?$ ]]; then
+# Docker tags forbid '+'. Reject build metadata with clear error.
+if [[ "$SEMVER" == *"+"* ]]; then
+    exit 1
+fi
+if ! [[ "$SEMVER" =~ ^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*))?$ ]]; then
     exit 1
 fi
 """
         p = subprocess.run(["bash", "-c", check])
         passed = (p.returncode == 0)
         if passed == should_pass:
-            log_pass(f"Semver regex test '{semver}': {'Accepted' if should_pass else 'Rejected'} as expected")
+            log_pass(f"Docker Semver test '{semver}': {'Accepted' if should_pass else 'Rejected (forbidden/invalid)'} as expected")
         else:
-            log_fail(f"Semver regex test '{semver}' unexpected result")
+            log_fail(f"Docker Semver test '{semver}' unexpected result: expected {should_pass}, got {passed}")
 
     # Test 3.4: Git ancestry check against current master
     # Get current master HEAD

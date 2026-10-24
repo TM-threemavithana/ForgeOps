@@ -31,6 +31,8 @@ All identified vulnerabilities have been remediated with defensive controls, lea
 | **VULN-PUB-06** | **Lack of Protected Environment / Approval** | Anyone with repository write access could trigger an immediate release without peer review or gate approval. | **Protected Environment Guard:** Scoped the `publish` job to the GitHub Environment `release`, enabling repository owners to require manual review approvals and restricted branch triggers. |
 | **VULN-PUB-07** | **Unsubstantiated Provenance Claims** | Workflow comments claimed "SLSA Level 2" provenance while rebuilding the image, violating provenance non-forgeability and build reproducibility. | **Accurate SLSA Attestation:** Integrated `actions/attest-build-provenance@v2` targeting the exact published SHA256 digest, paired with Trivy CycloneDX SBOM generation and artifact retention. |
 | **VULN-PUB-08** | **Race Conditions on Concurrent Releases** | Multiple simultaneous `workflow_dispatch` executions could interleave tag updates or produce inconsistent digest outputs. | **Workflow Concurrency Control:** Added `concurrency: group: publish-ghcr, cancel-in-progress: false` to sequence releases safely. |
+| **VULN-PUB-09** | **Dispatch from Non-Master Branches** | `workflow_dispatch` can be invoked from any branch where the file exists. If run on a feature branch, it could publish untested code. | **Branch Execution Guard:** Explicitly checks `$WORKFLOW_REF == "refs/heads/master"`. Dispatches from feature branches, PR refs, or tags are immediately blocked. |
+| **VULN-PUB-10** | **Invalid Docker Tag Format ('+' character)** | Standard SemVer allows build metadata (e.g. `1.0.0+build123`), but OCI/Docker container tag syntax forbids `+`, causing downstream push/build failures. | **Docker Tag Format Guard:** Rejects `+` with an explicit diagnostic error and validates against strict container-compatible SemVer regex. |
 
 ---
 
@@ -44,7 +46,7 @@ The hardened pipeline implements a two-job, fail-fast architecture:
         ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Job 1: validate-release (ubuntu-latest, read-only permissions)         │
-│  ├─ Step 1: Input Syntax & Confirmation Guard (regex validation)        │
+│  ├─ Step 1: Trigger Ref (refs/heads/master) & Docker SemVer Validation │
 │  ├─ Step 2: Checkout origin/master (fetch-depth: 0)                    │
 │  ├─ Step 3: Git object existence check (git rev-parse)                 │
 │  ├─ Step 4: Master branch ancestry check (git merge-base --is-ancestor)│
@@ -121,16 +123,19 @@ The pipeline strictly enforces:
 - **MEDIUM / LOW:** Logged to SARIF and uploaded to GitHub Code Scanning for informational monitoring.
 - **Scanners:** `os,library` (scans Alpine OS packages and Maven jar dependencies).
 
-### 5.2 Analysis of `ignore-unfixed: true`
-The Trivy configuration includes `ignore-unfixed: true`.
+### 5.2 Analysis of `ignore-unfixed: true` & Code Scanning SARIF Scope
+Both the blocking gate step and the SARIF report generation step configure `ignore-unfixed: true`.
 - **Rationale:** Prevents release pipeline paralysis caused by upstream vulnerabilities for which no patched package exists in Alpine Linux or Maven Central.
-- **Residual Risk:** A container image may be published containing known vulnerabilities if no upstream fix is available.
-- **Compensating Controls (Defense-in-Depth):**
+- **Direct Impact on GitHub Code Scanning:** Because `ignore-unfixed: true` is set on the Trivy SARIF generation step, **unfixed vulnerabilities are explicitly excluded from the SARIF upload and will NOT appear as alerts in GitHub Code Scanning**. Code Scanning alerts are strictly reserved for actionable (fixable) CRITICAL and HIGH vulnerabilities.
+- **Residual Risk:** A container image may be published containing known vulnerabilities without an available upstream fix, and these unfixed CVEs will not trigger Code Scanning alerts.
+- **Where Unfixed Vulnerabilities Can Be Inspected:**
+  1. *CycloneDX SBOM:* A complete bill of materials is generated from the candidate image (`forgetasks-api-sbom.cdx.json`) and retained as a workflow artifact, allowing offline vulnerability lookup (e.g. via `trivy sbom` or Dependency-Track).
+  2. *Local / Manual Trivy Scans:* Running `trivy image --ignore-unfixed=false <image>` reveals all known unfixed vulnerabilities.
+  3. *Dependabot:* Continues monitoring base images and Maven dependencies weekly for newly published fixes.
+- **Compensating Runtime Controls (Defense-in-Depth):**
   1. *Non-root runtime execution:* Container enforces `USER 10001:10001`, preventing privileged container breakout.
   2. *Minimal runtime footprint:* Built on `eclipse-temurin:21-jre-alpine` with unused packages removed.
   3. *Network isolation:* Local port-binding to `127.0.0.1` only; Kubernetes NetworkPolicies under Cilium CNI restrict ingress/egress.
-  4. *Scheduled Dependabot scanning:* Automated weekly scans monitor base images and dependencies for newly released fixes.
-  5. *Code Scanning SARIF:* Unfixed vulnerabilities are still reported to GitHub Security tab for visibility.
 
 ---
 
@@ -184,6 +189,11 @@ Found 6 shell script blocks in publish.yml
 [PASS] Shell script block 6 passed bash -n syntax validation
 
 --- Test 3: Trusted Commit & Input Rejection Paths ---
+[PASS] Trigger ref test 'refs/heads/master': Accepted as expected
+[PASS] Trigger ref test 'refs/heads/feature/branch': Rejected as expected
+[PASS] Trigger ref test 'refs/heads/g03-publish-hardening': Rejected as expected
+[PASS] Trigger ref test 'refs/pull/1/merge': Rejected as expected
+[PASS] Trigger ref test 'refs/tags/v1.0.0': Rejected as expected
 [PASS] Rejection test: Non-PUBLISH confirmation correctly rejected (exit 1)
 [PASS] Acceptance test: Exact 'PUBLISH' confirmation accepted (exit 0)
 [PASS] SHA regex test 'short sha' (5b70e43...): Rejected as expected
@@ -193,12 +203,15 @@ Found 6 shell script blocks in publish.yml
 [PASS] SHA regex test 'valid 40 hex' (5b70e434313b...): Accepted as expected
 [PASS] SHA regex test '41 chars' (5b70e434313b...): Rejected as expected
 [PASS] SHA regex test 'non-hex' (5b70e434313b...): Rejected as expected
-[PASS] Semver regex test '1.0.0': Accepted as expected
-[PASS] Semver regex test '0.1.0-rc.1': Accepted as expected
-[PASS] Semver regex test 'v1.0.0': Rejected as expected
-[PASS] Semver regex test 'latest': Rejected as expected
-[PASS] Semver regex test '1.0': Rejected as expected
-[PASS] Semver regex test '1.0.0+build123': Accepted as expected
+[PASS] Docker Semver test '1.0.0': Accepted as expected
+[PASS] Docker Semver test '0.1.0-rc.1': Accepted as expected
+[PASS] Docker Semver test '2.0.0-beta.2': Accepted as expected
+[PASS] Docker Semver test '1.0.0+build123': Rejected (forbidden/invalid) as expected
+[PASS] Docker Semver test '1.0.0+20130313144700': Rejected (forbidden/invalid) as expected
+[PASS] Docker Semver test 'v1.0.0': Rejected (forbidden/invalid) as expected
+[PASS] Docker Semver test 'latest': Rejected (forbidden/invalid) as expected
+[PASS] Docker Semver test '1.0': Rejected (forbidden/invalid) as expected
+[PASS] Docker Semver test '1.0.0.0': Rejected (forbidden/invalid) as expected
 [PASS] Git ancestry test: Current master HEAD (5b70e43) verified as valid ancestor of master
 [PASS] Git existence test: Non-existent commit correctly rejected (exit non-zero)
 
@@ -212,7 +225,7 @@ Found 6 shell script blocks in publish.yml
 [PASS] Published image digest captured from Docker daemon RepoDigests
 
 ============================================================
- Summary: 40 PASSED, 0 FAILED
+ Summary: 48 PASSED, 0 FAILED
 ============================================================
 All security hardening checks PASSED.
 ```

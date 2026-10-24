@@ -66,16 +66,25 @@ jobs:
       semver_tag: ${{ steps.validate-inputs.outputs.semver_tag }}
 
     steps:
-      - name: Validate input syntax and confirmation guard
+      - name: Validate workflow trigger ref, inputs, and confirmation guard
         id: validate-inputs
         env:
+          WORKFLOW_REF: ${{ github.ref }}
           CONFIRM_INPUT: ${{ inputs.confirm }}
           INPUT_SHA: ${{ inputs.git_sha }}
           SEMVER_INPUT: ${{ inputs.semver_tag }}
         run: |
-          echo "=== Step 1: Input Syntax & Confirmation Guard ==="
+          echo "=== Step 1: Trigger Ref, Input Syntax & Confirmation Guard ==="
 
-          # Check confirmation guard string
+          # 1. Verify workflow execution ref is refs/heads/master
+          if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+            echo "::error::Publishing workflow must be dispatched from 'refs/heads/master'. Current trigger ref: '$WORKFLOW_REF'."
+            echo "Execution from feature branches, pull requests, or non-master refs is strictly prohibited."
+            exit 1
+          fi
+          echo "[PASS] Workflow trigger ref verified: $WORKFLOW_REF."
+
+          # 2. Check confirmation guard string
           if [ "$CONFIRM_INPUT" != "PUBLISH" ]; then
             echo "::error::Confirmation guard failed. Expected 'PUBLISH', received '$CONFIRM_INPUT'."
             echo "Publication aborted. This guard prevents accidental GHCR releases."
@@ -83,7 +92,7 @@ jobs:
           fi
           echo "[PASS] Confirmation literal 'PUBLISH' verified."
 
-          # Normalize SHA (strip whitespace, lowercase)
+          # 3. Normalize SHA (strip whitespace, lowercase)
           CLEAN_SHA="$(echo "$INPUT_SHA" | tr '[:upper:]' '[:lower:]' | xargs)"
           if ! [[ "$CLEAN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Invalid git_sha '$INPUT_SHA'. A full 40-character hexadecimal SHA is required."
@@ -92,14 +101,20 @@ jobs:
           fi
           echo "[PASS] Full 40-character SHA syntax verified: $CLEAN_SHA"
 
-          # Validate optional semver tag
+          # 4. Validate optional semver tag (Docker tag compatible)
           CLEAN_SEMVER="$(echo "$SEMVER_INPUT" | xargs)"
           if [ -n "$CLEAN_SEMVER" ]; then
-            if ! [[ "$CLEAN_SEMVER" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
-              echo "::error::Invalid semver_tag '$CLEAN_SEMVER'. Must follow Semantic Versioning (e.g. 1.0.0 or 1.0.0-rc.1)."
+            # Docker tags forbid '+'. Reject build metadata with clear error.
+            if [[ "$CLEAN_SEMVER" == *"+"* ]]; then
+              echo "::error::Invalid semver_tag '$CLEAN_SEMVER'. Docker image tags do not support '+' (SemVer build metadata is forbidden in container tags)."
               exit 1
             fi
-            echo "[PASS] Semver tag syntax verified: $CLEAN_SEMVER"
+            # Strict SemVer regex without build metadata (+): X.Y.Z or X.Y.Z-prerelease
+            if ! [[ "$CLEAN_SEMVER" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
+              echo "::error::Invalid semver_tag '$CLEAN_SEMVER'. Must follow Semantic Versioning (e.g. 1.0.0 or 1.0.0-rc.1) using only Docker-compatible characters."
+              exit 1
+            fi
+            echo "[PASS] Semver tag syntax verified (Docker-compatible): $CLEAN_SEMVER"
           else
             echo "[INFO] No semver tag provided. Publishing will use immutable SHA tags only."
           fi
