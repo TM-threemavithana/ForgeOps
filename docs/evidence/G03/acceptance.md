@@ -73,18 +73,28 @@ Key deliverables:
 | Gitleaks | Full history scan on each run | Job `gitleaks-scan` |
 | Required status | `ci-gate` job aggregates all results | `.github/workflows/ci.yml` L200+ |
 
-### A-302: Trusted release to GHCR by SHA256
+### A-302: Trusted release to GHCR by SHA256 (Hardened)
 
 | Item | Requirement | Evidence |
 |---|---|---|
-| Trigger | `workflow_dispatch` only | `.github/workflows/publish.yml` L20 |
-| Confirmation guard | Input must equal literal "PUBLISH" | `preflight` job, step 1 |
-| Specific SHA checkout | `ref: git_sha input` | `publish` job checkout step |
-| Pre-push Trivy gate | Zero CRITICAL CVEs before any push | `publish` job trivy step |
-| Provenance | SLSA Level 2 via `provenance: mode=max` | `build-and-push` step |
-| SBOM | `sbom: true` | `build-and-push` step |
-| Digest recording | Logged to run summary | `record published image digest` step |
-| No leaked secrets | `packages:write` from GITHUB_TOKEN only; no PATs | Workflow permission block |
+| Trigger | `workflow_dispatch` only | `.github/workflows/publish.yml` |
+| Concurrency | Single release execution | `publish-ghcr`, `cancel-in-progress: false` |
+| Input sanitization | No shell interpolation; regex guards | `validate-release` step 1 |
+| Confirmation guard | Input must equal literal "PUBLISH" | `validate-release` step 1 |
+| SHA format validation | Full 40-character hexadecimal SHA | `validate-release` step 1 regex check |
+| Repository existence | Object exists in repository database | `validate-release` step 2 (`git rev-parse`) |
+| Trusted history | Must be ancestor of `origin/master` | `validate-release` step 2 (`git merge-base`) |
+| Head alignment | Must match current `origin/master` HEAD | `validate-release` step 2 HEAD check |
+| CI run verification | Real-time query of `ci.yml` run | `validate-release` step 3 (`gh api`) |
+| CI Gate check | Mandatory `CI Gate` job completed:success | `validate-release` step 3 (`gh api`) |
+| Protected environment | Approval required via `release` environment | `publish` job `environment: release` |
+| Build-once integrity | Build once, load locally, zero rebuild | `publish` step 4 (`load: true`, `push: false`) |
+| Tamper verification | Candidate Image ID verified pre/post scan | `publish` step 5 & 10 (`docker inspect`) |
+| Pre-push Trivy gate | Zero CRITICAL or HIGH unfixed CVEs | `publish` step 6 (`exit-code: 1`, `severity: CRITICAL,HIGH`) |
+| Provenance | SLSA Build Provenance attestation | `publish` step 13 (`actions/attest-build-provenance@v2`) |
+| SBOM | CycloneDX SBOM generated and retained | `publish` step 8 & 9 (Trivy + `upload-artifact@v4`) |
+| Digest recording | Captured from `.RepoDigests` | `publish` step 12 |
+| Scoped permissions | `packages:write` scoped strictly to `publish` | Workflow job permission blocks |
 
 ### A-303: Local CI counterpart
 

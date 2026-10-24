@@ -1,18 +1,20 @@
-﻿# ForgeOps GHCR Image Publishing Pipeline
-# Gate G03: Controlled, Trusted Release to GitHub Container Registry
+# ForgeOps GHCR Image Publishing Pipeline
+# Gate G03: Controlled, Hardened Release to GitHub Container Registry (GHCR)
 #
-# Trust model:
-#   - Triggered ONLY by manual workflow_dispatch (never on push/PR)
-#   - Requires approver confirmation of the input SHA to prevent accidental releases
-#   - Builds image from a specific git SHA; tags with that SHA plus semver if provided
-#   - Attaches provenance attestation (SLSA Level 2) via docker/build-push-action
-#   - Requires packages:write permission; GITHUB_TOKEN is sufficient (no PAT needed)
-#
-# Security controls:
-#   - Re-runs Trivy CRITICAL scan before push; blocks if CRITICAL CVEs are found
-#   - Image is tagged by immutable SHA digest; floating tags (latest) are secondary
-#   - No secrets are baked into the image layers
-#   - Pinned action versions using commit SHAs for supply-chain integrity
+# Trust Boundary & Architecture:
+#   - Triggered EXCLUSIVELY by manual workflow_dispatch (never on push, PR, or schedule)
+#   - Input Injection Defense: all workflow inputs are sanitized via env variables with regex guards
+#   - Confirmation Guard: requires explicit literal "PUBLISH"
+#   - Cryptographic Pinning: requires full 40-character commit SHA
+#   - Trusted History Enforcement: commit must exist in repo, belong to origin/master history,
+#     and match current origin/master HEAD (initial publishing policy)
+#   - CI Gate Verification: queries GitHub API to ensure the exact source SHA has a successful
+#     run in ci.yml and that the mandatory "CI Gate" check passed
+#   - Protected Environment: executes publish job in the "release" GitHub Environment with required reviewers
+#   - Build-Once, Scan-Then-Publish: image is built once, loaded into Docker daemon, scanned by Trivy
+#     (blocking on CRITICAL and HIGH CVEs), and pushed directly without rebuilding (zero rebuild disparity)
+#   - Immutable Digest Capture: captures sha256:... digest from registry and attests build provenance
+#   - Least-Privilege: packages:write is scoped strictly to the publish job; top-level is read-only
 
 name: Publish to GHCR
 
@@ -20,11 +22,11 @@ on:
   workflow_dispatch:
     inputs:
       git_sha:
-        description: "Git commit SHA to build and publish (short or full)"
+        description: "Exact 40-character Git commit SHA to build and publish (must be verified on master)"
         required: true
         type: string
       semver_tag:
-        description: "Optional semantic version tag (e.g. 1.0.0). Leave blank to publish SHA-only."
+        description: "Optional semantic version tag (e.g. 1.0.0). Leave blank for SHA-only tagging."
         required: false
         type: string
         default: ""
@@ -33,84 +35,292 @@ on:
         required: true
         type: string
 
-# Minimal permissions; packages:write is added below per job
+# Global least-privilege: read-only by default
 permissions:
   contents: read
+
+# Concurrency: prevent simultaneous release runs that could race on image tags
+concurrency:
+  group: publish-ghcr
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/forgetasks-api
-  JAVA_VERSION: "21"
-  JAVA_DISTRIBUTION: temurin
 
 jobs:
 
   # ---------------------------------------------------------------------------
-  # Preflight: Validate inputs before doing any real work
+  # Job 1: Validate Release Inputs, Git Ancestry, and CI Verification Status
   # ---------------------------------------------------------------------------
-  preflight:
-    name: Publication Preflight Check
+  validate-release:
+    name: Validate Release Authorization
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    outputs:
+      validated_sha: ${{ steps.validate-commit.outputs.validated_sha }}
+      short_sha: ${{ steps.validate-commit.outputs.short_sha }}
+      semver_tag: ${{ steps.validate-inputs.outputs.semver_tag }}
 
     steps:
-      - name: Validate confirmation input
+      - name: Validate input syntax and confirmation guard
+        id: validate-inputs
+        env:
+          CONFIRM_INPUT: ${{ inputs.confirm }}
+          INPUT_SHA: ${{ inputs.git_sha }}
+          SEMVER_INPUT: ${{ inputs.semver_tag }}
         run: |
-          if [ "${{ github.event.inputs.confirm }}" != "PUBLISH" ]; then
-            echo "[FAIL] Confirmation input was '${{ github.event.inputs.confirm }}' — expected 'PUBLISH'."
+          echo "=== Step 1: Input Syntax & Confirmation Guard ==="
+
+          # Check confirmation guard string
+          if [ "$CONFIRM_INPUT" != "PUBLISH" ]; then
+            echo "::error::Confirmation guard failed. Expected 'PUBLISH', received '$CONFIRM_INPUT'."
             echo "Publication aborted. This guard prevents accidental GHCR releases."
             exit 1
           fi
-          echo "[PASS] Confirmation accepted."
+          echo "[PASS] Confirmation literal 'PUBLISH' verified."
 
-      - name: Echo publication parameters
+          # Normalize SHA (strip whitespace, lowercase)
+          CLEAN_SHA="$(echo "$INPUT_SHA" | tr '[:upper:]' '[:lower:]' | xargs)"
+          if ! [[ "$CLEAN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid git_sha '$INPUT_SHA'. A full 40-character hexadecimal SHA is required."
+            echo "Short SHAs, branch names, and floating refs are rejected to guarantee cryptographic immutability."
+            exit 1
+          fi
+          echo "[PASS] Full 40-character SHA syntax verified: $CLEAN_SHA"
+
+          # Validate optional semver tag
+          CLEAN_SEMVER="$(echo "$SEMVER_INPUT" | xargs)"
+          if [ -n "$CLEAN_SEMVER" ]; then
+            if ! [[ "$CLEAN_SEMVER" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
+              echo "::error::Invalid semver_tag '$CLEAN_SEMVER'. Must follow Semantic Versioning (e.g. 1.0.0 or 1.0.0-rc.1)."
+              exit 1
+            fi
+            echo "[PASS] Semver tag syntax verified: $CLEAN_SEMVER"
+          else
+            echo "[INFO] No semver tag provided. Publishing will use immutable SHA tags only."
+          fi
+
+          echo "clean_sha=$CLEAN_SHA" >> "$GITHUB_OUTPUT"
+          echo "semver_tag=$CLEAN_SEMVER" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Verify commit existence and master branch history
+        id: validate-commit
+        env:
+          TARGET_SHA: ${{ steps.validate-inputs.outputs.clean_sha }}
         run: |
-          echo "=== Publication Parameters ==="
-          echo "Repository:  ${{ github.repository }}"
-          echo "Triggered by: ${{ github.actor }}"
-          echo "Target SHA:  ${{ github.event.inputs.git_sha }}"
-          echo "Semver tag:  ${{ github.event.inputs.semver_tag || '(none)' }}"
-          echo "Registry:    ${{ env.REGISTRY }}"
-          echo "Image:       ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "=============================="
+          echo "=== Step 2: Git Repository & Ancestry Verification ==="
+          git fetch origin master
+
+          # 1. Verify object exists in Git repository
+          if ! git rev-parse --verify --quiet "${TARGET_SHA}^{commit}" > /dev/null; then
+            echo "::error::Commit $TARGET_SHA does not exist in the official repository."
+            exit 1
+          fi
+          echo "[PASS] Commit object exists in repository."
+
+          # 2. Verify commit is in master history (ancestor check)
+          if ! git merge-base --is-ancestor "$TARGET_SHA" origin/master; then
+            echo "::error::Commit $TARGET_SHA is not an ancestor of origin/master. Commits from unmerged feature branches or untrusted forks are strictly prohibited."
+            exit 1
+          fi
+          echo "[PASS] Commit belongs to trusted master branch history."
+
+          # 3. For initial publishing policy: require matching current master HEAD
+          MASTER_HEAD=$(git rev-parse origin/master)
+          if [ "$TARGET_SHA" != "$MASTER_HEAD" ]; then
+            echo "::error::Target commit $TARGET_SHA does not match current origin/master HEAD ($MASTER_HEAD)."
+            echo "Initial publishing policy requires releasing the current verified master HEAD."
+            exit 1
+          fi
+          echo "[PASS] Target commit matches current origin/master HEAD."
+
+          SHORT_SHA=$(git rev-parse --short=7 "$TARGET_SHA")
+          echo "validated_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Verify successful CI run and CI Gate check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ steps.validate-commit.outputs.validated_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "=== Step 3: CI Pipeline Verification ==="
+          echo "Querying GitHub Actions runs for commit: $TARGET_SHA"
+
+          # Query workflow runs for ci.yml on target commit
+          RUNS_JSON=$(gh api "/repos/${REPO}/actions/workflows/ci.yml/runs?head_sha=${TARGET_SHA}" 2>/dev/null || echo "")
+
+          if [ -z "$RUNS_JSON" ]; then
+            echo "::error::Failed to query GitHub Actions API for workflow runs."
+            exit 1
+          fi
+
+          TOTAL_RUNS=$(echo "$RUNS_JSON" | jq -r '.total_count // 0')
+          echo "Found $TOTAL_RUNS workflow run(s) for ci.yml at $TARGET_SHA."
+
+          if [ "$TOTAL_RUNS" -eq 0 ]; then
+            echo "::error::No CI run found for commit $TARGET_SHA in ci.yml."
+            echo "Only commits that have been verified by the CI pipeline can be published."
+            exit 1
+          fi
+
+          # Find the latest completed successful run on master
+          SUCCESSFUL_RUN_ID=$(echo "$RUNS_JSON" | jq -r '
+            [.workflow_runs[] | select(.head_branch == "master" and .status == "completed" and .conclusion == "success")]
+            | sort_by(.created_at) | last | .id // empty
+          ')
+
+          if [ -z "$SUCCESSFUL_RUN_ID" ]; then
+            echo "::error::No successful completed CI run found on master for commit $TARGET_SHA."
+            echo "Latest run status/conclusion:"
+            echo "$RUNS_JSON" | jq -r '.workflow_runs[0] | "Run ID: \(.id), Status: \(.status), Conclusion: \(.conclusion), Branch: \(.head_branch)"'
+            exit 1
+          fi
+
+          echo "[PASS] Successful CI workflow run verified: Run ID $SUCCESSFUL_RUN_ID"
+
+          # Verify that the mandatory 'CI Gate' job succeeded within that run
+          JOBS_JSON=$(gh api "/repos/${REPO}/actions/runs/${SUCCESSFUL_RUN_ID}/jobs" 2>/dev/null || echo "")
+          CI_GATE_STATUS=$(echo "$JOBS_JSON" | jq -r '
+            [.jobs[] | select(.name == "CI Gate")] | last | "\(.status):\(.conclusion)" // empty
+          ')
+
+          if [ "$CI_GATE_STATUS" != "completed:success" ]; then
+            echo "::error::Mandatory 'CI Gate' job status check failed for run $SUCCESSFUL_RUN_ID (status:conclusion = '${CI_GATE_STATUS}')."
+            echo "Release blocked: all required CI checks (Maven, Docker build, non-root, Trivy, Gitleaks) must pass."
+            exit 1
+          fi
+
+          echo "[PASS] Mandatory CI Gate status check verified: completed:success."
+          echo "=== All Release Preflight Validation Checks PASSED ==="
 
   # ---------------------------------------------------------------------------
-  # Build, scan, and publish image to GHCR
+  # Job 2: Build Once, Scan Once, and Publish the EXACT Scanned Image to GHCR
   # ---------------------------------------------------------------------------
   publish:
     name: Build Scan and Publish to GHCR
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: validate-release
+    environment:
+      name: release
     permissions:
       contents: read
       packages: write
       security-events: write
       attestations: write
-      id-token: write   # Required for provenance attestation (SLSA)
+      id-token: write
 
     steps:
-      - name: Checkout specific SHA
+      - name: Checkout verified commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.git_sha }}
+          ref: ${{ needs.validate-release.outputs.validated_sha }}
           fetch-depth: 0
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: ${{ env.JAVA_DISTRIBUTION }}
-          cache: maven
-
-      - name: Cache Maven local repository
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata (tags and labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=sha-${{ needs.validate-release.outputs.short_sha }}
+            type=raw,value=${{ needs.validate-release.outputs.validated_sha }}
+            type=raw,value=${{ needs.validate-release.outputs.semver_tag }},enable=${{ needs.validate-release.outputs.semver_tag != '' }}
+          labels: |
+            org.opencontainers.image.title=ForgeTasks API
+            org.opencontainers.image.description=ForgeTasks REST API and Persistence Service for ForgeOps DevOps Lab
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.validate-release.outputs.validated_sha }}
+            org.opencontainers.image.vendor=ForgeOps Platform Engineering
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build candidate container image (build once, load locally)
+        uses: docker/build-push-action@v6
+        id: build-candidate
+        with:
+          context: apps/forgetasks-api
+          file: apps/forgetasks-api/Dockerfile
+          push: false
+          load: true
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            forgetasks-api:candidate-${{ github.run_id }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Record and verify candidate image ID
+        id: candidate
+        run: |
+          CANDIDATE_TAG="forgetasks-api:candidate-${{ github.run_id }}"
+          CANDIDATE_ID=$(docker inspect --format='{{.Id}}' "$CANDIDATE_TAG")
+          echo "candidate_id=$CANDIDATE_ID" >> "$GITHUB_OUTPUT"
+          echo "============================================================"
+          echo " CANDIDATE CONTAINER ARTIFACT BUILT ONCE"
+          echo "============================================================"
+          echo "Candidate Tag:  $CANDIDATE_TAG"
+          echo "Candidate ID:   $CANDIDATE_ID"
+          echo "Source Commit:  ${{ needs.validate-release.outputs.validated_sha }}"
+          echo "Target Registry: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Configured Tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo "============================================================"
+
+      - name: Run Trivy security gate on candidate image (CRITICAL & HIGH block)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: forgetasks-api:candidate-${{ github.run_id }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+      - name: Generate Trivy SARIF report for candidate image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        if: always()
+        with:
+          image-ref: forgetasks-api:candidate-${{ github.run_id }}
+          format: sarif
+          output: trivy-candidate.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+      - name: Upload pre-publish SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-candidate.sarif
+          category: trivy-candidate-image
+        continue-on-error: true
+
+      - name: Generate CycloneDX SBOM for candidate image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: forgetasks-api:candidate-${{ github.run_id }}
+          format: cyclonedx
+          output: forgetasks-api-sbom.cdx.json
+
+      - name: Upload candidate SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx-${{ needs.validate-release.outputs.short_sha }}
+          path: forgetasks-api-sbom.cdx.json
+          retention-days: 30
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -119,85 +329,62 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata (tags and labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=${{ github.event.inputs.git_sha }}
-            type=raw,value=${{ github.event.inputs.semver_tag }},enable=${{ github.event.inputs.semver_tag != '' }}
-          labels: |
-            org.opencontainers.image.title=ForgeTasks API
-            org.opencontainers.image.description=ForgeTasks REST API and Persistence Service for ForgeOps DevOps Lab
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.event.inputs.git_sha }}
-            org.opencontainers.image.licenses=Apache-2.0
-
-      - name: Build image for pre-publish Trivy scan (no push yet)
-        uses: docker/build-push-action@v6
-        id: build-for-scan
-        with:
-          context: apps/forgetasks-api
-          file: apps/forgetasks-api/Dockerfile
-          push: false
-          tags: forgetasks-api:prescan-${{ github.run_id }}
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Run Trivy CRITICAL scan (gate — blocks publish if CRITICAL CVEs found)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
-        with:
-          image-ref: forgetasks-api:prescan-${{ github.run_id }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: os,library
-          severity: CRITICAL,HIGH
-
-      - name: Build and push image to GHCR with provenance attestation
-        uses: docker/build-push-action@v6
-        id: build-and-push
-        with:
-          context: apps/forgetasks-api
-          file: apps/forgetasks-api/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          # SLSA Level 2 provenance attestation
-          provenance: mode=max
-          sbom: true
-
-      - name: Record published image digest
+      - name: Publish verified image to GHCR (zero rebuild)
+        env:
+          EXPECTED_ID: ${{ steps.candidate.outputs.candidate_id }}
+          CANDIDATE_TAG: forgetasks-api:candidate-${{ github.run_id }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          echo "=== Published Image Digest ==="
-          echo "Image:  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "Digest: ${{ steps.build-and-push.outputs.digest }}"
-          echo "Tags:   ${{ steps.meta.outputs.tags }}"
-          echo "=============================="
+          echo "=== Verifying Candidate Image Integrity Before Push ==="
+          CURRENT_ID=$(docker inspect --format='{{.Id}}' "$CANDIDATE_TAG")
+          if [ "$CURRENT_ID" != "$EXPECTED_ID" ]; then
+            echo "::error::Image integrity failure! Expected image ID $EXPECTED_ID, but detected $CURRENT_ID before publishing."
+            exit 1
+          fi
+          echo "[PASS] Image ID unchanged: $CURRENT_ID matches scanned candidate."
+
+          echo "=== Publishing Verified Candidate to GHCR ==="
+          for tag in $TAGS; do
+            echo "Pushing: $tag"
+            docker push "$tag"
+          done
+          echo "[PASS] All verified image tags pushed to GHCR."
+
+      - name: Record and verify published image digest
+        id: publish-digest
+        env:
+          PRIMARY_TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ needs.validate-release.outputs.short_sha }}
+          REGISTRY_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          # Retrieve repo digests populated by docker push
+          REPO_DIGEST=$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$PRIMARY_TAG" | grep "^${REGISTRY_IMAGE}@" | head -n 1)
+
+          if [ -z "$REPO_DIGEST" ]; then
+            echo "::error::Could not determine published repository digest from Docker daemon."
+            exit 1
+          fi
+
+          DIGEST=$(echo "$REPO_DIGEST" | cut -d'@' -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+          echo "============================================================"
+          echo " GHCR PUBLICATION VERIFIED"
+          echo "============================================================"
+          echo "Registry:          ${{ env.REGISTRY }}"
+          echo "Image Name:        ${{ env.IMAGE_NAME }}"
+          echo "Source Commit:     ${{ needs.validate-release.outputs.validated_sha }}"
+          echo "Candidate ID:      ${{ steps.candidate.outputs.candidate_id }}"
+          echo "Published Digest:  $DIGEST"
+          echo "Canonical Ref:     ${REGISTRY_IMAGE}@${DIGEST}"
+          echo "============================================================"
           echo ""
-          echo "To pull by immutable digest:"
-          echo "  docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}"
+          echo "Immutable deployment reference for GitOps (Argo CD):"
+          echo "  ${REGISTRY_IMAGE}@${DIGEST}"
 
-      - name: Run Trivy CRITICAL+HIGH scan on published image (informational)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v2
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
-          format: sarif
-          output: trivy-published.sarif
-          ignore-unfixed: true
-          vuln-type: os,library
-          severity: CRITICAL,HIGH
-        continue-on-error: true
-
-      - name: Upload post-publish SARIF to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: trivy-published.sarif
-          category: trivy-published-image
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.publish-digest.outputs.digest }}
+          push-to-registry: true
         continue-on-error: true
