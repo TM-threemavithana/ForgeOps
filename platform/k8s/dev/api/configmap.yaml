@@ -1,0 +1,20 @@
+# ForgeOps Gate G06 — ForgeTasks API ConfigMap
+# Non-sensitive runtime configuration parameters for Spring Boot application
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgetasks-api-config
+  namespace: forgeops-dev
+  labels:
+    app.kubernetes.io/name: forgetasks-api
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dev
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  # Internal Kubernetes CoreDNS resolution to PostgreSQL ClusterIP Service
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://forgetasks-db:5432/forgetasks"
+  SPRING_DATASOURCE_USERNAME: "forgeuser"
+  PORT: "8080"
+  MANAGEMENT_PORT: "8080"

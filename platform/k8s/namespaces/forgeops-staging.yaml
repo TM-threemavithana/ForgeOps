@@ -1,0 +1,57 @@
+# ForgeOps Gate G06 — Staging Namespace Configuration
+# Namespace: forgeops-staging
+# Isolated multi-tenancy namespace prepared for promotion workflows (G07/G08)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgeops-staging
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: staging
+    forgeops.dev/tier: application
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-quota
+  namespace: forgeops-staging
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: staging
+spec:
+  hard:
+    requests.cpu: "1500m"
+    requests.memory: 1Gi
+    limits.cpu: "2500m"
+    limits.memory: 1536Mi
+    persistentvolumeclaims: "5"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: forgeops-staging
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: staging
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 1000m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      max:
+        cpu: 2000m
+        memory: 1024Mi
+      min:
+        cpu: 50m
+        memory: 64Mi

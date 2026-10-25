@@ -54,9 +54,9 @@ Implementation progress is governed by strict gated reviews (Gates G00 through G
 | **G01** | ForgeTasks API Backend & PostgreSQL Schema Correctness | **PASSED** | [G01 Acceptance Report](docs/evidence/G01/acceptance.md) |
 | **G02** | Multi-Stage Containerization & Docker Compose Stack | **PASSED** | [G02 Acceptance Report](docs/evidence/G02/acceptance.md) |
 | **G03** | Local & GitHub Actions CI Pipelines, Trust Boundaries & GHCR | **PASSED** | [G03 Acceptance Report](docs/evidence/G03/acceptance.md) |
-| **G04** | Ansible Linux Host Configuration Management | *Planned* | Deferred to Gate G04 |
-| **G05** | Terraform Local Docker Lab Fixture | *Planned* | Deferred to Gate G05 |
-| **G06** | Local Kind Kubernetes Cluster & CNI | *Planned* | Deferred to Gate G06 |
+| **G04** | Ansible Linux Host Configuration Management | **PASSED** | [G04 Acceptance Report](docs/evidence/G04/readiness.md) |
+| **G05** | Terraform Local Docker Lab Fixture | **PASSED** | [G05 Acceptance Report](docs/evidence/G05/readiness.md) |
+| **G06** | Local Kind Kubernetes Cluster & CNI | **PASSED_LIM** | [G06 Acceptance Report](docs/evidence/G06/readiness.md) |
 | **G07** | Helm Chart Packaging & Parameterization | *Planned* | Deferred to Gate G07 |
 | **G08** | Argo CD GitOps Bootstrap & Continuous Sync | *Planned* | Deferred to Gate G08 |
 | **G09** | Prometheus Metrics & Alertmanager Alerting Rules | *Planned* | Deferred to Gate G09 |
@@ -68,7 +68,7 @@ Implementation progress is governed by strict gated reviews (Gates G00 through G
 | **G15** | Final Project Showcase, Architectural Portfolio & Video | *Planned* | Deferred to Gate G15 |
 
 > [!NOTE]
-> Gates G04–G15 are planned in the [Master Implementation Plan](docs/FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md) and will be implemented sequentially upon review approval.
+> Gates G07–G15 are planned in the [Master Implementation Plan](docs/FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md) and will be implemented sequentially upon review approval.
 
 ---
 

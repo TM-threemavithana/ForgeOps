@@ -1,0 +1,23 @@
+# ForgeOps Gate G06 — ForgeTasks API Service
+# Internal ClusterIP Service routing traffic to Spring Boot application pods
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgetasks-api
+  namespace: forgeops-dev
+  labels:
+    app.kubernetes.io/name: forgetasks-api
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dev
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: forgetasks-api
+    app.kubernetes.io/component: backend

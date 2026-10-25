@@ -1,0 +1,118 @@
+# ForgeOps Gate G06 — PostgreSQL 16 Alpine StatefulSet
+# Stateful persistent workload with volumeClaimTemplates and local storage provisioning
+# Enforces non-root execution (UID 70 / GID 70) and restricted resource bounds
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: forgetasks-db
+  namespace: forgeops-dev
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dev
+spec:
+  serviceName: "forgetasks-db-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: forgeops
+        forgeops.dev/environment: dev
+    spec:
+      # fsGroup 70 grants alpine postgres group ownership over mounted volumes
+      securityContext:
+        fsGroup: 70
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          # Pinned to local postgres:16-alpine loaded via kind load docker-image
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: "forgetasks"
+            - name: POSTGRES_USER
+              value: "forgeuser"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forgetasks-db-secret
+                  key: postgres-password
+            # Subpath pgdata prevents permission conflicts on volume mount root
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - forgeuser
+                - -d
+                - forgetasks
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - forgeuser
+                - -d
+                - forgetasks
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+  # Persistent volume dynamically provisioned by Kind's standard local-path-provisioner
+  # No separate standalone PVC manifest is declared to avoid duplicate claim collisions
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+        labels:
+          app.kubernetes.io/name: postgres
+          app.kubernetes.io/component: database
+          app.kubernetes.io/part-of: forgeops
+          forgeops.dev/environment: dev
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        # StorageClassName omitted to automatically bind to the cluster's default StorageClass
+        # In Kind, this resolves to 'standard' (rancher/local-path-provisioner)
+        resources:
+          requests:
+            storage: 1Gi
