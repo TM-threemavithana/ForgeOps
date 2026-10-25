@@ -21,8 +21,14 @@ help:
 	@echo "  make actionlint     - [G03] Lint GitHub Actions workflow YAML files"
 	@echo "  make cluster-create - [G06] Create Kind Kubernetes cluster"
 	@echo "  make cluster-delete - [G06] Scoped Kind cluster deletion (requires CONFIRM=yes)"
-	@echo "  make tf-plan        - [G05] Run Terraform plan for local Docker lab"
+	@echo "  make tf-init        - [G05] Initialize Terraform provider with protected local state"
+	@echo "  make tf-fmt         - [G05] Check Terraform formatting"
+	@echo "  make tf-validate    - [G05] Validate Terraform configuration and provider schema"
+	@echo "  make tf-providers   - [G05] List resolved Terraform providers"
+	@echo "  make tf-plan        - [G05] Run speculative in-memory Terraform plan (no files created)"
+	@echo "  make tf-plan-save   - [G05] Save protected executable plan outside repository"
 	@echo "  make ansible-check  - [G04] Run Ansible syntax check and dry-run on lab inventory"
+
 
 # --- ForgeTasks API Build & Test Targets ---
 .PHONY: build-api test-api
@@ -60,6 +66,38 @@ actionlint:
 .PHONY: ansible-check
 ansible-check:
 	@./scripts/verify_g04_ansible_syntax.sh
+
+# --- G05 Terraform Targets ---
+TF_DIR := infrastructure/terraform/local-docker-lab
+TF_STATE_DIR ?= $(HOME)/.local/state/forgeops/g05
+TF_PLAN_FILE ?= $(TF_STATE_DIR)/forgeops-g05.tfplan
+
+.PHONY: tf-init tf-fmt tf-validate tf-providers tf-plan tf-plan-save
+tf-init:
+	@echo "Initializing G05 Terraform lab with protected local state backend..."
+	@mkdir -p $(TF_STATE_DIR) && chmod 0700 $(TF_STATE_DIR)
+	@cd $(TF_DIR) && umask 0077 && terraform init
+
+tf-fmt:
+	@echo "Checking G05 Terraform formatting..."
+	@cd $(TF_DIR) && terraform fmt -check -recursive
+
+tf-validate:
+	@echo "Validating G05 Terraform configuration..."
+	@cd $(TF_DIR) && terraform validate
+
+tf-providers:
+	@echo "Inspecting G05 Terraform provider dependencies..."
+	@cd $(TF_DIR) && terraform providers
+
+tf-plan:
+	@echo "Running G05 Terraform speculative (in-memory) plan review..."
+	@cd $(TF_DIR) && terraform plan -no-color
+
+tf-plan-save:
+	@echo "Saving protected G05 Terraform execution plan to $(TF_PLAN_FILE)..."
+	@mkdir -p $(TF_STATE_DIR) && chmod 0700 $(TF_STATE_DIR)
+	@cd $(TF_DIR) && umask 0077 && terraform plan -no-color -out=$(TF_PLAN_FILE)
 
 # --- Docker Compose Lifecycle (G02) ---
 .PHONY: setup-secrets compose-build compose-up compose-down compose-ps compose-logs
