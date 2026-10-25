@@ -56,6 +56,11 @@ actionlint:
 		echo "[WARN] actionlint not installed. Install: https://github.com/rhysd/actionlint"; \
 	fi
 
+# --- G04 Ansible Targets ---
+.PHONY: ansible-check
+ansible-check:
+	@./scripts/verify_g04_ansible_syntax.sh
+
 # --- Docker Compose Lifecycle (G02) ---
 .PHONY: setup-secrets compose-build compose-up compose-down compose-ps compose-logs
 setup-secrets:

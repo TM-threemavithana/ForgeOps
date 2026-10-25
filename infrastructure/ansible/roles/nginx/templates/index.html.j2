@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ web_site_title }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: #1e293b;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            max-width: 500px;
+            width: 100%;
+            border: 1px solid #334155;
+        }
+        h1 {
+            color: #38bdf8;
+            font-size: 1.5rem;
+            margin-top: 0;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 0.75rem;
+        }
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #1e293b;
+            font-size: 0.9rem;
+        }
+        .label {
+            color: #94a3b8;
+        }
+        .value {
+            font-family: monospace;
+            color: #4ade80;
+        }
+        .status-badge {
+            background: #166534;
+            color: #bbf7d0;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ForgeOps Lab Node</h1>
+        <div class="meta-row">
+            <span class="label">Status:</span>
+            <span class="status-badge">CONVERGED</span>
+        </div>
+        <div class="meta-row">
+            <span class="label">Node Hostname:</span>
+            <span class="value">{{ inventory_hostname }}</span>
+        </div>
+        <div class="meta-row">
+            <span class="label">Managed By:</span>
+            <span class="value">{{ web_managed_by }}</span>
+        </div>
+        <div class="meta-row">
+            <span class="label">Health Check:</span>
+            <span class="value"><a href="{{ web_health_endpoint }}" style="color: #38bdf8;">{{ web_health_endpoint }}</a></span>
+        </div>
+    </div>
+</body>
+</html>

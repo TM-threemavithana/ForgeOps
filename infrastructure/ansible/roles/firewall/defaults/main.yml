@@ -1,0 +1,6 @@
+---
+# Defaults for role firewall
+firewall_incoming_default: "{{ firewall_default_incoming_policy | default('deny') }}"
+firewall_outgoing_default: "{{ firewall_default_outgoing_policy | default('allow') }}"
+firewall_tcp_ports: "{{ firewall_allowed_tcp_ports | default([22, 80]) }}"
+firewall_enabled: true

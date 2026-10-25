@@ -1,0 +1,25 @@
+---
+# Defaults for role ssh-hardening
+# Configures OpenSSH server with early drop-in to precede cloud-init (50-cloud-init.conf)
+
+hardening_ssh_port: "{{ ssh_port | default(22) }}"
+hardening_ssh_permit_root_login: "{{ ssh_permit_root_login | default('no') }}"
+hardening_ssh_password_authentication: "{{ ssh_password_authentication | default('no') }}"
+hardening_ssh_kbd_interactive_authentication: "{{ ssh_kbd_interactive_authentication | default('no') }}"
+hardening_ssh_pubkey_authentication: "{{ ssh_pubkey_authentication | default('yes') }}"
+hardening_ssh_max_auth_tries: "{{ ssh_max_auth_tries | default(3) }}"
+hardening_ssh_client_alive_interval: "{{ ssh_client_alive_interval | default(300) }}"
+hardening_ssh_client_alive_count_max: "{{ ssh_client_alive_count_max | default(2) }}"
+hardening_ssh_x11_forwarding: "no"
+hardening_ssh_allow_tcp_forwarding: "no"
+hardening_ssh_allow_agent_forwarding: "no"
+
+# Drop-in paths (00- prefix ensures precedence before 50-cloud-init.conf)
+hardening_ssh_dropin_filename: "00-forgeops-hardening.conf"
+hardening_ssh_dropin_path: "/etc/ssh/sshd_config.d/00-forgeops-hardening.conf"
+hardening_ssh_candidate_path: "/etc/ssh/sshd_config.d/.00-forgeops-hardening.conf.candidate"
+hardening_ssh_legacy_dropin_path: "/etc/ssh/sshd_config.d/99-forgeops-hardening.conf"
+
+# Public key verification variables
+hardening_ssh_operator_user: "{{ ops_user | default('ops') }}"
+hardening_ssh_public_key_file: "{{ ops_ssh_public_key_file | default('~/.ssh/forgeops_lab_ed25519.pub') }}"

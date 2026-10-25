@@ -1,0 +1,43 @@
+---
+# Tasks for role baseline
+- name: Update apt cache if older than cache_valid_time
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: "{{ baseline_apt_cache_valid_time }}"
+  tags:
+    - baseline
+    - packages
+
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ baseline_timezone }}"
+  tags:
+    - baseline
+    - timezone
+
+- name: Install baseline system packages
+  ansible.builtin.apt:
+    name: "{{ baseline_packages_list }}"
+    state: present
+  tags:
+    - baseline
+    - packages
+
+- name: Ensure systemd-timesyncd is enabled and started
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    state: started
+    enabled: true
+  when: baseline_enable_timesyncd | bool
+  tags:
+    - baseline
+    - ntp
+
+- name: Ensure logrotate service is enabled
+  ansible.builtin.systemd:
+    name: logrotate.timer
+    state: started
+    enabled: true
+  tags:
+    - baseline
+    - logging

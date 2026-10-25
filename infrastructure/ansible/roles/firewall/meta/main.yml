@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: Tharuka Madhuwantha Threemavithana
+  description: UFW Host firewall management with default-deny and scoped allow rules
+  company: ForgeOps
+  license: Apache-2.0
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - "24.04"
+  categories:
+    - security
+
+dependencies: []

@@ -1,0 +1,62 @@
+---
+# Tasks for role users
+# Safely manages the installer-created operator account without changing its UID.
+# Preserves home directory, existing SSH keys, sudo access, and existing file ownership.
+
+- name: Ensure operator primary group exists
+  ansible.builtin.group:
+    name: "{{ manage_users_group }}"
+    state: present
+  tags:
+    - users
+
+- name: Ensure operator user account exists and has proper shell and groups
+  ansible.builtin.user:
+    name: "{{ manage_users_name }}"
+    group: "{{ manage_users_group }}"
+    groups: "{{ manage_users_groups }}"
+    append: true
+    shell: "{{ manage_users_shell }}"
+    state: present
+  tags:
+    - users
+
+- name: Configure passwordless sudo for operator user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/99-{{ manage_users_name }}-user"
+    content: "{{ manage_users_name }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"
+  when: manage_users_sudo_nopasswd | bool
+  tags:
+    - users
+    - sudo
+
+- name: Remove passwordless sudo grant when policy requires password authentication
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/99-{{ manage_users_name }}-user"
+    state: absent
+  when: not (manage_users_sudo_nopasswd | bool)
+  tags:
+    - users
+    - sudo
+
+- name: Deploy authorized SSH key for operator if provided
+  ansible.posix.authorized_key:
+    user: "{{ manage_users_name }}"
+    state: present
+    key: "{{ manage_users_ssh_public_key }}"
+  when: manage_users_ssh_public_key | length > 0
+  tags:
+    - users
+    - ssh
+
+- name: Ensure root password authentication is locked
+  ansible.builtin.user:
+    name: root
+    password_lock: true
+  tags:
+    - users
+    - security

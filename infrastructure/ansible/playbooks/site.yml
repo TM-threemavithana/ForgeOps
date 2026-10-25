@@ -1,0 +1,33 @@
+---
+# ForgeOps Main Convergence Playbook
+# Gate G04: Linux Host Configuration Management
+# Targets: managed_lab (Ubuntu Server 24.04 LTS Guest)
+
+- name: Converge ForgeOps Managed Linux Lab Node
+  hosts: managed_lab
+  gather_facts: true
+  become: true
+
+  roles:
+    - role: baseline
+      tags:
+        - baseline
+
+    - role: users
+      tags:
+        - users
+
+    - role: ssh-hardening
+      tags:
+        - ssh
+        - security
+
+    - role: firewall
+      tags:
+        - firewall
+        - security
+
+    - role: nginx
+      tags:
+        - nginx
+        - web

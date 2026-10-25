@@ -1,0 +1,20 @@
+# ForgeOps OpenSSH Hardening Drop-in Configuration
+# Managed by Ansible - do not edit directly
+# Effective for Ubuntu 24.04 LTS (applied as 00- prefix to precede 50-cloud-init.conf)
+
+Port {{ hardening_ssh_port }}
+PermitRootLogin {{ hardening_ssh_permit_root_login }}
+PasswordAuthentication {{ hardening_ssh_password_authentication }}
+KbdInteractiveAuthentication {{ hardening_ssh_kbd_interactive_authentication }}
+PubkeyAuthentication {{ hardening_ssh_pubkey_authentication }}
+AuthorizedKeysFile .ssh/authorized_keys
+
+MaxAuthTries {{ hardening_ssh_max_auth_tries }}
+ClientAliveInterval {{ hardening_ssh_client_alive_interval }}
+ClientAliveCountMax {{ hardening_ssh_client_alive_count_max }}
+
+X11Forwarding {{ hardening_ssh_x11_forwarding }}
+AllowTcpForwarding {{ hardening_ssh_allow_tcp_forwarding }}
+AllowAgentForwarding {{ hardening_ssh_allow_agent_forwarding }}
+
+LogLevel INFO

@@ -1,0 +1,73 @@
+---
+# Tasks for role nginx
+# Installs and configures Nginx with a templated site and /health check endpoint
+
+- name: Ensure nginx package is installed
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+  tags:
+    - nginx
+    - web
+
+- name: Remove default Nginx site configuration link
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+  tags:
+    - nginx
+    - web
+
+- name: Ensure document root directory exists
+  ansible.builtin.file:
+    path: "{{ web_docroot }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+  tags:
+    - nginx
+    - web
+
+- name: Deploy lab landing page from template
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ web_docroot }}/index.html"
+    owner: www-data
+    group: www-data
+    mode: "0644"
+  tags:
+    - nginx
+    - web
+
+- name: Deploy ForgeOps Nginx site configuration
+  ansible.builtin.template:
+    src: forgeops-lab.conf.j2
+    dest: /etc/nginx/sites-available/forgeops-lab.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+  tags:
+    - nginx
+    - web
+
+- name: Enable ForgeOps Nginx site configuration
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/forgeops-lab.conf
+    dest: /etc/nginx/sites-enabled/forgeops-lab.conf
+    state: link
+  notify: reload nginx
+  tags:
+    - nginx
+    - web
+
+- name: Ensure Nginx service is enabled and running
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
+  tags:
+    - nginx
+    - web

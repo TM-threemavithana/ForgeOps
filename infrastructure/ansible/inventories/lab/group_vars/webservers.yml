@@ -1,0 +1,8 @@
+---
+# Variables for webservers group
+nginx_port: 80
+nginx_server_name: forgeops-lab.local
+nginx_docroot: /var/www/forgeops
+nginx_health_endpoint: /health
+nginx_site_title: "ForgeOps Ansible Managed Node"
+nginx_managed_by: "Ansible Core 2.17.7"

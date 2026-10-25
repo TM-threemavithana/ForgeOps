@@ -1,0 +1,23 @@
+---
+# Global group variables for ForgeOps Lab
+ansible_python_interpreter: /usr/bin/python3
+
+# System policy
+system_timezone: Etc/UTC
+system_locale: en_US.UTF-8
+
+# Core package list
+baseline_packages:
+  - curl
+  - ca-certificates
+  - tar
+  - rsync
+  - ufw
+  - gnupg
+  - software-properties-common
+  - logrotate
+  - htop
+  - jq
+
+# Apt configuration
+apt_cache_valid_time: 3600

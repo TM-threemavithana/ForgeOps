@@ -1,0 +1,36 @@
+---
+# Variables for all managed lab nodes
+ops_user: ops
+ops_group: ops
+ops_shell: /bin/bash
+# Privilege policy: password-required sudo is enforced for this lab.
+# Passwordless sudo (NOPASSWD) is an unnecessary escalation risk in a learning
+# environment with a single operator. Run playbooks with --ask-become-pass.
+# Set to true only if an automated pipeline without an interactive session
+# can supply become_password via an Ansible Vault-protected variable.
+ops_sudo_nopasswd: false
+
+# Operator SSH public key configuration
+# Reads the verified ed25519 public key from the WSL controller host
+ops_ssh_public_key_file: "~/.ssh/forgeops_lab_ed25519.pub"
+ops_ssh_public_key: ""
+
+# OpenSSH Hardening Settings
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+ssh_kbd_interactive_authentication: "no"
+ssh_pubkey_authentication: "yes"
+ssh_max_auth_tries: 3
+ssh_client_alive_interval: 300
+ssh_client_alive_count_max: 2
+
+# UFW Firewall Settings
+firewall_default_incoming_policy: deny
+firewall_default_outgoing_policy: allow
+firewall_allowed_tcp_ports:
+  - 22
+  - 80
+firewall_blocked_test_ports:
+  - 8088
+  - 9999

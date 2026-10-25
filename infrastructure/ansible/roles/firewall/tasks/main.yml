@@ -1,0 +1,54 @@
+---
+# Tasks for role firewall
+# Enforces anti-lockout ordering: explicitly allows SSH and required services
+# BEFORE enforcing restrictive default incoming policy and enabling firewall.
+# Uses community.general.ufw
+
+- name: Ensure ufw package is installed
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+  tags:
+    - firewall
+
+- name: Anti-lockout guard - Allow SSH port 22 before enforcing default incoming deny
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    comment: "ForgeOps SSH access"
+  tags:
+    - firewall
+    - ssh
+
+- name: Allow specified inbound TCP services
+  community.general.ufw:
+    rule: allow
+    port: "{{ item | string }}"
+    proto: tcp
+  loop: "{{ firewall_tcp_ports }}"
+  when: item != 22
+  tags:
+    - firewall
+
+- name: Set UFW default outgoing policy
+  community.general.ufw:
+    direction: outgoing
+    default: "{{ firewall_outgoing_default }}"
+  tags:
+    - firewall
+
+- name: Set UFW default incoming policy
+  community.general.ufw:
+    direction: incoming
+    default: "{{ firewall_incoming_default }}"
+  tags:
+    - firewall
+
+- name: Enable UFW firewall and enforce state
+  community.general.ufw:
+    state: enabled
+    logging: "on"
+  when: firewall_enabled | bool
+  tags:
+    - firewall

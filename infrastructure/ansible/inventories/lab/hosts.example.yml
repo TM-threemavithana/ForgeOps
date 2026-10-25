@@ -1,0 +1,27 @@
+---
+# Example Local Inventory Override
+# Copy to 'infrastructure/ansible/inventories/lab/hosts.local.yml' (git-ignored)
+#
+# IMPORTANT:
+# 1. Host key verification is strictly enforced against ~/.ssh/known_hosts.
+#    Before running playbooks, ensure the guest host key is verified and recorded:
+#      ssh-keyscan -p 2222 127.0.0.1 >> ~/.ssh/known_hosts
+# 2. Do NOT assume 192.168.96.1 is permanent. In WSL2, the default gateway can change.
+#    Discover the current Windows host IP dynamically inside WSL2:
+#      WINDOWS_HOST=$(ip route | awk '/default/ {print $3}')
+# 3. Verify reachability BEFORE configuring this file:
+#      nc -zv -w 2 "$WINDOWS_HOST" 2222 || nc -zv -w 2 127.0.0.1 2222
+# 4. Start with one restricted SSH forwarding rule (port 2222 -> guest 22).
+
+all:
+  children:
+    managed_lab:
+      children:
+        webservers:
+          hosts:
+            forgeops-node-01:
+              # Set to 127.0.0.1 (if WSL localhost proxy is active) or $(ip route | awk '/default/ {print $3}')
+              ansible_host: 127.0.0.1
+              ansible_port: 2222
+              ansible_user: ops
+              ansible_ssh_private_key_file: ~/.ssh/forgeops_lab_ed25519

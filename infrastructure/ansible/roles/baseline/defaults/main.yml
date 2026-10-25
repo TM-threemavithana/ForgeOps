@@ -1,0 +1,6 @@
+---
+# Defaults for role baseline
+baseline_timezone: "{{ system_timezone | default('Etc/UTC') }}"
+baseline_packages_list: "{{ baseline_packages | default(['curl', 'ca-certificates', 'tar', 'rsync', 'ufw', 'gnupg', 'software-properties-common', 'logrotate', 'htop', 'jq']) }}"
+baseline_apt_cache_valid_time: "{{ apt_cache_valid_time | default(3600) }}"
+baseline_enable_timesyncd: true
