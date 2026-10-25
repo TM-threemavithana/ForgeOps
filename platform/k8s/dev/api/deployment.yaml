@@ -1,0 +1,95 @@
+# ForgeOps Gate G06 — ForgeTasks Spring Boot API Deployment
+# Stateless backend workload with container-aware JVM ergonomics and non-root execution
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgetasks-api
+  namespace: forgeops-dev
+  labels:
+    app.kubernetes.io/name: forgetasks-api
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dev
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgetasks-api
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forgetasks-api
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: forgeops
+        forgeops.dev/environment: dev
+    spec:
+      # Enforce unprivileged non-root execution matching Dockerfile UID 10001
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: forgetasks-api:1.0.0
+          # IfNotPresent enables offline loading via 'kind load docker-image'
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: forgetasks-api-config
+          env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forgetasks-db-secret
+                  key: postgres-password
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

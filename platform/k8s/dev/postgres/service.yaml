@@ -1,0 +1,44 @@
+# ForgeOps Gate G06 — PostgreSQL Services
+# Defines governing headless Service for StatefulSet identity and ClusterIP Service for Spring Boot DNS
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgetasks-db-headless
+  namespace: forgeops-dev
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dev
+spec:
+  clusterIP: None
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgetasks-db
+  namespace: forgeops-dev
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dev
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database

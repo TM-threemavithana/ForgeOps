@@ -44,7 +44,7 @@
 | **REQ-P-02.1** | Untrusted PR workflow (read-only) | G03 | `.github/workflows/ci.yml` | A-301 | **PASSED (G03)** |
 | **REQ-P-02.2** | Trusted release to GHCR by SHA256 | G03 | `.github/workflows/publish.yml` | A-302 | **PASSED (G03 — awaiting push)** |
 | **REQ-P-02.3** | Offline local CI counterpart (`make ci`)| G03 | `Makefile`, `scripts/verify_g03_local.sh` | A-303 | **PASSED (G03)** |
-| **REQ-P-03.1** | Local Kind cluster (`dev`/`staging`) | G06 | `platform/kind/core.yaml`, `scripts/cluster/create.sh` | A-601 | PLANNED |
+| **REQ-P-03.1** | Local Kind cluster (`dev`/`staging`) | G06 | `platform/kind/cluster-config.yaml`, `scripts/cluster/create-cluster.sh` | A-601 | **PASSED (G06)** |
 | **REQ-P-03.2** | Reusable Helm chart (`existingSecret`) | G07 | `platform/charts/forgetasks/` | A-701 | PLANNED |
 | **REQ-P-03.3** | Argo CD GitOps pull-based promotion | G08 | `platform/argocd/apps/`, `values-dev.yaml` | A-801 | PLANNED |
 | **REQ-P-03.4** | Declarative Git revert rollback | G08, G12 | `docs/runbooks/rollback.md`, Git commit revert | A-802, DR-02 | PLANNED |
@@ -70,9 +70,9 @@
 |---|---|---|---|---|
 | **NFR-SEC-01** | Zero secrets in git repository | G00–G15 | `.gitignore`, Gitleaks CI scan, `A-1101` | **PASSED (G00 baseline verified)** |
 | **NFR-SEC-02** | Containers run non-root UID | G02, G11 | Dockerfile user, Trivy report, `A-201` | **PASSED (G02)** |
-| **NFR-SEC-03** | Local loopback binding (`127.0.0.1`) | G02, G06 | Docker Compose port mappings, `kubectl port-forward` | **PASSED (G02)** |
+| **NFR-SEC-03** | Local loopback binding (`127.0.0.1`) | G02, G06 | Docker Compose port mappings, Kind 127.0.0.1:6443, port-forward | **PASSED (G02, G06)** |
 | **NFR-PERF-01**| p95 latency < 500 ms under k6 load | G12 | k6 report, Prometheus histogram, `A-1201`, `DR-05` | PLANNED |
-| **NFR-REL-01** | Stateless pod failure replacement | G06, G12 | Pod kill test, `A-602`, `DR-01` | PLANNED |
+| **NFR-REL-01** | Stateless pod failure replacement | G06, G12 | Pod kill test, `A-602`, `DR-01` | **PASSED_LIM (G06 A-602 functional pass, 32s/35s vs 30s target; DR-01 planned G12)** |
 | **NFR-RES-01** | Core profile memory & disk governance | G00–G15 | `docs/evidence/G00-preflight.md`, `A-001` | **PASSED_LIM (6.6 GB free SSD limitation)** |
 | **NFR-COV-01** | Jacoco test coverage ≥ 80% | G01 | Maven JaCoCo report (`target/site/jacoco/index.html`) | **PASSED (G01: 94.09% instruction, 91.23% branch)** |
 | **GOV-001** | Zero paid cloud dependency | G00–G15 | Zero cloud SDKs / credentials required | **PASSED** |

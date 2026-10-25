@@ -19,8 +19,17 @@ help:
 	@echo "  make ci-local       - [G03] Run full local CI gate (build, test, Docker, Trivy)"
 	@echo "  make trivy-scan     - [G03] Run Trivy vulnerability scan on local Docker image"
 	@echo "  make actionlint     - [G03] Lint GitHub Actions workflow YAML files"
-	@echo "  make cluster-create - [G06] Create Kind Kubernetes cluster"
+	@echo "  make cluster-create - [G06] Create Kind Kubernetes cluster (single control plane)"
+	@echo "  make cluster-create-dry-run - [G06] Run preflight checks without creating cluster"
 	@echo "  make cluster-delete - [G06] Scoped Kind cluster deletion (requires CONFIRM=yes)"
+	@echo "  make cluster-status - [G06] Inspect Kind cluster node and pod status"
+	@echo "  make cluster-load-images - [G06] Load local Docker images into Kind node offline"
+	@echo "  make k8s-dev-deploy - [G06] Deploy vanilla Dev manifests (namespaces, DB, API)"
+	@echo "  make k8s-dev-verify - [G06] Run read-only A-601 health verification (non-mutating)"
+	@echo "  make k8s-dev-smoke-write - [G06] Run application database write smoke test"
+	@echo "  make k8s-dev-drill-persistence - [G06] Run DB restart recovery drill (requires CONFIRM=yes)"
+	@echo "  make k8s-dev-drill-a602 - [G06] Run stateless pod kill recovery drill (requires CONFIRM=yes)"
+	@echo "  make k8s-dev-teardown - [G06] Teardown Dev manifests cleanly"
 	@echo "  make tf-init        - [G05] Initialize Terraform provider with protected local state"
 	@echo "  make tf-fmt         - [G05] Check Terraform formatting"
 	@echo "  make tf-validate    - [G05] Validate Terraform configuration and provider schema"
@@ -185,11 +194,67 @@ guard-confirm:
 		exit 1; \
 	fi
 
-.PHONY: cluster-delete
+# --- Kind Kubernetes Lifecycle (G06) ---
+K8S_KUBECONFIG ?= $(HOME)/.kube/config-forgeops
+
+.PHONY: cluster-create cluster-create-dry-run cluster-delete cluster-status cluster-load-images
+cluster-create:
+	@./scripts/cluster/create-cluster.sh
+
+cluster-create-dry-run:
+	@./scripts/cluster/create-cluster.sh --dry-run
+
 cluster-delete: guard-confirm
-	@echo "Explicit Kind cluster deletion requested..."
-	@if which kind >/dev/null 2>&1; then \
-		kind delete cluster --name forgeops; \
-	else \
-		echo "Kind is not installed."; \
+	@CONFIRM=$(CONFIRM) ./scripts/cluster/delete-cluster.sh
+
+cluster-status:
+	@if [ ! -f $(K8S_KUBECONFIG) ]; then \
+		echo "Kubeconfig $(K8S_KUBECONFIG) not found. Is cluster created?"; \
+		exit 1; \
 	fi
+	@echo "=== Node Status ==="
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) get nodes -o wide
+	@echo "=== Workloads Across All Namespaces ==="
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) get pods,pvc,svc -A
+
+cluster-load-images:
+	@./scripts/cluster/load-images.sh
+
+# --- G06 Workload Lifecycle ---
+.PHONY: k8s-dev-deploy k8s-dev-verify k8s-dev-teardown
+k8s-dev-deploy:
+	@if [ ! -f $(K8S_KUBECONFIG) ]; then \
+		echo "Kubeconfig $(K8S_KUBECONFIG) not found. Run 'make cluster-create' first."; \
+		exit 1; \
+	fi
+	@echo "Applying namespace manifests and quotas..."
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) apply -f platform/k8s/namespaces/
+	@echo "Injecting PostgreSQL database credentials out-of-band..."
+	@./scripts/cluster/inject-secrets.sh forgeops-dev
+	@echo "Deploying PostgreSQL StatefulSet and Services..."
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) apply -f platform/k8s/dev/postgres/
+	@echo "Deploying ForgeTasks Spring Boot API..."
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) apply -f platform/k8s/dev/api/
+
+k8s-dev-verify:
+	@./scripts/cluster/verify-g06.sh --read-only
+
+k8s-dev-smoke-write:
+	@./scripts/cluster/verify-g06.sh --smoke-write
+
+k8s-dev-drill-persistence: guard-confirm
+	@ALLOW_POD_TERMINATION=yes ./scripts/cluster/verify-g06.sh --drill-persistence
+
+k8s-dev-drill-a602: guard-confirm
+	@ALLOW_POD_TERMINATION=yes ./scripts/cluster/verify-g06.sh --drill-a602
+
+k8s-dev-teardown:
+	@if [ ! -f $(K8S_KUBECONFIG) ]; then \
+		echo "Kubeconfig $(K8S_KUBECONFIG) not found. Nothing to tear down."; \
+		exit 0; \
+	fi
+	@echo "Tearing down ForgeTasks API and PostgreSQL in forgeops-dev..."
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) delete -f platform/k8s/dev/api/ --ignore-not-found
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) delete -f platform/k8s/dev/postgres/ --ignore-not-found
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) delete secret forgetasks-db-secret -n forgeops-dev --ignore-not-found
+	@kubectl --kubeconfig=$(K8S_KUBECONFIG) delete pvc -l app.kubernetes.io/name=postgres -n forgeops-dev --ignore-not-found
