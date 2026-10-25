@@ -1,0 +1,34 @@
+# ForgeOps Lab Nginx VirtualHost Configuration
+# Managed by Ansible - do not edit directly
+
+server {
+    listen {{ web_nginx_port }} default_server;
+    listen [::]:{{ web_nginx_port }} default_server;
+
+    server_name {{ web_nginx_server_name }};
+    root {{ web_docroot }};
+    index index.html;
+
+    # Security headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Main landing page
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # Lab health check endpoint for curl verification
+    location {{ web_health_endpoint }} {
+        default_type application/json;
+        return 200 '{"status":"UP","node":"{{ inventory_hostname }}","service":"nginx-lab","managed_by":"{{ web_managed_by }}"}\n';
+    }
+
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}

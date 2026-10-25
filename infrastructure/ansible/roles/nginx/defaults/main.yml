@@ -1,0 +1,8 @@
+---
+# Defaults for role nginx
+web_nginx_port: "{{ nginx_port | default(80) }}"
+web_nginx_server_name: "{{ nginx_server_name | default('forgeops-lab.local') }}"
+web_docroot: "{{ nginx_docroot | default('/var/www/forgeops') }}"
+web_health_endpoint: "{{ nginx_health_endpoint | default('/health') }}"
+web_site_title: "{{ nginx_site_title | default('ForgeOps Ansible Managed Node') }}"
+web_managed_by: "{{ nginx_managed_by | default('Ansible Core 2.17.7') }}"

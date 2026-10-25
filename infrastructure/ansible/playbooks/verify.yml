@@ -1,0 +1,118 @@
+---
+# ForgeOps Verification Playbook
+# Gate G04: Acceptance Test & Security Audit (A-401 & A-402)
+# Non-mutating audit tasks to verify converged guest state
+
+- name: Audit ForgeOps Managed Linux Lab Node
+  hosts: managed_lab
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Audit system timezone
+      ansible.builtin.command: timedatectl show -p Timezone --value
+      register: audit_timezone
+      changed_when: false
+      failed_when: audit_timezone.stdout != "Etc/UTC"
+
+    - name: Audit operator account presence
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ ops_user | default('ops') }}"
+
+    # Sudo policy audit: behaviour is driven by ops_sudo_nopasswd.
+    # When false (lab default): the operator must be in the sudo group and
+    #   NOPASSWD must NOT appear in sudoers (password is required).
+    # When true: NOPASSWD must be present.
+    - name: Audit operator sudo privilege listing
+      ansible.builtin.command: sudo -l -U "{{ ops_user | default('ops') }}"
+      register: audit_sudo
+      changed_when: false
+
+    - name: Audit operator sudo group membership (policy-independent)
+      ansible.builtin.getent:
+        database: group
+        key: sudo
+      register: audit_sudo_group
+      # getent populates ansible_facts.getent_group; failure means group absent.
+
+    - name: Assert operator is a member of the sudo group
+      ansible.builtin.assert:
+        that:
+          - (ops_user | default('ops')) in (ansible_facts.getent_group.sudo[2] | default([]))
+        fail_msg: >-
+          Audit FAILED: '{{ ops_user | default('ops') }}' is not a member of
+          the sudo group on {{ inventory_hostname }}.
+        quiet: true
+
+    - name: Assert NOPASSWD is present (ops_sudo_nopasswd = true)
+      ansible.builtin.assert:
+        that:
+          - "'NOPASSWD' in audit_sudo.stdout"
+        fail_msg: >-
+          Audit FAILED: ops_sudo_nopasswd is true but NOPASSWD was not found
+          in 'sudo -l' output for '{{ ops_user | default('ops') }}'.
+        quiet: true
+      when: ops_sudo_nopasswd | default(false) | bool
+
+    - name: Assert NOPASSWD is absent (ops_sudo_nopasswd = false)
+      ansible.builtin.assert:
+        that:
+          - "'NOPASSWD' not in audit_sudo.stdout"
+        fail_msg: >-
+          Audit FAILED: ops_sudo_nopasswd is false but NOPASSWD was found
+          in 'sudo -l' output for '{{ ops_user | default('ops') }}'.
+          Remove /etc/sudoers.d/99-{{ ops_user | default('ops') }}-user and
+          re-run site.yml to enforce the password-required policy.
+        quiet: true
+      when: not (ops_sudo_nopasswd | default(false) | bool)
+
+    - name: Audit OpenSSH hardening drop-in presence (00-forgeops-hardening.conf)
+      ansible.builtin.stat:
+        path: /etc/ssh/sshd_config.d/00-forgeops-hardening.conf
+      register: audit_sshd_conf
+      failed_when: not audit_sshd_conf.stat.exists
+
+    - name: Audit legacy OpenSSH hardening drop-in absence
+      ansible.builtin.stat:
+        path: /etc/ssh/sshd_config.d/99-forgeops-hardening.conf
+      register: audit_legacy_sshd_conf
+      failed_when: audit_legacy_sshd_conf.stat.exists
+
+    - name: Audit effective OpenSSH password authentication setting
+      ansible.builtin.command: /usr/sbin/sshd -T
+      register: audit_sshd_effective
+      changed_when: false
+      failed_when: "'passwordauthentication no' not in (audit_sshd_effective.stdout | lower)"
+
+    - name: Audit UFW service status
+      ansible.builtin.command: ufw status verbose
+      register: audit_ufw
+      changed_when: false
+      failed_when: "'Status: active' not in audit_ufw.stdout"
+
+    - name: Audit Nginx systemd service status
+      ansible.builtin.systemd:
+        name: nginx
+      register: audit_nginx_service
+      failed_when: audit_nginx_service.status.ActiveState != "active"
+
+    - name: Audit Nginx local health endpoint HTTP response
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ nginx_port | default(80) }}{{ nginx_health_endpoint | default('/health') }}"
+        status_code: 200
+        return_content: true
+      register: audit_http_resp
+      failed_when: "'\"status\":\"UP\"' not in audit_http_resp.content"
+
+    - name: Summary of audit verification
+      ansible.builtin.debug:
+        msg: >-
+          Audit PASSED: Node {{ inventory_hostname }} is converged.
+          Timezone: {{ audit_timezone.stdout }},
+          User: {{ ops_user | default('ops') }} (sudo group member,
+          NOPASSWD={{ ops_sudo_nopasswd | default(false) | bool }}),
+          SSHD: Hardened (00- prefix active, passwordauth disabled),
+          UFW: active,
+          Nginx: active,
+          HTTP Health: {{ audit_http_resp.status }}.

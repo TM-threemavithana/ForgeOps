@@ -1,0 +1,12 @@
+---
+# Handlers for role ssh-hardening
+- name: Validate sshd configuration
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  listen: "reload sshd"
+
+- name: Reload ssh service
+  ansible.builtin.systemd:
+    name: ssh
+    state: reloaded
+  listen: "reload sshd"

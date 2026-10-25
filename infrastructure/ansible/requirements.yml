@@ -1,0 +1,9 @@
+---
+# ForgeOps Ansible Galaxy Collection Dependencies
+# Pinned versions matching docs/compatibility-matrix.md
+collections:
+  - name: ansible.posix
+    version: "1.6.2"
+
+  - name: community.general
+    version: "9.5.2"

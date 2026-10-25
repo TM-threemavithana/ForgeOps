@@ -1,0 +1,15 @@
+---
+# Defaults for role users
+manage_users_name: "{{ ops_user | default('ops') }}"
+manage_users_group: "{{ ops_group | default('ops') }}"
+manage_users_shell: "{{ ops_shell | default('/bin/bash') }}"
+manage_users_groups:
+  - sudo
+manage_users_ssh_public_key_file: "{{ ops_ssh_public_key_file | default('~/.ssh/forgeops_lab_ed25519.pub') }}"
+manage_users_ssh_public_key: >-
+  {{
+    ops_ssh_public_key
+    if (ops_ssh_public_key is defined and ops_ssh_public_key | length > 0)
+    else lookup('ansible.builtin.file', manage_users_ssh_public_key_file | expanduser, errors='ignore')
+  }}
+manage_users_sudo_nopasswd: "{{ ops_sudo_nopasswd | default(false) }}"

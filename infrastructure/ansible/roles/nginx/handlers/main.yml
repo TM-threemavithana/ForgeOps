@@ -1,0 +1,12 @@
+---
+# Handlers for role nginx
+- name: Validate nginx configuration
+  ansible.builtin.command: /usr/sbin/nginx -t
+  changed_when: false
+  listen: "reload nginx"
+
+- name: Reload nginx service
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+  listen: "reload nginx"

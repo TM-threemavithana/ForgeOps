@@ -1,0 +1,192 @@
+---
+# Tasks for role ssh-hardening
+# Configures OpenSSH hardening via 00-forgeops-hardening.conf drop-in.
+# Strict anti-lockout safeguards: validates keys and syntax prior to activation.
+# Design decisions:
+#   - Candidate staging/cleanup use changed_when: false (A-402 idempotence).
+#   - block/always ensures the candidate is cleaned up even on validation failure.
+#   - Anti-lockout guard verifies the actual public key string in authorized_keys,
+#     not merely file existence or size.
+#   - The only task that legitimately reports 'changed' is "Activate verified drop-in".
+
+# ---------------------------------------------------------------------------
+# 1. Controller-side safety guard: verify the operator public key is readable.
+# ---------------------------------------------------------------------------
+- name: Safety guard - Resolve operator public key from controller
+  ansible.builtin.set_fact:
+    _hardening_resolved_pubkey: >-
+      {{
+        ops_ssh_public_key
+        if (ops_ssh_public_key is defined and ops_ssh_public_key | length > 0)
+        else lookup('ansible.builtin.file',
+                    (hardening_ssh_public_key_file | expanduser),
+                    errors='ignore')
+      }}
+  when: hardening_ssh_password_authentication == 'no'
+  tags:
+    - ssh
+    - security
+
+- name: Safety guard - Confirm operator public key is non-empty on controller
+  ansible.builtin.assert:
+    that:
+      - _hardening_resolved_pubkey is defined
+      - _hardening_resolved_pubkey | length > 0
+    fail_msg: >-
+      CRITICAL SAFETY GUARD: Cannot disable password authentication without a
+      verified SSH public key on the controller for operator
+      '{{ hardening_ssh_operator_user }}'. Check ops_ssh_public_key or
+      ops_ssh_public_key_file ({{ hardening_ssh_public_key_file }}).
+      Aborting before any SSH configuration is altered.
+    quiet: true
+  when: hardening_ssh_password_authentication == 'no'
+  tags:
+    - ssh
+    - security
+
+# ---------------------------------------------------------------------------
+# 2. Guest-side safety guard: verify the actual key string is present in
+#    authorized_keys — a non-empty file is not sufficient proof.
+# ---------------------------------------------------------------------------
+- name: Safety guard - Read guest authorized_keys for operator
+  ansible.builtin.slurp:
+    src: "/home/{{ hardening_ssh_operator_user }}/.ssh/authorized_keys"
+  register: _guest_auth_keys_raw
+  when: hardening_ssh_password_authentication == 'no'
+  tags:
+    - ssh
+    - security
+
+- name: Safety guard - Confirm operator public key is present in authorized_keys
+  ansible.builtin.assert:
+    that:
+      - (_guest_auth_keys_raw.content | b64decode).find(
+          _hardening_resolved_pubkey | trim | regex_replace('\\s+\\S+$', '')
+        ) != -1
+    fail_msg: >-
+      CRITICAL SAFETY GUARD: The operator public key was NOT found in
+      /home/{{ hardening_ssh_operator_user }}/.ssh/authorized_keys on
+      {{ inventory_hostname }}. Verify the key was deployed (users role or
+      manual bootstrap) before disabling password authentication.
+      Aborting before any SSH configuration is altered.
+    quiet: true
+  when: hardening_ssh_password_authentication == 'no'
+  tags:
+    - ssh
+    - security
+
+# ---------------------------------------------------------------------------
+# 3. Filesystem prerequisites.
+# ---------------------------------------------------------------------------
+- name: Ensure sshd_config.d directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - ssh
+    - security
+
+- name: Remove legacy hardening drop-in if present
+  ansible.builtin.file:
+    path: "{{ hardening_ssh_legacy_dropin_path }}"
+    state: absent
+  notify: reload sshd
+  tags:
+    - ssh
+    - security
+
+# ---------------------------------------------------------------------------
+# 4. Candidate staging → validation → activation with guaranteed cleanup.
+#    Only "Activate verified OpenSSH hardening drop-in" reports changed.
+#    All transient operations use changed_when: false (A-402).
+# ---------------------------------------------------------------------------
+- name: Stage, validate and activate OpenSSH hardening drop-in
+  block:
+
+    - name: Stage candidate OpenSSH hardening drop-in
+      ansible.builtin.template:
+        src: 00-forgeops-hardening.conf.j2
+        dest: "{{ hardening_ssh_candidate_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      # Staging is transient; idempotence is measured by the activate task.
+      changed_when: false
+      tags:
+        - ssh
+        - security
+
+    - name: Validate candidate OpenSSH configuration syntax
+      ansible.builtin.command: >-
+        bash -c '
+        TMP_CFG=$(mktemp /tmp/sshd_validate_XXXXXX.conf);
+        printf "Include {{ hardening_ssh_candidate_path }}\nInclude /etc/ssh/sshd_config\n" > "$TMP_CFG";
+        /usr/sbin/sshd -t -f "$TMP_CFG";
+        RC=$?;
+        rm -f "$TMP_CFG";
+        exit $RC'
+      changed_when: false
+      tags:
+        - ssh
+        - security
+
+    - name: Activate verified OpenSSH hardening drop-in
+      ansible.builtin.copy:
+        src: "{{ hardening_ssh_candidate_path }}"
+        dest: "{{ hardening_ssh_dropin_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload sshd
+      tags:
+        - ssh
+        - security
+
+  always:
+    # Guaranteed cleanup: removes candidate whether the block succeeded or failed.
+    # A failed validation must never leave a candidate file behind.
+    - name: Remove temporary candidate configuration file
+      ansible.builtin.file:
+        path: "{{ hardening_ssh_candidate_path }}"
+        state: absent
+      # Cleanup is transient and non-idempotence-relevant; suppress noise.
+      changed_when: false
+      tags:
+        - ssh
+        - security
+
+  tags:
+    - ssh
+    - security
+
+# ---------------------------------------------------------------------------
+# 5. Post-activation verification: assert effective values via sshd -T.
+#    Does not run in check mode (sshd -T requires a live daemon config).
+# ---------------------------------------------------------------------------
+- name: Inspect effective OpenSSH configuration using sshd -T
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: sshd_effective_config
+  changed_when: false
+  check_mode: false
+  tags:
+    - ssh
+    - security
+
+- name: Verify effective OpenSSH hardening values
+  ansible.builtin.assert:
+    that:
+      - "'passwordauthentication ' ~ (hardening_ssh_password_authentication | lower) in (sshd_effective_config.stdout | lower)"
+      - "'permitrootlogin ' ~ (hardening_ssh_permit_root_login | lower) in (sshd_effective_config.stdout | lower)"
+      - "'pubkeyauthentication ' ~ (hardening_ssh_pubkey_authentication | lower) in (sshd_effective_config.stdout | lower)"
+    fail_msg: >-
+      Effective OpenSSH configuration does not reflect intended hardening values.
+      Inspect /etc/ssh/sshd_config.d/ for conflicting precedence.
+    quiet: true
+  when: not ansible_check_mode
+  tags:
+    - ssh
+    - security
