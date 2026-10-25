@@ -48,12 +48,12 @@
 | **REQ-P-03.2** | Reusable Helm chart (`existingSecret`) | G07 | `platform/charts/forgetasks/` | A-701 | PLANNED |
 | **REQ-P-03.3** | Argo CD GitOps pull-based promotion | G08 | `platform/argocd/apps/`, `values-dev.yaml` | A-801 | PLANNED |
 | **REQ-P-03.4** | Declarative Git revert rollback | G08, G12 | `docs/runbooks/rollback.md`, Git commit revert | A-802, DR-02 | PLANNED |
-| **REQ-P-04.1** | Terraform local Docker lab fixture | G05 | `infrastructure/terraform/local-docker-lab/` | A-501 | PLANNED |
+| **REQ-P-04.1** | Terraform local Docker lab fixture | G05 | `infrastructure/terraform/local-docker-lab/` | A-501 | **PASSED (G05)** |
 | **REQ-P-04.2** | Terraform Argo CD cluster bootstrap | G08 | `infrastructure/terraform/cluster-bootstrap/` | A-501, A-801 | PLANNED |
-| **REQ-P-04.3** | Scoped destroy without collateral loss | G05 | `Makefile`, `scripts/cleanup/` | A-502 | PLANNED |
-| **REQ-P-05.1** | Ansible Linux guest VM over SSH | G04 | `infrastructure/ansible/inventories/lab/hosts.yml` | A-401 | PLANNED |
-| **REQ-P-05.2** | Ansible idempotent roles (`changed=0`) | G04 | `infrastructure/ansible/roles/`, `playbooks/site.yml` | A-402, DR-09 | PLANNED |
-| **REQ-P-05.3** | Genuine VM requirement (no container) | G04 | `docs/evidence/G04/` | A-401 | PLANNED |
+| **REQ-P-04.3** | Scoped destroy without collateral loss | G05 | `Makefile`, `scripts/cleanup/` | A-502 | **PASSED (G05)** |
+| **REQ-P-05.1** | Ansible Linux guest VM over SSH | G04 | `infrastructure/ansible/inventories/lab/hosts.yml` | A-401 | **PASSED (G04)** |
+| **REQ-P-05.2** | Ansible idempotent roles (`changed=0`) | G04 | `infrastructure/ansible/roles/`, `playbooks/site.yml` | A-402, DR-09 | **PASSED (G04)** |
+| **REQ-P-05.3** | Genuine VM requirement (no container) | G04 | `docs/evidence/G04/` | A-401 | **PASSED (G04)** |
 | **REQ-P-06.1** | Prometheus metrics & retention cap | G09 | `observability/prometheus/` | A-901 | PLANNED |
 | **REQ-P-06.2** | Alertmanager alert firing & resolution | G09 | `observability/alertmanager/`, Alert rules | A-902, DR-03 | PLANNED |
 | **REQ-P-06.3** | Grafana Alloy log harvest (no Promtail)| G10 | `observability/alloy/`, `observability/loki/` | A-1001 | PLANNED |

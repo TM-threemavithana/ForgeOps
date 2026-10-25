@@ -59,19 +59,20 @@
 - **Description:** Accidental commit of `.env.local`, raw private keys, database passwords, or `terraform.tfstate` files (which store plaintext resource attributes) to public GitHub remotes.
 - **Likelihood:** Medium | **Impact:** High
 - **Mitigation:**
-  - Comprehensive `.gitignore` strictly excluding `*.tfstate*`, `.env*`, `*.key`, `*kubeconfig*`, and `secrets/`.
-  - Out-of-band secret generation in `~/.config/forgeops/secrets/`.
+  - Comprehensive `.gitignore` strictly excluding `*.tfstate*`, `.env*`, `*.key`, `*kubeconfig*`, `tfplan*`, `*.tfplan`, `*.plan`, and `secrets/`.
+  - Out-of-band state and secret generation in `~/.local/state/forgeops/` and `~/.config/forgeops/secrets/`.
   - Automated Gitleaks scanning in pre-commit hooks and GitHub Actions workflows.
-- **Status:** Mitigated via ADR-0006; `.gitignore` created in G00.
+- **Status:** Formally verified at Gate G05. Terraform state and plan artifacts stored outside Git in `/home/tharuka/.local/state/forgeops/g05/` with permissions `0700`/`0600`. Zero state or plan leaks.
 
-### R06: Resource Ownership Collision (Terraform vs. Argo CD)
-- **Description:** Terraform and Argo CD attempting to manage the same Kubernetes resources (e.g., Deployments or Namespaces), causing endless reconciliation loops and configuration drift.
+### R06: Resource Ownership Collision (Terraform vs. Argo CD / Compose)
+- **Description:** Terraform and Argo CD attempting to manage the same Kubernetes resources (e.g., Deployments or Namespaces), or Terraform colliding with Docker Compose / host workloads, causing endless reconciliation loops or accidental destruction.
 - **Likelihood:** Medium | **Impact:** High
 - **Mitigation:**
-  - Enforce the Strict Sole Owner Contract (ADR-0003).
-  - Terraform manages *only* the initial Argo CD platform bootstrap release.
+  - Enforce the Strict Sole Owner Contract (ADR-0003, ADR-0014).
+  - Gate G05 Terraform module owns strictly 3 resources (`docker_image.fixture`, `docker_network.iac_lab`, `docker_container.diag_fixture`).
+  - Terraform manages *only* the initial Argo CD platform bootstrap release (G08).
   - Argo CD has exclusive ownership of all application and observability workloads.
-- **Status:** Mitigated via ADR-0003.
+- **Status:** Formally verified at Gate G05 via A-501, DR-10, and A-502. Zero collision with Compose, RealmCanvas, or VM workloads.
 
 ### R07: NetworkPolicy Security Illusion under Default Kindnet
 - **Description:** Authoring Kubernetes `NetworkPolicy` manifests in default Kind and claiming network isolation when `kindnet` actually fails to enforce them.
@@ -96,7 +97,7 @@
   - Maintain an exact, verified Compatibility Matrix (`docs/compatibility-matrix.md`) cross-referenced against current official documentation.
   - Pin all image digests, Helm chart versions, Maven dependencies, and GitHub Actions.
   - Promtail strictly banned and replaced with Grafana Alloy.
-- **Status:** Mitigated via Compatibility Matrix in G00.
+- **Status:** Formally verified at Gate G05. Provider pinned to `kreuzwerker/docker v4.6.0` via `.terraform.lock.hcl`. Fixture image pinned to verified multi-arch OCI digest `nginx:1.30.6-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951`.
 
 ### R10: Project Scope Creep Across 20+ DevOps Tools
 - **Description:** Attempting to implement advanced tools (Jenkins, Tempo, Cilium, SOPS, Kyverno) before the core delivery loop (G01–G08) is verified and stable.

@@ -29,6 +29,13 @@ id_ed25519*
 *.tfstate.backup
 .terraform/
 .terraform.lock.hcl.tmp
+tfplan
+tfplan*
+*.tfplan
+*.plan
+*.tfvars
+*.tfvars.json
+!*.example.tfvars
 crash.log
 
 # --- Ansible ---
