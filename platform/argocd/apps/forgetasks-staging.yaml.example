@@ -1,0 +1,36 @@
+# ForgeOps Gate G08 — Example Staging Application Specification (DOCUMENTATION ONLY)
+# Intended for promotional digest verification.
+# AUTOMATED SYNCHRONIZATION, PRUNING, AND SELF-HEAL ARE DISABLED.
+# Requires verified immutable container digest (sha256:...) before promotion.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgetasks-staging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: staging
+    forgeops.io/gate: G08
+spec:
+  project: forgeops-project
+
+  source:
+    repoURL: "https://github.com/TM-threemavithana/ForgeOps.git"
+    targetRevision: "master"
+    path: "platform/charts/forgetasks"
+    helm:
+      valueFiles:
+        - "values-staging.yaml"
+
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: forgeops-staging
+
+  # Conservative sync policy: Manual sync only during adoption
+  # Automated sync, self-heal, prune, and replace/force are STRICTLY DISABLED
+  syncPolicy:
+    automated: null
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true

@@ -1,0 +1,11 @@
+# ForgeOps Gate G08 — Isolated GitOps Rehearsal Namespace
+# Declares dedicated namespace boundary for rehearsal validation
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgeops-gitops-rehearsal
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.io/gate: G08
+    forgeops.io/role: gitops-rehearsal
+    forgeops.dev/environment: rehearsal

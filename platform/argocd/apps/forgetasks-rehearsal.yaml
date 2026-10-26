@@ -1,0 +1,36 @@
+# ForgeOps Gate G08 — Isolated GitOps Rehearsal Application Specification
+# Deploys ForgeTasks Helm chart into isolated namespace 'forgeops-gitops-rehearsal'
+# AUTOMATED SYNCHRONIZATION, PRUNING, AND SELF-HEAL ARE STRICTLY DISABLED.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgetasks-rehearsal
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.io/gate: G08
+    forgeops.io/role: gitops-rehearsal
+spec:
+  project: forgeops-rehearsal-project
+
+  source:
+    repoURL: "https://github.com/TM-threemavithana/ForgeOps.git"
+    targetRevision: "g08-argocd-gitops"
+    path: "platform/charts/forgetasks"
+    helm:
+      releaseName: "forgetasks-rehearsal"
+      valueFiles:
+        - "values-rehearsal.yaml"
+
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: forgeops-gitops-rehearsal
+
+  # Conservative sync policy: Manual sync only
+  # Automated sync, self-heal, prune, and replace/force are STRICTLY DISABLED
+  syncPolicy:
+    automated: null
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+      - PruneLast=false

@@ -1,0 +1,89 @@
+# ForgeOps Gate G08 — Resource-Conscious Argo CD Core Values Profile
+# Compatible with argo/argo-cd Helm chart 10.11.6 (Argo CD v3.5.6)
+# Tuned for local Kind execution on laptop hardware under Core Profile constraints.
+
+global:
+  logging:
+    level: info
+    format: text
+
+# CRD Management: Install and retain CRDs across helm operations
+crds:
+  install: true
+  keep: true
+
+# Standalone Redis Configuration (HA disabled to conserve memory)
+redis-ha:
+  enabled: false
+
+redis:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# Core Application Controller (Reconciliation loop)
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+
+# Repository Server (Clones Git & executes Helm templating)
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# API & Web UI Server
+server:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+
+# ApplicationSet Controller
+applicationSet:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# Authentication & Admin Management
+# Uses chart-generated random initial password in Secret 'argocd-initial-admin-secret'
+# Authentication remains ENABLED. Zero committed passwords or hardcoded hashes.
+configs:
+  cm:
+    create: true
+    admin.enabled: true
+    timeout.reconciliation: 180s
+  secret:
+    createSecret: true
+
+# Heavy subsystems explicitly disabled for local single-cluster lab
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
