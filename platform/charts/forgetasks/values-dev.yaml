@@ -1,0 +1,32 @@
+# ForgeOps Gate G07 — Development Values Profile
+# Tailored for local Kind execution, offline image caching, and single-instance constraints.
+
+environment: dev
+
+api:
+  replicaCount: 1
+  image:
+    repository: forgetasks-api
+    tag: "1.0.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+postgresql:
+  auth:
+    existingSecretName: "forgetasks-db-secret"
+  persistence:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi

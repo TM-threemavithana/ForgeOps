@@ -1,0 +1,117 @@
+# ForgeOps Gate G07 — ForgeTasks Base Helm Values Specification
+# Defines default configurations, resource limits, probes, and safety parameters.
+# In accordance with ADR-0006: NO PLAINTEXT PASSWORDS PERMITTED IN THIS FILE.
+
+# Deployment environment descriptor ("dev" or "staging")
+environment: dev
+
+# Override chart naming standard
+nameOverride: ""
+fullnameOverride: ""
+
+# ForgeTasks Spring Boot API Workload Configuration
+api:
+  replicaCount: 1
+
+  image:
+    repository: forgetasks-api
+    tag: "1.0.0"
+    # Immutable digest format: sha256:<64-hex>. Populated in staging GitOps promotions.
+    # When digest is specified, it takes precedence over tag.
+    digest: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  config:
+    springProfilesActive: "prod"
+
+  # Optional metadata annotations attached to the API ConfigMap
+  configMapAnnotations: {}
+
+  # CPU/Memory bounds strictly enforcing LimitRange defaults from G06
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  # Probes tuned to accommodate Spring Boot cold-start (25-27s measured in G06)
+  probes:
+    startup:
+      initialDelaySeconds: 10
+      periodSeconds: 3
+      timeoutSeconds: 3
+      failureThreshold: 20
+    readiness:
+      initialDelaySeconds: 0
+      periodSeconds: 3
+      timeoutSeconds: 3
+      failureThreshold: 2
+    liveness:
+      initialDelaySeconds: 0
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  # Non-root runtime identity matching Dockerfile unprivileged user
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+
+# PostgreSQL 16 Alpine Stateful Workload Configuration
+postgresql:
+  enabled: true
+
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    digest: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 5432
+
+  # Credential binding decoupling. Credentials MUST pre-exist in target namespace.
+  # NEVER populate passwords in values files or Helm release objects.
+  auth:
+    existingSecretName: "forgetasks-db-secret"
+    secretKeys:
+      passwordKey: "postgres-password"
+    database: "forgetasks"
+    username: "forgeuser"
+
+  # Persistent volume dynamically provisioned by Kind standard local-path provisioner
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Alpine PostgreSQL non-root identity
+  securityContext:
+    runAsUser: 70
+    runAsGroup: 70
+    fsGroup: 70
+
+# Helm Connection Test Hook Configuration
+# Uses postgres:16-alpine image which includes /usr/bin/wget and is pre-cached offline in Kind
+test:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent

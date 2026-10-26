@@ -45,7 +45,7 @@
 | **REQ-P-02.2** | Trusted release to GHCR by SHA256 | G03 | `.github/workflows/publish.yml` | A-302 | **PASSED (G03 — awaiting push)** |
 | **REQ-P-02.3** | Offline local CI counterpart (`make ci`)| G03 | `Makefile`, `scripts/verify_g03_local.sh` | A-303 | **PASSED (G03)** |
 | **REQ-P-03.1** | Local Kind cluster (`dev`/`staging`) | G06 | `platform/kind/cluster-config.yaml`, `scripts/cluster/create-cluster.sh` | A-601 | **PASSED (G06)** |
-| **REQ-P-03.2** | Reusable Helm chart (`existingSecret`) | G07 | `platform/charts/forgetasks/` | A-701 | PLANNED |
+| **REQ-P-03.2** | Reusable Helm chart (`existingSecret`) | G07 | `platform/charts/forgetasks/` | A-701 | **PASSED (G07)** |
 | **REQ-P-03.3** | Argo CD GitOps pull-based promotion | G08 | `platform/argocd/apps/`, `values-dev.yaml` | A-801 | PLANNED |
 | **REQ-P-03.4** | Declarative Git revert rollback | G08, G12 | `docs/runbooks/rollback.md`, Git commit revert | A-802, DR-02 | PLANNED |
 | **REQ-P-04.1** | Terraform local Docker lab fixture | G05 | `infrastructure/terraform/local-docker-lab/` | A-501 | **PASSED (G05)** |
