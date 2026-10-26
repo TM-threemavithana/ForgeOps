@@ -1,0 +1,36 @@
+# ForgeOps Gate G08 — Example Dev Application Specification (DOCUMENTATION ONLY)
+# Intended for future Phase 4 adoption rehearsal.
+# AUTOMATED SYNCHRONIZATION, PRUNING, AND SELF-HEAL ARE DISABLED.
+# DO NOT APPLY AGAINST LIVE G06 WORKLOADS UNTIL ISOLATED REHEARSAL IS COMPLETE.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgetasks-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dev
+    forgeops.io/gate: G08
+spec:
+  project: forgeops-project
+
+  source:
+    repoURL: "https://github.com/TM-threemavithana/ForgeOps.git"
+    targetRevision: "master"
+    path: "platform/charts/forgetasks"
+    helm:
+      valueFiles:
+        - "values-dev.yaml"
+
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: forgeops-dev
+
+  # Conservative sync policy: Manual sync only during adoption
+  # Automated sync, self-heal, prune, and replace/force are STRICTLY DISABLED
+  syncPolicy:
+    automated: null
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true

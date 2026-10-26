@@ -1,0 +1,45 @@
+# ForgeOps Gate G08 — Restrictive GitOps Rehearsal AppProject
+# Strictly limits deployment destinations to 'forgeops-gitops-rehearsal'
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: forgeops-rehearsal-project
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.io/gate: G08
+    forgeops.io/role: gitops-rehearsal
+spec:
+  description: "Strictly isolated AppProject for ForgeOps GitOps rehearsal"
+
+  # Allowed Git repositories (strictly ForgeOps repository)
+  sourceRepos:
+    - "https://github.com/TM-threemavithana/ForgeOps.git"
+
+  # Allowed deployment destinations (strictly local Kind cluster and rehearsal namespace)
+  destinations:
+    - namespace: forgeops-gitops-rehearsal
+      server: "https://kubernetes.default.svc"
+
+  # Deny all cluster-scoped resources (ClusterRole, Namespace, etc.)
+  clusterResourceWhitelist: []
+
+  # Allow standard namespaced workload resources
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: "Deployment"
+    - group: "apps"
+      kind: "StatefulSet"
+    - group: ""
+      kind: "Service"
+    - group: ""
+      kind: "ConfigMap"
+    - group: ""
+      kind: "ServiceAccount"
+    - group: ""
+      kind: "Pod"
+
+  # Explicitly forbid Secret management via GitOps (enforcing out-of-band injection)
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: "Secret"

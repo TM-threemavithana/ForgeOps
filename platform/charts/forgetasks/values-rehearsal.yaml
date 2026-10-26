@@ -1,0 +1,45 @@
+# ForgeOps Gate G08 — Isolated GitOps Rehearsal Values Profile
+# Strictly targets the isolated 'forgeops-gitops-rehearsal' namespace.
+# Configured for unique naming, dedicated credentials, and zero collision with G06.
+
+environment: dev
+
+nameOverride: "rehearsal"
+fullnameOverride: "forgetasks-rehearsal"
+
+api:
+  replicaCount: 1
+  image:
+    repository: forgetasks-api
+    tag: "1.0.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+postgresql:
+  enabled: true
+  auth:
+    existingSecretName: "forgetasks-rehearsal-db-secret"
+    secretKeys:
+      passwordKey: "postgres-password"
+    database: "forgetasks"
+    username: "forgeuser"
+  persistence:
+    enabled: true
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+test:
+  enabled: true

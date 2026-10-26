@@ -1,0 +1,46 @@
+# ForgeOps Gate G08 — Example AppProject Specification (DOCUMENTATION ONLY)
+# Enforces strict repository and destination restrictions for GitOps workloads
+# DO NOT APPLY UNTIL AUTHORIZED
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: forgeops-project
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.io/gate: G08
+spec:
+  description: "ForgeOps workload governance project for dev and staging environments"
+
+  # Allowed Git repositories (strictly ForgeOps master/branches)
+  sourceRepos:
+    - "https://github.com/TM-threemavithana/ForgeOps.git"
+
+  # Allowed deployment destinations (local cluster, restricted namespaces only)
+  destinations:
+    - namespace: forgeops-dev
+      server: "https://kubernetes.default.svc"
+    - namespace: forgeops-staging
+      server: "https://kubernetes.default.svc"
+
+  # Deny cluster-scoped resources (Namespaces, ClusterRoles, etc.)
+  clusterResourceWhitelist: []
+
+  # Allow standard workload resources within target namespaces
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: "Deployment"
+    - group: "apps"
+      kind: "StatefulSet"
+    - group: ""
+      kind: "Service"
+    - group: ""
+      kind: "ConfigMap"
+    - group: ""
+      kind: "ServiceAccount"
+
+  # Explicitly forbid managing Secrets via Argo CD (enforcing out-of-band injection)
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: "Secret"
