@@ -5,7 +5,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Build stage
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM eclipse-temurin:25-jdk-alpine AS builder
 
 WORKDIR /build
 
@@ -26,7 +26,7 @@ RUN ./mvnw clean package -DskipTests -B
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal hardened runtime stage
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:25-jre-alpine AS runtime
 
 # OCI Image Annotations (Standardized Metadata)
 LABEL org.opencontainers.image.title="ForgeTasks API" \
