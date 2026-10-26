@@ -2,13 +2,51 @@
 
 This directory documents the declarative **Argo CD Application and AppProject Architecture** for ForgeOps in accordance with `ADR-0003`, `ADR-0004`, and `ADR-0014`.
 
-## 1. Architectural Safeguards (Phase 2 Baseline)
+## Current G08 Rehearsal State
+
+The G08 rehearsal has been deployed and verified on the local
+Kind cluster. The original Phase 2 safeguards below describe
+the earlier design and the inactive development/staging examples.
+
+The active rehearsal uses:
+
+- Application: `forgetasks-rehearsal`
+- Project: `forgeops-rehearsal-project`
+- Destination: `forgeops-gitops-rehearsal`
+- Source branch: `g08-argocd-gitops`
+- Automated synchronization: enabled
+- Self-healing: enabled
+- Automatic pruning: disabled
+- Allow-empty synchronization: disabled
+- Automatic namespace creation: disabled
+- Secret management through Argo CD: prohibited
+
+The rehearsal API and PostgreSQL database use isolated
+resources. No Argo CD Application currently adopts the
+protected G06 namespace or the staging namespace.
+
+Validated acceptance evidence is recorded in
+`docs/evidence/G08/readiness.md`.
+
+The active manifest files are:
+
+- `apps/forgetasks-rehearsal.yaml`
+- `projects/forgeops-rehearsal-project.yaml`
+- `../charts/forgetasks/values-rehearsal.yaml`
+
+The `.yaml.example` manifests remain inactive examples.
+
+Do not delete the G08 branch while the live Application
+still targets it. A controlled transition to `master`
+is required after the changes have been reviewed and merged.
+
+## 1. Historical Architectural Safeguards (Phase 2 Baseline)
 
 In accordance with G08 Phase 2 architecture decisions:
 1. **Zero Active Workload Targeting:**
    No Argo CD Application is active or installed targeting `forgeops-dev` or `forgeops-staging`. The example manifests in `projects/` and `apps/` carry `.example` extensions to prevent accidental deployment or automatic adoption.
 2. **Conservative Sync Policy:**
-   Automated synchronization (`syncPolicy.automated`), automated self-healing (`selfHeal: true`), and automated resource pruning (`prune: true`) are **strictly disabled** for the initial adoption stage.
+   The initial adoption design disabled automatic reconciliation. The active G08 rehearsal now has automated synchronization and self-healing enabled, while automatic pruning remains disabled.
 3. **No Force or Replace:**
    Neither `Replace=true` nor `Force=true` sync options are permitted. Destructive adoption is prohibited.
 4. **Out-of-Band Secrets Boundary:**

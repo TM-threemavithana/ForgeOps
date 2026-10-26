@@ -10,7 +10,7 @@ In strict compliance with the **Sole Owner Contract (ADR-0003)**:
   - 1 Helm Release: `argocd` (`helm_release.argocd`, upstream chart `argo/argo-cd:10.11.6`, app version `v3.5.6`)
 - **This module explicitly does NOT own:**
   - The Kind cluster containers, control-plane nodes, or Docker networks (owned by `scripts/cluster/`).
-  - Application workloads (`forgetasks-api`, `forgetasks-db`), ConfigMaps, or Services in `forgeops-dev` or `forgeops-staging` (owned by Argo CD / Helm).
+  - Application workloads (`forgetasks-api`, `forgetasks-db`), ConfigMaps, or Services in `forgeops-dev` or `forgeops-staging` (outside this Terraform module; protected G06 remains manifest-managed and has not been adopted by Argo CD).
   - The existing persistent volume claim `postgres-storage-forgetasks-db-0` (owned by Flyway / PostgreSQL StatefulSet / Kind local-path storage).
   - Kubernetes Secrets (owned by out-of-band injection `scripts/cluster/inject-secrets.sh`).
   - Local diagnostic fixtures or Docker Compose stacks (owned by `local-docker-lab` and Compose).
@@ -40,7 +40,21 @@ State is maintained strictly outside the repository in native-WSL storage:
 - **Exclusion:** `.gitignore` excludes `*.tfstate`, `*.tfplan`, and `.terraform/`.
 - **Lockfile:** `.terraform.lock.hcl` is committed to ensure reproducible provider binary checksums.
 
-## 5. Operator Runbook
+## 5. Operator Runbook — Historical Bootstrap Reference
+
+**Important:** Argo CD is already installed, and the active
+Terraform state is maintained outside the Git repository.
+
+The initialization, planning, and original apply examples
+below describe the bootstrap process. They must not be
+replayed against the active environment without an
+explicitly authorized, state-aware change procedure.
+
+Any future Terraform plan must use the existing private
+state, be reviewed before application, and preserve the
+rehearsal workloads, database storage, and protected G06
+resources.
+
 
 ### Preflight Verification
 Confirm Kind cluster is healthy and context is active:
@@ -65,9 +79,10 @@ Verify the plan proposes:
 - `Plan: 2 to add, 0 to change, 0 to destroy.`
 - **Zero changes to `forgeops-dev`, `forgeops-staging`, or other namespaces.**
 
-### Future Controlled Apply (Operator Authorized Only)
+### Original Apply Stage (Historical; Not Authorized for Replay)
 ```bash
-terraform apply tfplan-g08
+# Historical apply command intentionally omitted.
+# A fresh, reviewed plan requires separate authorization.
 ```
 
 ### Accessing Argo CD
@@ -84,9 +99,9 @@ kubectl --kubeconfig ~/.kube/config-forgeops --context kind-forgeops \
 # 3. Access https://localhost:8080 (User: admin)
 ```
 
-### Targeted Teardown (Safe Destruction)
-To destroy exclusively Argo CD without affecting other cluster resources:
+### Destructive Teardown Prohibited While Rehearsal Is Active
+Do not destroy the Terraform-managed Argo CD installation while it manages the live rehearsal Application. Removing Argo CD can interrupt GitOps reconciliation and must not be represented as harmless cleanup.
 ```bash
-terraform destroy
-# Destroys only helm_release.argocd and kubernetes_namespace.argocd
+# Destructive Terraform commands are intentionally omitted.
+# Require a separately approved teardown and recovery plan.
 ```
