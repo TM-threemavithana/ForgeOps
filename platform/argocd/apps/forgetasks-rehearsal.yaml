@@ -15,7 +15,7 @@ spec:
 
   source:
     repoURL: "https://github.com/TM-threemavithana/ForgeOps.git"
-    targetRevision: "g08-argocd-gitops"
+    targetRevision: "master"
     path: "platform/charts/forgetasks"
     helm:
       releaseName: "forgetasks-rehearsal"
