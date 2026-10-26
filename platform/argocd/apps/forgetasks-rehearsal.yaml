@@ -1,6 +1,6 @@
 # ForgeOps Gate G08 — Isolated GitOps Rehearsal Application Specification
 # Deploys ForgeTasks Helm chart into isolated namespace 'forgeops-gitops-rehearsal'
-# Phase 5G: automatic Git sync enabled; pruning and self-heal disabled.
+# Phase 5H: automatic Git sync and self-healing enabled; pruning disabled.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -26,13 +26,13 @@ spec:
     server: "https://kubernetes.default.svc"
     namespace: forgeops-gitops-rehearsal
 
-  # Phase 5G: automated Git reconciliation, rehearsal namespace only.
-  # No automatic pruning, self-healing, or allow-empty behavior.
+  # Phase 5H: automated reconciliation and self-healing, rehearsal only.
+  # Automatic pruning and allow-empty behavior remain disabled.
   syncPolicy:
     automated:
       enabled: true
       prune: false
-      selfHeal: false
+      selfHeal: true
       allowEmpty: false
     syncOptions:
       - CreateNamespace=false
