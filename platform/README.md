@@ -6,6 +6,8 @@ This directory tree defines the Kubernetes platform architecture for the ForgeOp
 
 ```text
 platform/
+├── charts/
+│   └── forgetasks/                      # Reusable ForgeTasks application Helm chart (Gate G07)
 ├── kind/
 │   └── cluster-config.yaml              # Kind cluster configuration (Kubernetes v1.34.11, loopback 127.0.0.1)
 └── k8s/
@@ -73,6 +75,15 @@ The verification test harness [`scripts/cluster/verify-g06.sh`](file:///C:/Proje
 - `make k8s-dev-smoke-write`: **Transactional Smoke Test**. Exercises an end-to-end `POST /api/v1/accounts` registration request to verify Flyway migrations, Hibernate JPA constraints, and database commits.
 - `make k8s-dev-drill-persistence`: **Stateful Persistence Drill**. Requires `ALLOW_POD_TERMINATION=yes`. Validates resource labels, deletes `forgetasks-db-0`, verifies StatefulSet replacement, and proves data persistence via duplicate account registration collision (`HTTP 409`).
 - `make k8s-dev-drill-a602`: **Stateless Self-Healing Drill**. Requires `ALLOW_POD_TERMINATION=yes`. Validates API labels, deletes the API pod, measures ReplicaSet controller recovery time, evaluates single-replica availability impact, and confirms traffic resumption.
+
+## Reusable Helm Chart Packaging (Gate G07)
+
+The ForgeTasks application is packaged as an enterprise-grade Helm chart at [`platform/charts/forgetasks/`](file:///C:/Project/ForgeOps/platform/charts/forgetasks/):
+- **Workload Scaffolding:** Packages the Spring Boot API Deployment, PostgreSQL 16 Alpine StatefulSet, headless and ClusterIP Services, ConfigMaps, and unprivileged ServiceAccounts.
+- **Credential Decoupling (ADR-0006):** External `existingSecretName` binding (`forgetasks-db-secret`) with zero plaintext credentials in values or chart templates.
+- **Fail-Closed Promotion:** JSON Schema (`values.schema.json`) and template helpers strictly enforce 64-hex SHA-256 digests (`sha256:...`) for staging environments, rejecting untagged or `:latest` fallback.
+- **Dedicated Sandbox Isolation:** Sandbox testing is isolated to `forgeops-helm-sandbox` using [`scripts/cluster/inject-sandbox-secrets.sh`](file:///C:/Project/ForgeOps/scripts/cluster/inject-sandbox-secrets.sh), preserving the G06 development baseline.
+- **Lifecycle Acceptance (A-701):** Validated through automated test hooks, transactional smoke writes (HTTP 201), duplicate registration collisions (HTTP 409), controlled metadata upgrade (Revision 2), rollback (Revision 3), and clean PVC lifecycle retention. See [Gate G07 Acceptance Report](file:///C:/Project/ForgeOps/docs/evidence/G07/readiness.md).
 
 ## Lifecycle Ownership Boundaries (ADR-0003)
 

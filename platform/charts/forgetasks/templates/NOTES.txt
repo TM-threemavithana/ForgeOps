@@ -1,0 +1,73 @@
+ForgeOps — ForgeTasks Helm Release Notes
+==============================================================================
+Release Name: {{ .Release.Name }}
+Namespace:    {{ .Release.Namespace }}
+Environment:  {{ .Values.environment }}
+Chart:        {{ .Chart.Name }}-{{ .Chart.Version }}
+App Version:  {{ .Chart.AppVersion }}
+==============================================================================
+
+1. ACCESSING THE FORGETASKS SPRING BOOT API:
+
+   The API Service is configured as ClusterIP (internal port {{ .Values.api.service.port }}).
+   To access the API locally on your host over loopback (127.0.0.1):
+
+   export KUBECONFIG=~/.kube/config-forgeops
+{{- if eq .Release.Namespace "forgeops-helm-sandbox" }}
+   # Forward to host port 28081 (avoiding conflicts with forgeops-dev on 8080):
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "forgetasks.fullname" . }}-api 28081:{{ .Values.api.service.port }}
+
+   Then verify the health endpoints in another terminal (host port 28081):
+   - Readiness:  curl -i http://127.0.0.1:28081/actuator/health/readiness
+   - Liveness:   curl -i http://127.0.0.1:28081/actuator/health/liveness
+   - Prometheus: curl -i http://127.0.0.1:28081/actuator/prometheus
+   - REST API:   curl -i http://127.0.0.1:28081/api/v1/projects
+{{- else }}
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "forgetasks.fullname" . }}-api {{ .Values.api.service.port }}:{{ .Values.api.service.port }}
+
+   Then verify the health endpoints in another terminal:
+   - Readiness:  curl -i http://127.0.0.1:{{ .Values.api.service.port }}/actuator/health/readiness
+   - Liveness:   curl -i http://127.0.0.1:{{ .Values.api.service.port }}/actuator/health/liveness
+   - Prometheus: curl -i http://127.0.0.1:{{ .Values.api.service.port }}/actuator/prometheus
+   - REST API:   curl -i http://127.0.0.1:{{ .Values.api.service.port }}/api/v1/projects
+{{- end }}
+
+2. CREDENTIAL HYGIENE (ADR-0006):
+
+   PostgreSQL database credentials are NOT stored in Helm release manifests.
+   The workloads reference the pre-provisioned external Secret:
+     Secret Name: {{ .Values.postgresql.auth.existingSecretName }}
+     Key:         {{ .Values.postgresql.auth.secretKeys.passwordKey }}
+
+{{- if eq .Release.Namespace "forgeops-helm-sandbox" }}
+   Ensure credentials were injected out-of-band using the dedicated sandbox workflow:
+     ./scripts/cluster/inject-sandbox-secrets.sh --validate-only
+     ./scripts/cluster/inject-sandbox-secrets.sh --confirm
+
+   CRITICAL: The --confirm flag operates in atomic create-only mode and must
+   NOT be rerun when the Secret '{{ .Values.postgresql.auth.existingSecretName }}' already exists.
+{{- else if eq .Release.Namespace "forgeops-dev" }}
+   Ensure credentials were injected out-of-band before pod startup:
+     ./scripts/cluster/inject-secrets.sh --namespace forgeops-dev
+{{- else if or (eq .Release.Namespace "forgeops-staging") (eq .Values.environment "staging") }}
+   Staging credential hygiene:
+     Credentials must be provisioned via the dedicated Gate G08 staging secrets pipeline.
+     DO NOT inject local development (G06) or sandbox credentials into the staging namespace.
+{{- else }}
+   Ensure credentials were pre-provisioned out-of-band in namespace '{{ .Release.Namespace }}'.
+   DO NOT inject local development credentials into production or staging environments.
+{{- end }}
+
+3. STORAGE & PVC PERSISTENCE SAFEGUARDS:
+
+   PostgreSQL storage is provisioned via StatefulSet volumeClaimTemplates.
+   PVC Name: postgres-storage-{{ include "forgetasks.fullname" . }}-db-0
+   Retention Policy: Retain on delete and Retain on scale.
+   Uninstalling this Helm release ('helm uninstall {{ .Release.Name }}') will
+   orphan and retain the PVC to prevent accidental data loss.
+
+4. AUTOMATED CONNECTION TEST:
+
+   To execute the Helm test hook:
+     helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+==============================================================================

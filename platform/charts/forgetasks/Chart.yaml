@@ -1,0 +1,15 @@
+apiVersion: v2
+name: forgetasks
+description: A reusable Helm chart for the ForgeTasks Spring Boot API and PostgreSQL database on Kubernetes (ForgeOps)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - forgeops
+  - spring-boot
+  - postgresql
+  - devops
+  - platform-engineering
+maintainers:
+  - name: ForgeOps Platform Team
+    email: platform@forgeops.dev

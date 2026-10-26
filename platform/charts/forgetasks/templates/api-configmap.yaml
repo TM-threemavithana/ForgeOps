@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "forgetasks.fullname" . }}-api-config
+  labels:
+    {{- include "forgetasks.api.labels" . | nindent 4 }}
+  {{- with .Values.api.configMapAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.api.config.springProfilesActive | default "prod" | quote }}
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ include "forgetasks.fullname" . }}-db:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.auth.database }}"
+  SPRING_DATASOURCE_USERNAME: {{ .Values.postgresql.auth.username | quote }}
+  PORT: {{ .Values.api.service.port | quote }}
+  MANAGEMENT_PORT: {{ .Values.api.service.port | quote }}

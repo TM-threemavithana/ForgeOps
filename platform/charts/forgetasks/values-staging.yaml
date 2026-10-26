@@ -1,0 +1,44 @@
+# ForgeOps Gate G07 — Staging Values Profile
+# Demonstrates immutable image digest promotion and staging environment configuration.
+#
+# NOTE ON DEPLOYABILITY:
+# This profile represents the desired state for staging promotion in Gate G08.
+# It requires an immutable container digest published to GHCR (e.g., ghcr.io/tm-threemavithana/forgetasks-api).
+# In accordance with ADR-0004 and Gate G07 policies:
+# - An empty digest in this baseline file is valid for static linting, but live deployment
+#   strictly requires a promoted SHA-256 digest format: sha256:<64-hex-characters>.
+# - CI promotion workflows supply this digest via a Git Pull Request modifying this file directly
+#   or passing '--set api.image.digest=sha256:...' during testing.
+# - Do NOT deploy this profile until the target image digest is verified and accessible.
+
+environment: staging
+
+api:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/tm-threemavithana/forgetasks-api
+    tag: ""
+    # Format: sha256:[a-f0-9]{64}
+    # Example promoted digest: sha256:26aad76a827e94fbcff9900eecc1f08c9096732386345914fa65b058a74e0d91
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+postgresql:
+  auth:
+    existingSecretName: "forgetasks-db-secret"
+  persistence:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
