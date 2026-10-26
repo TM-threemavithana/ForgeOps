@@ -171,27 +171,83 @@ Secret creation and governance labeling are separate operations.
 Successful database continuity testing does not constitute a
 full database disaster-recovery or backup-restoration test.
 
-## 8. Merge and Cleanup Restrictions
+## 8. Merge and Cleanup Verification
 
-At the time of acceptance, the live Argo CD Application
-tracked `g08-argocd-gitops`.
+G08 implementation and GitOps master transition
+were completed through two merged pull requests.
 
-Do not delete this branch until a controlled transition
-to `master` has been completed and verified.
+- Implementation PR: #22
+- Implementation merge: f47ef2d
+- Master-transition PR: #23
+- Master-transition merge: 494883cd
+- Live Application targetRevision: master
+- Argo CD synchronization: Synced
+- Argo CD health: Healthy
 
-Do not run Terraform destroy, delete the rehearsal namespace,
-remove database PVCs, or adopt protected G06 workloads as
-part of G08 documentation or pull-request preparation.
+The live Application was updated using the
+merged declarative Application manifest.
 
-## 9. Acceptance Conclusion
+The deployed Helm chart was verified unchanged
+between the original G08 feature branch and master.
 
-G08 functional acceptance and the observed security-isolation
-checks passed.
+No Terraform destroy, namespace deletion,
+PVC recreation, or protected G06 workload
+adoption was performed during this transition.
 
-Remaining release activities:
+The original feature branch may be retained
+until a separate cleanup decision is approved.
 
-- Review and correct outdated README guidance.
-- Review the evidence report and final Git diff.
-- Open and review the G08 pull request.
-- Plan and verify safe post-merge GitOps target-revision
-  transition before feature-branch deletion.
+## 9. Final Acceptance Conclusion
+
+G08 runtime acceptance: PASS
+
+Verification date: 2026-10-27
+
+### GitOps
+
+- Live targetRevision: master
+- Live Git revision:
+  494883cd223fd39d5fcac7555f1f288908889739
+- Sync status: Synced
+- Health status: Healthy
+- Automatic pruning remains disabled.
+
+### Rehearsal Workloads
+
+- API Deployment: 1/1 ready
+- PostgreSQL StatefulSet: 1/1 ready
+- API rollout: successful
+- PostgreSQL rollout: successful
+- Rehearsal PVC: Bound
+
+### Protected G06 Workloads
+
+- API Deployment: 1/1 ready
+- PostgreSQL StatefulSet: 1/1 ready
+- Protected database PVC: Bound
+
+### Persistent Storage Continuity
+
+G08 rehearsal PVC UID:
+b5ea8ec9-47e8-4979-afdb-621f2e3c63b8
+
+Protected G06 PVC UID:
+84853fb3-4d13-43a9-bc62-973c3be3c90c
+
+Both PVC identities were verified unchanged
+after the GitOps master transition.
+
+### Remaining Limitations
+
+The operational limitations documented in
+Section 7 remain applicable.
+
+In particular, create-only Secret provisioning
+does not enforce Secret immutability, and full
+database disaster recovery was not tested.
+
+G08 implementation and runtime verification
+are complete.
+
+Formal documentation closure is subject to
+review and merge of this evidence update.
