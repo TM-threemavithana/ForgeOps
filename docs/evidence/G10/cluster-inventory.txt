@@ -1,0 +1,50 @@
+=== G10 Cluster State & Inventory ===
+Timestamp: Tue Oct 27 16:54:22 UTC 2026
+
+--- Argo CD Applications ---
+NAME                     PROJECT                          SYNC     HEALTH    AUTO_SYNC
+forgetasks-rehearsal     forgeops-rehearsal-project       Synced   Healthy   map[allowEmpty:false enabled:false prune:false selfHeal:true]
+g09-monitoring           forgeops-observability-project   Synced   Healthy   <none>
+g10-alloy                forgeops-logging-project         Synced   Healthy   <none>
+g10-grafana-datasource   forgeops-logging-project         Synced   Healthy   <none>
+g10-loki                 forgeops-logging-project         Synced   Healthy   <none>
+
+--- Pods across Namespaces ---
+NAME                             READY   STATUS    RESTARTS        AGE   IP            NODE                     NOMINATED NODE   READINESS GATES
+forgetasks-api-6c7f85944-cnngk   1/1     Running   10 (120m ago)   45h   10.244.0.5    forgeops-control-plane   <none>           <none>
+forgetasks-db-0                  1/1     Running   3 (14h ago)     45h   10.244.0.13   forgeops-control-plane   <none>           <none>
+
+NAME                                        READY   STATUS    RESTARTS        AGE     IP            NODE                     NOMINATED NODE   READINESS GATES
+forgetasks-rehearsal-api-76c5d4c75d-gp8l2   1/1     Running   1 (3h43m ago)   3h46m   10.244.0.21   forgeops-control-plane   <none>           <none>
+forgetasks-rehearsal-db-0                   1/1     Running   2 (14h ago)     25h     10.244.0.10   forgeops-control-plane   <none>           <none>
+
+NAME                                                     READY   STATUS    RESTARTS       AGE   IP            NODE                     NOMINATED NODE   READINESS GATES
+alertmanager-g09-monitoring-kube-promet-alertmanager-0   2/2     Running   0              10h   10.244.0.17   forgeops-control-plane   <none>           <none>
+alloy-5bd65f9dd5-vtwtk                                   2/2     Running   0              34m   10.244.0.24   forgeops-control-plane   <none>           <none>
+g09-monitoring-grafana-5575bd9d6b-hkzxd                  3/3     Running   0              10h   10.244.0.15   forgeops-control-plane   <none>           <none>
+g09-monitoring-kube-promet-operator-75c84dd8bf-grvvc     1/1     Running   0              10h   10.244.0.16   forgeops-control-plane   <none>           <none>
+loki-0                                                   1/1     Running   0              37m   10.244.0.23   forgeops-control-plane   <none>           <none>
+prometheus-g09-monitoring-kube-promet-prometheus-0       2/2     Running   1 (121m ago)   10h   10.244.0.19   forgeops-control-plane   <none>           <none>
+
+--- Services in forgeops-observability ---
+NAME                                      TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+alertmanager-operated                     ClusterIP   None            <none>        9093/TCP,9094/TCP,9094/UDP   10h
+alloy                                     ClusterIP   10.96.91.76     <none>        12345/TCP                    34m
+g09-monitoring-grafana                    ClusterIP   10.96.14.231    <none>        80/TCP                       12h
+g09-monitoring-kube-promet-alertmanager   ClusterIP   10.96.161.86    <none>        9093/TCP,8080/TCP            12h
+g09-monitoring-kube-promet-operator       ClusterIP   10.96.218.57    <none>        8080/TCP                     12h
+g09-monitoring-kube-promet-prometheus     ClusterIP   10.96.145.225   <none>        9090/TCP,8080/TCP            12h
+loki                                      ClusterIP   10.96.100.61    <none>        3100/TCP,9095/TCP            41m
+loki-headless                             ClusterIP   None            <none>        3100/TCP                     41m
+loki-memberlist                           ClusterIP   None            <none>        7946/TCP                     41m
+prometheus-operated                       ClusterIP   None            <none>        9090/TCP                     10h
+
+--- RBAC in forgeops-gitops-rehearsal ---
+NAME                                                             CREATED AT
+role.rbac.authorization.k8s.io/alloy                             2026-10-27T16:19:29Z
+role.rbac.authorization.k8s.io/g09-prometheus-rehearsal-reader   2026-10-27T04:12:23Z
+
+NAME                                                                    ROLE                                   AGE
+rolebinding.rbac.authorization.k8s.io/alloy                             Role/alloy                             34m
+rolebinding.rbac.authorization.k8s.io/g09-prometheus-rehearsal-reader   Role/g09-prometheus-rehearsal-reader   12h
+

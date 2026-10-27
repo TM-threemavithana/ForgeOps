@@ -1,0 +1,45 @@
+[0;34m[INFO][0m Starting ForgeOps G10 Acceptance Verification
+[0;34m[INFO][0m Step 1: Verifying protected PVC UIDs against documented baselines
+[0;32m[PASS][0m All 3 protected PVC UIDs matched documented baselines identically.
+[0;34m[INFO][0m Step 2: Verifying Pod health across namespaces
+pod/loki-0 condition met
+pod/alloy-5bd65f9dd5-vtwtk condition met
+pod/forgetasks-rehearsal-api-76c5d4c75d-gp8l2 condition met
+pod/forgetasks-rehearsal-db-0 condition met
+[0;32m[PASS][0m Loki, Alloy, Rehearsal API, and Rehearsal DB pods are all Ready.
+[0;34m[INFO][0m Step 3: Establishing localhost port-forwards for reliable host-side testing
+[0;32m[PASS][0m Port-forward connections established on 127.0.0.1.
+[0;34m[INFO][0m Step 4: Checking Loki /ready endpoint and PVC capacity via host-side curl
+[0;32m[PASS][0m Loki /ready responded 200 OK ('ready').
+[0;32m[PASS][0m Loki PVC capacity verified at 2Gi (storage request boundary).
+[0;34m[INFO][0m Step 5: Checking Alloy /-/healthy endpoint via host-side curl
+[0;32m[PASS][0m Alloy /-/healthy responded 200 OK ('All Alloy components are healthy.').
+[0;34m[INFO][0m Step 6: Verifying RBAC boundaries for Alloy ServiceAccount
+[0;32m[PASS][0m Positive RBAC: Alloy SA can get pods in forgeops-gitops-rehearsal.
+[0;32m[PASS][0m Negative RBAC: Alloy SA denied pod access in forgeops-dev.
+[0;32m[PASS][0m Negative RBAC: Alloy SA denied secret access.
+[0;32m[PASS][0m Negative RBAC: Alloy SA denied pod access in kube-system.
+[0;34m[INFO][0m Step 7: Recording baseline accounts count from Rehearsal PostgreSQL
+[0;34m[INFO][0m Baseline accounts count: 2
+[0;34m[INFO][0m Step 8: Executing proven G10-B invalid account registration POST probe
+[0;34m[INFO][0m Probe Correlation ID: req-g10-probe-1793120028-12867
+[0;32m[PASS][0m Probe request returned HTTP 400 Bad Request.
+[0;32m[PASS][0m HTTP response header X-Request-ID matched probe correlation ID.
+[0;32m[PASS][0m ProblemDetail body contained matching correlationId.
+[0;34m[INFO][0m Step 9: Verifying Rehearsal database accounts count remained unchanged
+[0;32m[PASS][0m Database state completely unchanged (2 accounts). Zero records created.
+[0;34m[INFO][0m Step 10: Polling Loki for ingested ECS JSON log event with correlationId
+[0;32m[PASS][0m Log event with correlationId req-g10-probe-1793120028-12867 retrieved from Loki via LogQL and verified against ECS JSON schema.
+[0;34m[INFO][0m Step 11: Verifying Loki stream index labels
+[0;32m[PASS][0m Loki index labels are strictly low-cardinality and exclude dynamic Pod names.
+[0;34m[INFO][0m Step 12: Validating negative log isolation (empty result arrays)
+[0;32m[PASS][0m Negative Log Isolation: Exactly 0 logs from forgeops-dev in Loki (result: []).
+[0;32m[PASS][0m Negative Log Isolation: Exactly 0 logs from postgres container in Loki (result: []).
+[0;34m[INFO][0m Step 13: Verifying Grafana Loki datasource provisioning via host-side curl
+[0;32m[PASS][0m Grafana provisioned Loki datasource while preserving existing Prometheus datasource.
+[0;34m[INFO][0m Step 14: Verifying Prometheus scrape targets remain UP via host-side curl
+[0;32m[PASS][0m All existing Prometheus scrape targets remain UP and healthy.
+[0;34m[INFO][0m =================================================================
+[0;32m[PASS][0m ALL G10-C THROUGH G10-E ACCEPTANCE CRITERIA VERIFIED SUCCESSFULLY
+[0;34m[INFO][0m =================================================================
+[0;34m[INFO][0m Cleaning up background port-forward processes and temporary artifacts...
