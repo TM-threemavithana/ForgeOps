@@ -15,7 +15,7 @@ spec:
       interval: 15s
       rules:
         - alert: G09AlertPipelineDrill
-          expr: vector(0) == 1
+          expr: vector(1) == 1
           for: 1m
           labels:
             severity: info
