@@ -1,0 +1,99 @@
+# ForgeOps G10-C — Loki Single-Binary Configuration
+# Pinned Chart: grafana/loki 6.27.0 (App Version: 3.4.2)
+# Scope: Local development logging, bounded 2Gi PVC, monolithic single replica.
+# NOT APPROVED FOR CLUSTER DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+      admin_api_directory: /var/loki/admin
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  limits_config:
+    retention_period: 24h
+    reject_old_samples: true
+    reject_old_samples_max_age: 24h
+    max_cache_freshness_per_query: 10m
+    query_timeout: 300s
+    volume_enabled: true
+
+  compactor:
+    working_directory: /var/loki/compactor
+    compactor_ring:
+      kvstore:
+        store: inmemory
+    retention_enabled: true
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 15
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: standard
+    enableStatefulSetAutoDeletePVC: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Minimal namespaced RBAC only; suppresses ClusterRole and ClusterRoleBinding.
+rbac:
+  namespaced: true
+
+# Disable unnecessary sidecar rules container (rules are managed by Prometheus).
+sidecar:
+  rules:
+    enabled: false
+
+# Disable all unnecessary distributed, cache, canary, and gateway components.
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
+lokiCanary:
+  enabled: false
+
+test:
+  enabled: false
+
+gateway:
+  enabled: false
+
+minio:
+  enabled: false
+
+backend:
+  replicas: 0
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0

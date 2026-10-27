@@ -1,0 +1,35 @@
+# ForgeOps G10 — Grafana Alloy Application
+# Manual sync only; API-based pod log collector scoped strictly to G08 rehearsal.
+# CANDIDATE — NOT APPROVED FOR DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: g10-alloy
+  namespace: argocd
+spec:
+  project: forgeops-logging-project
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgeops-observability
+
+  sources:
+    # Pinned upstream Helm chart
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.14.3
+      helm:
+        releaseName: alloy
+        skipCrds: true
+        skipTests: true
+        valueFiles:
+          - $values/observability/alloy/values-alloy.yaml
+
+    # Git-managed Helm values
+    - repoURL: https://github.com/TM-threemavithana/ForgeOps.git
+      targetRevision: master
+      ref: values
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false

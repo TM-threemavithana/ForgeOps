@@ -1,0 +1,35 @@
+# ForgeOps G10 — Loki Application
+# Manual sync only; single replica monolithic Loki with 2Gi local filesystem storage.
+# CANDIDATE — NOT APPROVED FOR DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: g10-loki
+  namespace: argocd
+spec:
+  project: forgeops-logging-project
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgeops-observability
+
+  sources:
+    # Pinned upstream Helm chart
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 6.27.0
+      helm:
+        releaseName: loki
+        skipCrds: true
+        skipTests: true
+        valueFiles:
+          - $values/observability/loki/values-loki.yaml
+
+    # Git-managed Helm values
+    - repoURL: https://github.com/TM-threemavithana/ForgeOps.git
+      targetRevision: master
+      ref: values
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false

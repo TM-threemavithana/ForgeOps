@@ -1,0 +1,14 @@
+# ForgeOps G10 — Grafana Helm Repository Secret for Argo CD
+# CANDIDATE — NOT APPROVED FOR DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: g10-grafana-helm-repository
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  name: grafana-helm-repo
+  type: helm
+  url: https://grafana.github.io/helm-charts
