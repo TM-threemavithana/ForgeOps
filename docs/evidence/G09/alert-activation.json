@@ -1,0 +1,33 @@
+{
+  "gitRevision": "65491e8d3b66ea7180ce226067a2219fc9612e6e",
+  "alert": "G09AlertPipelineDrill",
+  "pendingObserved": true,
+  "firingObserved": true,
+  "alertmanagerReceived": true,
+  "observations": [
+    {
+      "timestamp": "2026-10-27T07:20:29.592759+00:00",
+      "message": "Baseline: Prometheus alert inactive"
+    },
+    {
+      "timestamp": "2026-10-27T07:20:29.593182+00:00",
+      "message": "Baseline: Alertmanager has no drill alert"
+    },
+    {
+      "timestamp": "2026-10-27T07:20:29.885460+00:00",
+      "message": "Manual G09 activation sync requested"
+    },
+    {
+      "timestamp": "2026-10-27T07:21:41.893796+00:00",
+      "message": "Prometheus state: pending"
+    },
+    {
+      "timestamp": "2026-10-27T07:22:55.981020+00:00",
+      "message": "Prometheus state: firing"
+    },
+    {
+      "timestamp": "2026-10-27T07:22:55.986589+00:00",
+      "message": "Alertmanager received drill alert: active"
+    }
+  ]
+}
