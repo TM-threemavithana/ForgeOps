@@ -1,0 +1,35 @@
+# ForgeOps G09 — Monitoring Application candidate
+# Manual sync only. Bootstrap prerequisites must exist first.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: g09-monitoring
+  namespace: argocd
+spec:
+  project: forgeops-observability-project
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgeops-observability
+
+  sources:
+    # Pinned upstream OCI Helm chart.
+    - repoURL: ghcr.io/prometheus-community/charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.11.0
+      helm:
+        releaseName: g09-monitoring
+        skipCrds: true
+        skipTests: true
+        valueFiles:
+          - $values/observability/prometheus/values-g09.yaml
+
+    # Git-managed Helm values and G09 namespaced resources.
+    - repoURL: https://github.com/TM-threemavithana/ForgeOps.git
+      targetRevision: master
+      ref: values
+      path: observability/prometheus
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false

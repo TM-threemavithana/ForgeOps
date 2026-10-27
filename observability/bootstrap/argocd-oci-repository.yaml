@@ -1,0 +1,15 @@
+# ForgeOps G09 — Public OCI Helm repository
+# Bootstrap-owned candidate; NOT APPLIED.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: g09-monitoring-helm-oci-repository
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  name: g09-monitoring-helm-oci
+  type: helm
+  url: ghcr.io/prometheus-community/charts
+  enableOCI: "true"
