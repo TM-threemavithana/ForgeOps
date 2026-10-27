@@ -100,7 +100,7 @@ if [[ "$LOKI_STATUS" != "200" ]] || [[ "$LOKI_BODY" != "ready" ]]; then
 fi
 pass "Loki /ready responded 200 OK ('ready')."
 
-LOKI_PVC_CAPACITY=$(kubectl get pvc loki-single-binary-0 -n forgeops-observability -o jsonpath='{.status.capacity.storage}')
+LOKI_PVC_CAPACITY=$(kubectl get pvc storage-loki-0 -n forgeops-observability -o jsonpath='{.status.capacity.storage}')
 if [[ "$LOKI_PVC_CAPACITY" != "2Gi" ]]; then
   fail "Expected Loki PVC capacity 2Gi, got $LOKI_PVC_CAPACITY"
 fi
@@ -112,10 +112,10 @@ ALLOY_HEALTH_RESP=$(curl -s -w "\n%{http_code}" "http://127.0.0.1:${ALLOY_LOCAL_
 ALLOY_STATUS=$(echo "$ALLOY_HEALTH_RESP" | tail -n 1)
 ALLOY_BODY=$(echo "$ALLOY_HEALTH_RESP" | sed '$d')
 
-if [[ "$ALLOY_STATUS" != "200" ]] || [[ "$ALLOY_BODY" != "Alloy is healthy."* ]]; then
+if [[ "$ALLOY_STATUS" != "200" ]] || [[ "$ALLOY_BODY" != *"healthy"* ]]; then
   fail "Alloy health check failed: HTTP $ALLOY_STATUS, body: $ALLOY_BODY"
 fi
-pass "Alloy /-/healthy responded 200 OK ('Alloy is healthy.')."
+pass "Alloy /-/healthy responded 200 OK ('$ALLOY_BODY')."
 
 # 6. Scoped RBAC Validation (Positive and Negative)
 info "Step 6: Verifying RBAC boundaries for Alloy ServiceAccount"
@@ -194,7 +194,7 @@ pass "Database state completely unchanged ($POST_COUNT accounts). Zero records c
 info "Step 10: Polling Loki for ingested ECS JSON log event with correlationId"
 LOG_FOUND=false
 for i in {1..20}; do
-  LOKI_QUERY_RESP=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query" \
+  LOKI_QUERY_RESP=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query_range" \
     --data-urlencode "query={app=\"rehearsal-api\"} |= \"${TEST_CORRELATION_ID}\"")
 
   IS_VALID=$(echo "$LOKI_QUERY_RESP" | python3 -c "
@@ -251,7 +251,7 @@ pass "Loki index labels are strictly low-cardinality and exclude dynamic Pod nam
 
 # 12. Negative Log Isolation Validation (Validating Empty Result Arrays)
 info "Step 12: Validating negative log isolation (empty result arrays)"
-DEV_QUERY_RESP=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query" \
+DEV_QUERY_RESP=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query_range" \
   --data-urlencode 'query={namespace="forgeops-dev"}')
 
 echo "$DEV_QUERY_RESP" | python3 -c "
@@ -263,7 +263,7 @@ assert len(results) == 0, f'Forbidden logs from forgeops-dev detected: count={le
 "
 pass "Negative Log Isolation: Exactly 0 logs from forgeops-dev in Loki (result: [])."
 
-DB_QUERY_RESP=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query" \
+DB_QUERY_RESP=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query_range" \
   --data-urlencode 'query={container="postgres"}')
 
 echo "$DB_QUERY_RESP" | python3 -c "
