@@ -59,7 +59,7 @@ pass "All 3 protected PVC UIDs matched documented baselines identically."
 info "Step 2: Verifying Pod health across namespaces"
 kubectl wait --namespace forgeops-observability --for=condition=ready pod -l app.kubernetes.io/name=loki --timeout=60s
 kubectl wait --namespace forgeops-observability --for=condition=ready pod -l app.kubernetes.io/name=alloy --timeout=60s
-kubectl wait --namespace forgeops-gitops-rehearsal --for=condition=ready pod -l app.kubernetes.io/name=forgetasks-rehearsal-api --timeout=60s
+kubectl wait --namespace forgeops-gitops-rehearsal --for=condition=ready pod -l app.kubernetes.io/name=rehearsal-api --timeout=60s
 kubectl wait --namespace forgeops-gitops-rehearsal --for=condition=ready pod/forgetasks-rehearsal-db-0 --timeout=60s
 pass "Loki, Alloy, Rehearsal API, and Rehearsal DB pods are all Ready."
 
@@ -195,7 +195,7 @@ info "Step 10: Polling Loki for ingested ECS JSON log event with correlationId"
 LOG_FOUND=false
 for i in {1..20}; do
   LOKI_QUERY_RESP=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query" \
-    --data-urlencode "query={app=\"forgetasks-rehearsal-api\"} |= \"${TEST_CORRELATION_ID}\"")
+    --data-urlencode "query={app=\"rehearsal-api\"} |= \"${TEST_CORRELATION_ID}\"")
 
   IS_VALID=$(echo "$LOKI_QUERY_RESP" | python3 -c "
 import sys, json
