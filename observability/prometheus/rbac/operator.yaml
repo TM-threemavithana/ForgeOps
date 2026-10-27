@@ -55,15 +55,15 @@ rules:
 
   - apiGroups: [""]
     resources: ["configmaps", "secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
 
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch", "delete"]
+    verbs: ["list", "delete"]
 
   - apiGroups: [""]
     resources: ["services", "endpoints"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "create", "update", "delete"]
 
   # Operator Service finalizer management.
   # Restricted to forgeops-observability by this Role.
@@ -73,7 +73,7 @@ rules:
 
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
 
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
