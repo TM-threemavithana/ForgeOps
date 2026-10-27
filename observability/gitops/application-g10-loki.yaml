@@ -25,11 +25,10 @@ spec:
         valueFiles:
           - $values/observability/loki/values-loki.yaml
 
-    # Git-managed Helm values and manifests
+    # Git-managed Helm values
     - repoURL: https://github.com/TM-threemavithana/ForgeOps.git
       targetRevision: master
       ref: values
-      path: observability/loki
 
   syncPolicy:
     syncOptions:

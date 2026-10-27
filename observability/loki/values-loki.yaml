@@ -65,6 +65,11 @@ singleBinary:
 rbac:
   namespaced: true
 
+# Disable unnecessary sidecar rules container (rules are managed by Prometheus).
+sidecar:
+  rules:
+    enabled: false
+
 # Disable all unnecessary distributed, cache, canary, and gateway components.
 chunksCache:
   enabled: false

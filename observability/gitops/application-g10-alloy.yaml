@@ -25,11 +25,10 @@ spec:
         valueFiles:
           - $values/observability/alloy/values-alloy.yaml
 
-    # Git-managed Helm values and manifests
+    # Git-managed Helm values
     - repoURL: https://github.com/TM-threemavithana/ForgeOps.git
       targetRevision: master
       ref: values
-      path: observability/alloy
 
   syncPolicy:
     syncOptions:

@@ -40,3 +40,19 @@ Loki provides lightweight, scalable log aggregation for the ForgeOps platform. U
   ```logql
   {app="forgetasks-rehearsal-api"} | json | log_level = "ERROR" or log_level = "WARN"
   ```
+
+## 7. Storage Provisioning Nuance & Operational Safeguards
+- **Local-Path Provisioner Behavior**: In Kind, the default `standard` storage class utilizes Rancher `local-path-provisioner`. In this environment, the `2Gi` PVC declaration is a scheduler capacity request and declarative bound, but does **not** enforce a hard OS-level directory quota on the host filesystem.
+- **Operational Safeguards**:
+  1. **Compactor Sweeps**: Compactor retention is explicitly active (`retention_enabled: true`, `retention_period: 24h`), scheduling regular deletion sweeps of chunks exceeding 24 hours.
+  2. **Ingestion Invariants**: Scraping is strictly isolated to the single rehearsal API workload with bounded labels, keeping ingestion rates below ~50 KB/hour in development.
+  3. **Capacity Monitoring**: Operators can inspect effective filesystem disk usage safely via `kubectl exec -n forgeops-observability loki-0 -- df -h /var/loki`.
+
+## 8. Non-Destructive Rollback & Reconciliation Runbook
+- **Zero Automatic Destruction**: Rollback never automatically deletes PVCs, StatefulSets, persistent data, or Argo CD Applications.
+- **Operator-Approved Non-Destructive Reconciliation**:
+  1. **Halt Ingestion**: Scale the Alloy deployment to 0 (`kubectl scale deployment alloy -n forgeops-observability --replicas=0`) to stop streaming immediately without affecting any application workloads.
+  2. **Freeze Logging Service**: If Loki requires rollback or maintenance, scale the StatefulSet to 0 (`kubectl scale statefulset loki -n forgeops-observability --replicas=0`). This preserves the `loki-single-binary-0` PVC, index files, and all existing chunks intact.
+  3. **Datasource Decoupling**: Delete or disable the `g10-grafana-datasource-loki` ConfigMap to revert Grafana cleanly to its G09 Prometheus-only baseline without restarting the Grafana pod.
+  4. **Data Deletion**: Any persistent data removal or PVC deletion requires explicit, separate operator approval following full lab evidence archival.
+

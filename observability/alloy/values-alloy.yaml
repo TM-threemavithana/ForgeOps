@@ -26,15 +26,10 @@ alloy:
           action        = "keep"
         }
 
-        // Bounded low-cardinality index labels only
+        // Bounded low-cardinality index labels only (stable app, namespace, container)
         rule {
           source_labels = ["__meta_kubernetes_namespace"]
           target_label  = "namespace"
-        }
-
-        rule {
-          source_labels = ["__meta_kubernetes_pod_name"]
-          target_label  = "pod"
         }
 
         rule {

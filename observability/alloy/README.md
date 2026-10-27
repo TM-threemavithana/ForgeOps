@@ -14,10 +14,9 @@ Grafana Alloy collects Pod logs from the G08 rehearsal environment and forwards 
 - **Target Filter**: Scoped strictly to namespace `forgeops-gitops-rehearsal` and pod label `app.kubernetes.io/name: forgetasks-rehearsal-api`.
 - **Bounded Stream Labels**:
   - `namespace`: Kubernetes namespace (`forgeops-gitops-rehearsal`)
-  - `pod`: Pod name
-  - `container`: Container name
+  - `container`: Container name (`forgetasks-api`)
   - `app`: Application name (`forgetasks-rehearsal-api`)
-- **Cardinally Guard**: Dynamic request metadata (`correlationId`, `X-Request-ID`), user IDs, HTTP status codes, and timestamps are **NOT** indexed as Loki stream labels. They remain inside the raw ECS JSON log payload and are parsed dynamically via LogQL.
+- **Cardinality Guard**: Dynamic Pod names (`pod`), request metadata (`correlationId`, `X-Request-ID`), user IDs, HTTP status codes, and timestamps are **NOT** indexed as Loki stream labels. They remain inside the raw ECS JSON log payload and are parsed dynamically via LogQL.
 
 ## 4. RBAC & Security Boundaries
 - **ServiceAccount**: `alloy` in `forgeops-observability`.
