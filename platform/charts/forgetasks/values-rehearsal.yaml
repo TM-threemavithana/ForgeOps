@@ -12,7 +12,7 @@ api:
   image:
     repository: ghcr.io/tm-threemavithana/forgetasks-api
     tag: "1.0.0"
-    digest: "sha256:09f46f0823b908b7c09584c6143f7b5b0c67566c397d1a0328b71b15d3a2dcd9"
+    digest: "sha256:0d2faee3fb0746be0557760a26118d5fa637609654028a7eaa573f09cbdca83b"
     pullPolicy: IfNotPresent
   resources:
     requests:
