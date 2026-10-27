@@ -1,0 +1,44 @@
+# ForgeOps G10 — Logging AppProject
+# Scoped strictly to G10 logging workloads (Loki, Alloy, Grafana Loki datasource).
+# CANDIDATE — NOT APPROVED FOR DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: forgeops-logging-project
+  namespace: argocd
+spec:
+  description: >
+    ForgeOps G10 namespaced logging infrastructure (Loki and Alloy) with zero cluster-scoped privileges.
+
+  sourceRepos:
+    - https://github.com/TM-threemavithana/ForgeOps.git
+    - https://grafana.github.io/helm-charts
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: forgeops-observability
+    - server: https://kubernetes.default.svc
+      namespace: forgeops-gitops-rehearsal
+
+  # Strictly zero cluster-scoped resource privileges
+  clusterResourceWhitelist: []
+
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding

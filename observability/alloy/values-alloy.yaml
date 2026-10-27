@@ -1,0 +1,89 @@
+# ForgeOps G10-C — Grafana Alloy Pod Log Collection Configuration
+# Pinned Chart: grafana/alloy 1.14.3 (App Version: v1.21.2)
+# Scope: Kubernetes API log collection scoped strictly to G08 rehearsal API.
+# Minimal namespaced RBAC only — no ClusterRoles, no hostPath mounts, no root.
+# NOT APPROVED FOR CLUSTER DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+
+alloy:
+  configMap:
+    create: true
+    content: |
+      // Discover pods strictly in the rehearsal namespace
+      discovery.kubernetes "rehearsal_pods" {
+        role = "pod"
+        namespaces {
+          names = ["forgeops-gitops-rehearsal"]
+        }
+      }
+
+      // Relabel and filter to only the forgetasks-rehearsal-api workload
+      discovery.relabel "rehearsal_api" {
+        targets = discovery.kubernetes.rehearsal_pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          regex         = "forgetasks-rehearsal-api"
+          action        = "keep"
+        }
+
+        // Bounded low-cardinality index labels only
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+      }
+
+      // Tail logs via Kubernetes API without requiring host filesystem access
+      loki.source.kubernetes "rehearsal_api" {
+        targets    = discovery.relabel.rehearsal_api.output
+        forward_to = [loki.write.loki_endpoint.receiver]
+      }
+
+      // Ship logs to internal Loki service
+      loki.write "loki_endpoint" {
+        endpoint {
+          url = "http://loki.forgeops-observability.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# Run as a single-replica Deployment for low resource consumption
+controller:
+  type: deployment
+  replicas: 1
+
+serviceAccount:
+  create: true
+  name: alloy
+
+# Scoped RBAC restricted strictly to forgeops-gitops-rehearsal
+rbac:
+  create: true
+  namespaces:
+    - forgeops-gitops-rehearsal
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "pods/log"]
+      verbs: ["get", "list", "watch"]

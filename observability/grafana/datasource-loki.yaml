@@ -1,0 +1,25 @@
+# ForgeOps G10-D — Grafana Loki Datasource Provisioning
+# Integrates with the existing G09 Grafana instance via sidecar discovery.
+# Label grafana_datasource: "1" ensures zero-downtime, non-destructive registration.
+# NOT APPROVED FOR CLUSTER DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: g10-grafana-datasource-loki
+  namespace: forgeops-observability
+  labels:
+    grafana_datasource: "1"
+    app.kubernetes.io/part-of: forgeops-observability
+    app.kubernetes.io/managed-by: GitOps
+data:
+  loki-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.forgeops-observability.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+      jsonData:
+        maxLines: 1000

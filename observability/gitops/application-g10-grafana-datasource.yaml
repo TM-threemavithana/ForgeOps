@@ -1,0 +1,24 @@
+# ForgeOps G10 — Grafana Datasource Application
+# Deploys the Loki datasource ConfigMap into forgeops-observability.
+# Picked up automatically by the existing G09 Grafana sidecar without restarting Grafana.
+# CANDIDATE — NOT APPROVED FOR DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: g10-grafana-datasource
+  namespace: argocd
+spec:
+  project: forgeops-logging-project
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgeops-observability
+
+  source:
+    repoURL: https://github.com/TM-threemavithana/ForgeOps.git
+    targetRevision: master
+    path: observability/grafana
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
