@@ -1,0 +1,41 @@
+# ForgeOps G09 — Operator cluster metadata reader
+# Bootstrap-owned candidate; NOT APPROVED FOR DEPLOYMENT.
+#
+# Cluster-scoped READ permissions only.
+# Namespaced WRITE permissions are in rbac/operator.yaml.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: g09-prometheus-operator-cluster-reader
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/gate: G09
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list", "watch"]
+
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: g09-prometheus-operator-cluster-reader
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/gate: G09
+subjects:
+  - kind: ServiceAccount
+    name: g09-monitoring-kube-promet-operator
+    namespace: forgeops-observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: g09-prometheus-operator-cluster-reader

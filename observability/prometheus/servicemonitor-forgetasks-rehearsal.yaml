@@ -1,0 +1,27 @@
+# ForgeOps G09 — ForgeTasks Rehearsal ServiceMonitor
+# Prepared for deployment after monitoring CRD bootstrap.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: forgetasks-rehearsal-api
+  namespace: forgeops-observability
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.io/gate: G09
+    release: g09-monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - forgeops-gitops-rehearsal
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: forgetasks-rehearsal
+      app.kubernetes.io/name: rehearsal-api
+
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      scheme: http
+      interval: 30s
+      scrapeTimeout: 10s

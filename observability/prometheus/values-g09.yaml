@@ -1,0 +1,181 @@
+# G09 minimal deployment profile
+# Replacement Operator/Prometheus RBAC required.
+global:
+  rbac:
+    create: false
+
+kubernetesServiceMonitors:
+  enabled: false
+
+# ForgeOps G09 — Initial monitoring configuration
+# Chart: kube-prometheus-stack 92.11.0
+# Target: single-node Kind cluster
+# NOT APPROVED FOR DEPLOYMENT
+
+# CRDs require a separately reviewed bootstrap.
+crds:
+  enabled: false
+
+# Custom alert rules will be added during G09.
+defaultRules:
+  create: false
+
+# Unavailable/unsuitable Kind control-plane scrape targets.
+kubelet:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: false
+
+nodeExporter:
+  enabled: false
+
+prometheusOperator:
+  namespaces:
+    releaseNamespace: true
+  kubeletService:
+    enabled: false
+  admissionWebhooks:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+prometheus:
+  enabled: true
+  serviceAccount:
+    createTokenSecret: false
+  prometheusSpec:
+    # Discover only G09-labeled ServiceMonitors
+    # in the dedicated observability namespace.
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector:
+      matchLabels:
+        release: g09-monitoring
+    ruleNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: forgeops-observability
+
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector:
+      matchLabels:
+        release: g09-monitoring
+    serviceMonitorNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: forgeops-observability
+
+    replicas: 1
+    retention: 12h
+    retentionSize: 700MB
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 400Mi
+      limits:
+        cpu: "1"
+        memory: 768Mi
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+grafana:
+  enabled: true
+  testFramework:
+    enabled: false
+  rbac:
+    namespaced: true
+
+  # G09 dashboards will be provisioned explicitly.
+  defaultDashboardsEnabled: false
+
+  # Restrict Grafana discovery to its own namespace.
+  sidecar:
+    dashboards:
+      searchNamespace: forgeops-observability
+    datasources:
+      searchNamespace: forgeops-observability
+
+
+  # Must be provisioned out of band before deployment.
+  admin:
+    existingSecret: g09-grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  ingress:
+    enabled: false
+
+  persistence:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+kube-state-metrics:
+  # Collection scope; not an RBAC boundary.
+  namespaces: "forgeops-observability,forgeops-gitops-rehearsal"
+
+  # Exclude Secret metadata and unused collectors.
+  collectors:
+    - deployments
+    - statefulsets
+    - pods
+    - persistentvolumeclaims
+    - services
+    - nodes
+    - namespaces
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 96Mi
+    limits:
+      cpu: 150m
+      memory: 192Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 150m
+      memory: 64Mi

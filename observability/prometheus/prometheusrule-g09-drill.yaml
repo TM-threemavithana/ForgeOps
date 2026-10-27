@@ -1,0 +1,28 @@
+# ForgeOps G09 — Controlled alert pipeline acceptance
+# Inactive by default. No production workload disruption.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: g09-alert-pipeline-drill
+  namespace: forgeops-observability
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    release: g09-monitoring
+    forgeops.dev/gate: G09
+spec:
+  groups:
+    - name: forgeops.g09.acceptance
+      interval: 15s
+      rules:
+        - alert: G09AlertPipelineDrill
+          expr: vector(0) == 1
+          for: 1m
+          labels:
+            severity: info
+            forgeops_gate: G09
+          annotations:
+            summary: G09 controlled alert pipeline test
+            description: >
+              This test alert is inactive by default.
+              Change the expression only during the
+              controlled G09 acceptance rehearsal.

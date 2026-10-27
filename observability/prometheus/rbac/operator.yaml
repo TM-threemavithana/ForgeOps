@@ -1,0 +1,92 @@
+# ForgeOps G09 — Prometheus Operator RBAC
+# Namespace-scoped candidate; NOT APPROVED FOR DEPLOYMENT.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: g09-prometheus-operator
+  namespace: forgeops-observability
+rules:
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - prometheuses
+      - alertmanagers
+      - prometheusagents
+      - thanosrulers
+      - servicemonitors
+      - podmonitors
+      - probes
+      - prometheusrules
+      - alertmanagerconfigs
+      - scrapeconfigs
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - prometheuses
+      - alertmanagers
+      - prometheusagents
+      - thanosrulers
+    verbs: ["patch"]
+
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - prometheuses/status
+      - alertmanagers/status
+      - prometheusagents/status
+      - thanosrulers/status
+      - servicemonitors/status
+      - podmonitors/status
+      - probes/status
+      - prometheusrules/status
+      - scrapeconfigs/status
+    verbs: ["create", "update", "patch", "delete"]
+
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - prometheuses/finalizers
+      - alertmanagers/finalizers
+      - prometheusagents/finalizers
+      - thanosrulers/finalizers
+    verbs: ["update"]
+
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["", "events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: g09-prometheus-operator
+  namespace: forgeops-observability
+subjects:
+  - kind: ServiceAccount
+    name: g09-monitoring-kube-promet-operator
+    namespace: forgeops-observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: g09-prometheus-operator

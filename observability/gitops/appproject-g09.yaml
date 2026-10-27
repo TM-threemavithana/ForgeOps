@@ -1,0 +1,45 @@
+# ForgeOps G09 — Monitoring AppProject
+# CANDIDATE — NOT APPROVED FOR DEPLOYMENT.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: forgeops-observability-project
+  namespace: argocd
+spec:
+  description: >
+    ForgeOps G09 namespaced monitoring workloads only.
+
+  sourceRepos:
+    - https://github.com/TM-threemavithana/ForgeOps.git
+    - ghcr.io/prometheus-community/charts
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: forgeops-observability
+
+  # CRDs, Namespace and cluster RBAC are bootstrap-owned.
+  clusterResourceWhitelist: []
+
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding
+    - group: monitoring.coreos.com
+      kind: Prometheus
+    - group: monitoring.coreos.com
+      kind: Alertmanager
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+    - group: monitoring.coreos.com
+      kind: PrometheusRule
