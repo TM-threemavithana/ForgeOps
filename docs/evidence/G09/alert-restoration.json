@@ -1,0 +1,25 @@
+{
+  "alert": "G09AlertPipelineDrill",
+  "restoredRevision": "37697bf64949088d288aa718c5bc6b3e69c934b3",
+  "prometheusAndAlertmanagerCleared": true,
+  "observations": [
+    {
+      "ruleState": "firing",
+      "ruleHealth": "ok",
+      "prometheusActiveAlerts": 1,
+      "alertmanagerAlerts": 1
+    },
+    {
+      "ruleState": "unknown",
+      "ruleHealth": "unknown",
+      "prometheusActiveAlerts": 1,
+      "alertmanagerAlerts": 1
+    },
+    {
+      "ruleState": "inactive",
+      "ruleHealth": "ok",
+      "prometheusActiveAlerts": 0,
+      "alertmanagerAlerts": 0
+    }
+  ]
+}
