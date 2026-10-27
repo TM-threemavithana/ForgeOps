@@ -451,7 +451,43 @@ jobs:
             exit 1
           fi
 
+          # 5. OCI Artifact Validation: strictly reject Sigstore attestation bundles, empty configs, and non-runnable artifacts
+          if [ -n "$RAW_MANIFEST" ]; then
+            python3 - "$RAW_MANIFEST" "$PRIMARY_DIGEST" << 'PYEOF'
+import sys, json
+
+raw_manifest = sys.argv[1]
+digest = sys.argv[2]
+
+try:
+    manifest = json.loads(raw_manifest)
+except Exception as e:
+    print(f"::error::Malformed OCI manifest JSON: {e}")
+    sys.exit(1)
+
+artifact_type = str(manifest.get("artifactType", "")).lower()
+media_type = str(manifest.get("mediaType", "")).lower()
+config_media_type = str(manifest.get("config", {}).get("mediaType", "")).lower()
+layers = manifest.get("layers", [])
+
+if "sigstore" in artifact_type or "sigstore" in media_type:
+    print(f"::error::Primary digest {digest} is an attestation bundle ({artifact_type}), NOT a runnable container image!")
+    sys.exit(1)
+
+if "empty" in config_media_type:
+    print(f"::error::Primary digest {digest} specifies an empty OCI configuration ({config_media_type}); cannot be scheduled by Kubernetes!")
+    sys.exit(1)
+
+if isinstance(layers, list) and len(layers) == 0:
+    print(f"::error::Primary digest {digest} has 0 layers; non-runnable artifact!")
+    sys.exit(1)
+
+print(f"[PASS] Primary digest {digest} validated as authentic runnable container image (layers: {len(layers)}).")
+PYEOF
+          fi
+
           echo "digest=$PRIMARY_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "primary_digest=$PRIMARY_DIGEST" >> "$GITHUB_OUTPUT"
 
           echo ""
           echo "============================================================"
@@ -473,3 +509,33 @@ jobs:
           subject-name: ${{ needs.validate-release.outputs.canonical_image }}
           subject-digest: ${{ steps.publish-digest.outputs.digest }}
           push-to-registry: true
+
+      - name: Publish Authoritative GitOps Deployment Summary
+        if: always() && steps.publish-digest.outcome == 'success'
+        env:
+          CANONICAL_IMAGE: ${{ needs.validate-release.outputs.canonical_image }}
+          PRIMARY_DIGEST: ${{ steps.publish-digest.outputs.digest }}
+          SHORT_SHA: ${{ needs.validate-release.outputs.short_sha }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.verified_sha }}
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## 🚀 ForgeOps Authoritative Release Reference
+
+          > **MANDATORY GITOPS DEPLOYMENT TARGET**  
+          > This is the cryptographically verified, runnable container image digest.  
+          > **DO NOT** use any downstream Sigstore attestation artifact digests for Kubernetes or Helm values!
+
+          | Key | Value |
+          | :--- | :--- |
+          | **Repository** | \`$CANONICAL_IMAGE\` |
+          | **Primary Digest** | \`$PRIMARY_DIGEST\` |
+          | **Full OCI Reference** | \`${CANONICAL_IMAGE}@${PRIMARY_DIGEST}\` |
+          | **Source Commit** | [\`$SHORT_SHA\`](https://github.com/${{ github.repository }}/commit/${SOURCE_SHA}) |
+
+          ### 📦 Helm / Argo CD Values Configuration
+          \`\`\`yaml
+          image:
+            repository: $CANONICAL_IMAGE
+            digest: "$PRIMARY_DIGEST"
+          \`\`\`
+          EOF
