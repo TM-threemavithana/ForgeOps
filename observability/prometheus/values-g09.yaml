@@ -40,6 +40,8 @@ nodeExporter:
   enabled: false
 
 prometheusOperator:
+  tls:
+    enabled: false
   namespaces:
     releaseNamespace: true
   kubeletService:
@@ -112,6 +114,25 @@ alertmanager:
         memory: 128Mi
 
 grafana:
+  env:
+    GF_PLUGINS_PREINSTALL_DISABLED: "true"
+
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: grafana
+    timeoutSeconds: 5
+    periodSeconds: 10
+    failureThreshold: 6
+
+  startupProbe:
+    httpGet:
+      path: /api/health
+      port: grafana
+    timeoutSeconds: 5
+    periodSeconds: 10
+    failureThreshold: 30
+
   enabled: true
   testFramework:
     enabled: false
@@ -143,11 +164,11 @@ grafana:
 
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 300m
+      cpu: 150m
       memory: 256Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
 
 kube-state-metrics:
   # Collection scope; not an RBAC boundary.
