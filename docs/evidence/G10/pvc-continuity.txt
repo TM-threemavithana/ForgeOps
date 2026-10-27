@@ -1,0 +1,8 @@
+=== PVC Continuity Table ===
+Timestamp: Tue Oct 27 16:54:25 UTC 2026
+
+NAMESPACE                   NAME                                                                                                     STATUS   CAPACITY   UID                                    VOLUME
+forgeops-dev                postgres-storage-forgetasks-db-0                                                                         Bound    1Gi        84853fb3-4d13-43a9-bc62-973c3be3c90c   pvc-84853fb3-4d13-43a9-bc62-973c3be3c90c
+forgeops-gitops-rehearsal   postgres-storage-forgetasks-rehearsal-db-0                                                               Bound    1Gi        b5ea8ec9-47e8-4979-afdb-621f2e3c63b8   pvc-b5ea8ec9-47e8-4979-afdb-621f2e3c63b8
+forgeops-observability      prometheus-g09-monitoring-kube-promet-prometheus-db-prometheus-g09-monitoring-kube-promet-prometheus-0   Bound    2Gi        cd64e090-2c69-49b3-a389-de5841ce06d6   pvc-cd64e090-2c69-49b3-a389-de5841ce06d6
+forgeops-observability      storage-loki-0                                                                                           Bound    2Gi        23468366-7394-4f2d-be1f-2a640d6f12c5   pvc-23468366-7394-4f2d-be1f-2a640d6f12c5
