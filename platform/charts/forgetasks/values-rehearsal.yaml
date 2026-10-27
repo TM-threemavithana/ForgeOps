@@ -10,9 +10,9 @@ fullnameOverride: "forgetasks-rehearsal"
 api:
   replicaCount: 1
   image:
-    repository: forgetasks-api
+    repository: ghcr.io/tm-threemavithana/forgetasks-api
     tag: "1.0.0"
-    digest: ""
+    digest: "sha256:09f46f0823b908b7c09584c6143f7b5b0c67566c397d1a0328b71b15d3a2dcd9"
     pullPolicy: IfNotPresent
   resources:
     requests:
