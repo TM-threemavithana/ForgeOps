@@ -44,6 +44,9 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgresql.auth.existingSecretName }}
                   key: {{ .Values.postgresql.auth.secretKeys.passwordKey }}
+            {{- with .Values.api.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
           securityContext:

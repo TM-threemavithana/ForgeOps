@@ -1,0 +1,36 @@
+# ForgeOps G11 — Grafana Tempo Datasource Provisioning
+# Integrates with the existing G09 Grafana instance via sidecar discovery.
+# Label grafana_datasource: "1" ensures zero-downtime, non-destructive registration.
+# Configures tracesToLogsV2 to link Tempo traces directly to ECS JSON logs in Loki.
+# NOT APPROVED FOR CLUSTER DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: g11-grafana-datasource-tempo
+  namespace: forgeops-observability
+  labels:
+    grafana_datasource: "1"
+    app.kubernetes.io/part-of: forgeops-observability
+    app.kubernetes.io/managed-by: GitOps
+data:
+  tempo-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.forgeops-observability.svc.cluster.local:3200
+      access: proxy
+      isDefault: false
+      jsonData:
+        httpMethod: GET
+        tracesToLogsV2:
+          datasourceUid: "loki"
+          spanStartTimeShift: "-1m"
+          spanEndTimeShift: "1m"
+          filterByTrace: false
+          filterBySpan: false
+          query: '{app="rehearsal-api"} |= "${__trace.id}"'
+          tags:
+            - key: "service.name"
+              value: "service_name"
