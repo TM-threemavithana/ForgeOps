@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sre-api-config
+  namespace: forgeops-sre-lab
+  labels:
+    app.kubernetes.io/name: sre-api
+    app.kubernetes.io/part-of: forgeops-sre-lab
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://sre-db.forgeops-sre-lab.svc.cluster.local:5432/forgetasks_sre"
+  SPRING_DATASOURCE_USERNAME: "sre_user"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus,metrics"
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy.forgeops-observability.svc.cluster.local:4318"
+  OTEL_SERVICE_NAME: "forgetasks-sre-lab"
+  OTEL_METRICS_EXPORTER: "none"
+  OTEL_LOGS_EXPORTER: "none"

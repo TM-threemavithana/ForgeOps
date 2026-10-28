@@ -58,17 +58,17 @@ Implementation progress is governed by strict gated reviews (Gates G00 through G
 | **G05** | Terraform Local Docker Lab Fixture | **PASSED** | [G05 Acceptance Report](docs/evidence/G05/readiness.md) |
 | **G06** | Local Kind Kubernetes Cluster & CNI | **PASSED_LIM** | [G06 Acceptance Report](docs/evidence/G06/readiness.md) |
 | **G07** | Helm Chart Packaging & Parameterization | **PASSED** | [G07 Acceptance Report](docs/evidence/G07/readiness.md) |
-| **G08** | Argo CD GitOps Bootstrap & Continuous Sync | *Planned* | Deferred to Gate G08 |
-| **G09** | Prometheus Metrics & Alertmanager Alerting Rules | *Planned* | Deferred to Gate G09 |
-| **G10** | Grafana Dashboards, Loki & Alloy Pod Log Harvesting | *Planned* | Deferred to Gate G10 |
-| **G11** | Security Hardening (Trivy, Gitleaks, RBAC, NetworkPolicy) | *Planned* | Deferred to Gate G11 |
-| **G12** | SRE Load & Chaos Testing (k6, Pod Failure Scenarios) | *Planned* | Deferred to Gate G12 |
+| **G08** | Argo CD GitOps Bootstrap & Continuous Sync | **PASSED** | [G08 Readiness Report](docs/evidence/G08/readiness.md) |
+| **G09** | Prometheus Metrics & Alertmanager Alerting Rules | **PASSED** | [G09 Readiness Report](docs/evidence/G09/README.md) |
+| **G10** | Grafana Dashboards, Loki & Alloy Pod Log Harvesting | **PASSED** | [G10 Acceptance Report](docs/evidence/G10/G10-acceptance-report.md) |
+| **G11** | Distributed Tracing (Grafana Tempo & OpenTelemetry)* | **PASSED** | [G11 Acceptance Report](docs/evidence/G11/G11-acceptance-report.md) |
+| **G12** | SRE Load & Chaos Testing (k6, Fault Scenarios, SLOs) | **IN PROGRESS** | [G12 SRE Framework](docs/sre-sli-slo-spec.md) |
 | **G13** | Database Disaster Recovery, Backup & Restoration DR Drill | *Planned* | Deferred to Gate G13 |
 | **G14** | Complete System Teardown & Reconstruction Runbook | *Planned* | Deferred to Gate G14 |
 | **G15** | Final Project Showcase, Architectural Portfolio & Video | *Planned* | Deferred to Gate G15 |
 
 > [!NOTE]
-> Gates G08–G15 are planned in the [Master Implementation Plan](docs/FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md) and will be implemented sequentially upon review approval.
+> \* **Gate G11 Scope Alignment:** Distributed Tracing with Grafana Tempo and OpenTelemetry was implemented under Gate G11 to complete the observability triad (Metrics, Logs, Traces) ahead of SRE reliability testing. Core security hardening controls (Trivy zero-vulnerability gate, Gitleaks, SLSA provenance, non-root execution, and least-privilege RBAC) are proven across G01–G11. See [Roadmap Reconciliation & Security Baseline](docs/roadmap-and-security-baseline.md) for full traceability and documented network policy boundaries.
 
 ---
 

@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sre-db
+  namespace: forgeops-sre-lab
+  labels:
+    app.kubernetes.io/name: sre-db
+    app.kubernetes.io/part-of: forgeops-sre-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sre-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sre-db
+        app.kubernetes.io/part-of: forgeops-sre-lab
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: forgetasks_sre
+            - name: POSTGRES_USER
+              value: sre_user
+            - name: POSTGRES_PASSWORD
+              value: sre_password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - sre_user
+                - -d
+                - forgetasks_sre
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - sre_user
+                - -d
+                - forgetasks_sre
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: ephemeral-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: ephemeral-storage
+          emptyDir: {}
