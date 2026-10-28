@@ -21,6 +21,20 @@ management:
           include: livenessState
         readiness:
           include: readinessState,db
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    export:
+      otlp:
+        enabled: false
+  otlp:
+    metrics:
+      export:
+        enabled: false
+    logging:
+      export:
+        enabled: false
 
 logging:
   level:

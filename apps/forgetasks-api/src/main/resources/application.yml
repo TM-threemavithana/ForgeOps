@@ -63,11 +63,37 @@ management:
         http.server.requests: 50ms,100ms,200ms,500ms,1s
     tags:
       application: ${spring.application.name}
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${SAMPLING_PROBABILITY:1.0}
+    propagation:
+      produce:
+        - W3C
+      consume:
+        - W3C
+        - B3
+        - B3_MULTI
+  opentelemetry:
+    resource-attributes:
+      service.name: ${spring.application.name}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:}
+          transport: http
+  otlp:
+    metrics:
+      export:
+        enabled: false
+    logging:
+      export:
+        enabled: false
 
 logging:
   pattern:
-    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [${spring.application.name:},%X{correlationId:-}] [%t] %-40.40logger{39} : %m%n"
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{correlationId:-}]"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{correlationId:-}] [%t] %-40.40logger{39} : %m%n"
   level:
     root: INFO
     com.forgeops.forgetasks: INFO
