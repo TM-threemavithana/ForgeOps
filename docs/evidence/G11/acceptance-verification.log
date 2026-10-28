@@ -1,0 +1,57 @@
+[0;34m[INFO][0m Starting ForgeOps G11 Acceptance Verification
+[0;34m[INFO][0m Step 1: Verifying all 4 protected PVC UIDs against documented baselines
+[0;32m[PASS][0m All 4 protected PVC UIDs matched documented baselines identically.
+[0;34m[INFO][0m Step 2: Verifying Pod health across namespaces
+pod/loki-0 condition met
+pod/tempo-0 condition met
+pod/alloy-84547b4558-qdcgl condition met
+pod/forgetasks-rehearsal-api-68fb7f76c7-4fk58 condition met
+pod/forgetasks-rehearsal-db-0 condition met
+[0;32m[PASS][0m Loki, Tempo, Alloy, Rehearsal API, and Rehearsal DB pods are all Ready.
+[0;34m[INFO][0m Step 3: Establishing localhost port-forwards for reliable host-side testing
+[0;32m[PASS][0m Port-forward connections established on 127.0.0.1.
+[0;34m[INFO][0m Step 4: Checking Tempo /ready endpoint and PVC capacity via host-side curl
+[0;32m[PASS][0m Tempo /ready responded 200 OK ('ready').
+[0;32m[PASS][0m Tempo PVC capacity verified at 2Gi (storage-tempo-0).
+[0;34m[INFO][0m Step 5: Checking Alloy /-/healthy endpoint and OTLP pipeline
+[0;32m[PASS][0m Alloy /-/healthy responded 200 OK ('All Alloy components are healthy.').
+[0;32m[PASS][0m Alloy configuration contains active OTLP receiver and exporter components.
+[0;34m[INFO][0m Step 6: Verifying RBAC boundaries for Alloy and Tempo ServiceAccounts
+[0;32m[PASS][0m Positive RBAC: Alloy SA can get pods in forgeops-gitops-rehearsal.
+[0;32m[PASS][0m Negative RBAC: Alloy SA denied pod access in forgeops-dev.
+[0;32m[PASS][0m Negative RBAC: Alloy SA denied secret access.
+[0;32m[PASS][0m Negative RBAC: Tempo SA has zero cluster-scoped privileges.
+[0;34m[INFO][0m Step 7: Recording baseline accounts count from Rehearsal PostgreSQL
+[0;34m[INFO][0m Baseline accounts count: 2
+[0;34m[INFO][0m Step 8: Executing deterministic HTTP probe with X-Request-ID and W3C traceparent
+[0;34m[INFO][0m Probe Correlation ID: req-g11-probe-1793160661-26427
+[0;34m[INFO][0m Probe Trace ID:        e060b7afe2a2d682ac61bd4b00256ddb
+[0;34m[INFO][0m Probe W3C Traceparent: 00-e060b7afe2a2d682ac61bd4b00256ddb-0e61fe07afaa58d0-01
+[0;32m[PASS][0m Probe request returned HTTP 400 Bad Request.
+[0;32m[PASS][0m HTTP response header X-Request-ID matched probe correlation ID.
+[0;32m[PASS][0m ProblemDetail body contained matching correlationId.
+[0;34m[INFO][0m Step 9: Verifying Rehearsal database accounts count remained unchanged
+[0;32m[PASS][0m Database state completely unchanged (2 accounts). Zero records created.
+[0;34m[INFO][0m Step 10: Polling Loki for ingested ECS JSON log event with traceId and correlationId
+[0;32m[PASS][0m Log event with correlationId req-g11-probe-1793160661-26427 and traceId e060b7afe2a2d682ac61bd4b00256ddb verified in Loki.
+[0;34m[INFO][0m Step 11: Polling Tempo API for exported trace e060b7afe2a2d682ac61bd4b00256ddb
+[0;32m[PASS][0m Trace e060b7afe2a2d682ac61bd4b00256ddb successfully retrieved from Tempo via internal HTTP API.
+[0;34m[INFO][0m Step 12: Verifying sensitive data exclusion in Tempo span attributes and events
+[0;32m[PASS][0m Tempo spans verified: zero passwords, tokens, or sensitive payload values leaked.
+[0;34m[INFO][0m Step 13: Verifying Loki stream index labels
+[0;32m[PASS][0m Loki index labels strictly low-cardinality: traceId and spanId are NOT promoted to index labels.
+[0;34m[INFO][0m Step 14: Verifying Grafana datasource provisioning for Tempo, Loki, and Prometheus
+[0;32m[PASS][0m Grafana Tempo datasource provisioned with customQuery and active Trace-to-Logs navigation (15613{__trace.traceId}).
+[0;34m[INFO][0m Step 14b: Testing provisioned trace-to-logs LogQL query against Loki
+[0;32m[PASS][0m Trace-to-logs navigation query executed against Loki returned matching ECS log event.
+[0;34m[INFO][0m Step 15: Verifying Prometheus scrape targets remain UP via host-side curl
+[0;32m[PASS][0m All existing Prometheus scrape targets remain UP and healthy.
+[0;34m[INFO][0m Step 16: Validating negative log isolation
+[0;32m[PASS][0m Negative Log Isolation: Exactly 0 logs from forgeops-dev in Loki.
+[0;34m[INFO][0m Step 17: Verifying Tempo declarative retention configuration
+[0;32m[PASS][0m Tempo declarative retention verified at 24h (block_retention: 24h).
+[0;34m[INFO][0m Note: Physical elapsed-time expiration of traces is not claimed until 24h elapsed.
+[0;34m[INFO][0m =================================================================
+[0;32m[PASS][0m ALL 18 G11 ACCEPTANCE CRITERIA VERIFIED SUCCESSFULLY
+[0;34m[INFO][0m =================================================================
+[0;34m[INFO][0m Cleaning up background port-forward processes and temporary artifacts...
