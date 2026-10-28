@@ -1,0 +1,7 @@
+# ForgeOps Gate G14: Mozilla SOPS Configuration
+# Scope: Restricted strictly to security/sops/ manifests
+# Scheme: Asymmetric public-key encryption via age (Primary + Recovery recipients)
+
+creation_rules:
+  - path_regex: security/sops/.*\.enc\.ya?ml$
+    age: "age144mfts76hsnncvzpzutqhl9pe5vlf78dnyjev39lqtgzknyucppsg5g54v,age1g3thfc5hcd2cnsp86z8rqd7ps5a5vl4h9wq38fhcr47qr7efw5kqhz970y"
