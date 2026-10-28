@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dr-api
+  namespace: forgeops-dr-lab
+  labels:
+    app.kubernetes.io/name: dr-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dr-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dr-api
+  template:
+    metadata:
+      labels:
+        app: dr-api
+        app.kubernetes.io/name: dr-api
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: forgeops
+        forgeops.dev/environment: dr-lab
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: forgetasks-api
+          image: ghcr.io/tm-threemavithana/forgetasks-api:1.0.0-g11
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: dr-api-config
+          env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dr-db-secret
+                  key: postgres-password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}

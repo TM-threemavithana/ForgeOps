@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: forgeops-dr-lab
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - db-source-deployment.yaml
+  - db-source-service.yaml
+  - db-target-deployment.yaml
+  - db-target-service.yaml
+

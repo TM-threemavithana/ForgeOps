@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dr-api
+  namespace: forgeops-dr-lab
+  labels:
+    app.kubernetes.io/name: dr-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dr-lab
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: dr-api

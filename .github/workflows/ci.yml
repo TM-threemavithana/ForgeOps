@@ -257,11 +257,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Job 5: SRE Reliability & Hardening Validation (Gate G12)
-  # Validates k6 test suites, resilience experiment scripts, safety guards, manifests
+  # Job 5: SRE Reliability & Disaster Recovery Hardening Validation (Gate G12 & G13)
+  # Validates k6 test suites, resilience experiment scripts, DR workflows, safety guards, manifests
   # ---------------------------------------------------------------------------
   sre-hardening-validate:
-    name: SRE Reliability & Hardening Validation
+    name: SRE & DR Hardening Validation
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -275,8 +275,19 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Python test dependencies
+        run: pip install --quiet bcrypt
+
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
+
+      - name: Ensure PostgreSQL client tools
+        run: |
+          if ! command -v pg_dump >/dev/null 2>&1 || ! command -v pg_restore >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          fi
+          pg_dump --version
+          pg_restore --version
 
       - name: Verify tools
         run: |
@@ -284,8 +295,11 @@ jobs:
           kubectl version --client=true
           python3 --version
 
-      - name: Run G12 Hardening Validation Suite
+      - name: Run G12 SRE Hardening Validation Suite
         run: python3 scripts/test_g12_hardening.py
+
+      - name: Run G13 Disaster Recovery Hardening Validation Suite
+        run: python3 scripts/test_g13_dr_hardening.py
 
   # ---------------------------------------------------------------------------
   # Job 6: CI Gate Summary (required status check for branch protection rules)

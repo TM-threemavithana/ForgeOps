@@ -37,6 +37,10 @@ help:
 	@echo "  make tf-plan        - [G05] Run speculative in-memory Terraform plan (no files created)"
 	@echo "  make tf-plan-save   - [G05] Save protected executable plan outside repository"
 	@echo "  make ansible-check  - [G04] Run Ansible syntax check and dry-run on lab inventory"
+	@echo "  make backup-db      - [G13] Run safe PostgreSQL automated backup (pg_dump -Fc)"
+	@echo "  make verify-backup  - [G13] Verify backup archive SHA-256 and TOC catalog"
+	@echo "  make restore-db     - [G13] Restore validated backup into disposable scratch DB"
+	@echo "  make dr-test        - [G13] Run end-to-end disaster recovery rehearsal drill"
 
 
 # --- ForgeTasks API Build & Test Targets ---
@@ -258,3 +262,51 @@ k8s-dev-teardown:
 	@kubectl --kubeconfig=$(K8S_KUBECONFIG) delete -f platform/k8s/dev/postgres/ --ignore-not-found
 	@kubectl --kubeconfig=$(K8S_KUBECONFIG) delete secret forgetasks-db-secret -n forgeops-dev --ignore-not-found
 	@kubectl --kubeconfig=$(K8S_KUBECONFIG) delete pvc -l app.kubernetes.io/name=postgres -n forgeops-dev --ignore-not-found
+
+# --- G13 Disaster Recovery & Database Backup Targets ---
+.PHONY: backup-db verify-backup restore-db dr-test setup-dr-lab teardown-dr-lab
+
+SOURCE_NS ?= forgeops-dr-lab
+TARGET_NS ?= forgeops-dr-lab
+DB_NAME ?= forgetasks
+BACKUP_DIR ?= $(HOME)/.forgeops/backups
+BACKUP_FILE ?=
+
+backup-db:
+	@./scripts/cluster/dr/backup-db.sh --source-namespace $(SOURCE_NS) --db-name $(DB_NAME) --output-dir $(BACKUP_DIR)
+
+verify-backup:
+	@if [ -z "$(BACKUP_FILE)" ]; then \
+		LATEST_MANIFEST=$$(ls -t $(BACKUP_DIR)/*.manifest.json 2>/dev/null | head -n 1 || true); \
+		if [ -z "$$LATEST_MANIFEST" ]; then \
+			echo "ERROR: BACKUP_FILE not specified and no existing manifest found in $(BACKUP_DIR)"; \
+			echo "Usage: make verify-backup BACKUP_FILE=/path/to/backup.dump"; \
+			exit 1; \
+		fi; \
+		./scripts/cluster/dr/verify-backup.sh "$$LATEST_MANIFEST"; \
+	else \
+		./scripts/cluster/dr/verify-backup.sh "$(BACKUP_FILE)"; \
+	fi
+
+restore-db:
+	@if [ -z "$(BACKUP_FILE)" ]; then \
+		LATEST_DUMP=$$(ls -t $(BACKUP_DIR)/*.dump 2>/dev/null | head -n 1 || true); \
+		if [ -z "$$LATEST_DUMP" ]; then \
+			echo "ERROR: BACKUP_FILE not specified and no existing backup found in $(BACKUP_DIR)"; \
+			echo "Usage: make restore-db BACKUP_FILE=/path/to/backup.dump [TARGET_NS=forgeops-dr-lab]"; \
+			exit 1; \
+		fi; \
+		./scripts/cluster/dr/restore-db.sh "$$LATEST_DUMP" --target-namespace $(TARGET_NS) --target-db $(DB_NAME); \
+	else \
+		./scripts/cluster/dr/restore-db.sh "$(BACKUP_FILE)" --target-namespace $(TARGET_NS) --target-db $(DB_NAME); \
+	fi
+
+dr-test:
+	@./scripts/cluster/dr/rehearse-dr.sh --target-namespace $(TARGET_NS)
+
+setup-dr-lab:
+	@./scripts/cluster/dr/setup-dr-lab.sh $(TARGET_NS)
+
+teardown-dr-lab:
+	@./scripts/cluster/dr/teardown-dr-lab.sh $(TARGET_NS)
+

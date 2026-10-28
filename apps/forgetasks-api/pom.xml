@@ -205,6 +205,7 @@
                             </rules>
                             <excludes>
                                 <exclude>**/ForgeTasksApplication.class</exclude>
+                                <exclude>**/FlywayMigrationRunner.class</exclude>
                                 <exclude>**/dto/**</exclude>
                                 <exclude>**/config/**</exclude>
                             </excludes>

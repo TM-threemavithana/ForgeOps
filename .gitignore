@@ -46,6 +46,7 @@ hosts.local.yml
 
 # --- Database & Backups ---
 *.dump
+*.manifest.json
 *.sql.gz
 *.bak
 backups/

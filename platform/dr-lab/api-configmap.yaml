@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dr-api-config
+  namespace: forgeops-dr-lab
+  labels:
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dr-lab
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://dr-target-db:5432/forgetasks"
+  SPRING_DATASOURCE_USERNAME: "forgeuser"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
