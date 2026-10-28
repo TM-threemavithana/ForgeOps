@@ -1,0 +1,168 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: forgeops-security-policies-test
+policies:
+  - ../disallow-privileged-containers.yaml
+  - ../disallow-privilege-escalation.yaml
+  - ../require-run-as-non-root.yaml
+  - ../require-drop-all-capabilities.yaml
+  - ../require-seccomp-default.yaml
+  - ../disallow-latest-tag.yaml
+  - ../require-resource-requests-limits.yaml
+  - ../disallow-host-namespaces.yaml
+  - ../restrict-image-registries.yaml
+  - ../require-security-labels.yaml
+resources:
+  - pass-workload.yaml
+  - fail-privileged.yaml
+  - fail-privilege-escalation.yaml
+  - fail-run-as-root.yaml
+  - fail-capabilities.yaml
+  - fail-seccomp.yaml
+  - fail-latest-tag.yaml
+  - fail-resource-limits.yaml
+  - fail-host-namespaces.yaml
+  - fail-untrusted-registry.yaml
+  - fail-missing-labels.yaml
+results:
+  # 1. disallow-privileged-containers
+  - policy: disallow-privileged-containers
+    rule: check-privileged
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: disallow-privileged-containers
+    rule: check-privileged
+    resources:
+      - fail-privileged
+    kind: Pod
+    result: fail
+
+  # 2. disallow-privilege-escalation
+  - policy: disallow-privilege-escalation
+    rule: check-privilege-escalation
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: disallow-privilege-escalation
+    rule: check-privilege-escalation
+    resources:
+      - fail-privilege-escalation
+    kind: Pod
+    result: fail
+
+  # 3. require-run-as-non-root
+  - policy: require-run-as-non-root
+    rule: check-run-as-non-root
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: require-run-as-non-root
+    rule: check-run-as-non-root
+    resources:
+      - fail-run-as-root
+    kind: Pod
+    result: fail
+
+  # 4. require-drop-all-capabilities
+  - policy: require-drop-all-capabilities
+    rule: check-drop-capabilities
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: require-drop-all-capabilities
+    rule: check-drop-capabilities
+    resources:
+      - fail-capabilities
+    kind: Pod
+    result: fail
+
+  # 5. require-seccomp-default
+  - policy: require-seccomp-default
+    rule: check-seccomp-profile
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: require-seccomp-default
+    rule: check-seccomp-profile
+    resources:
+      - fail-seccomp
+    kind: Pod
+    result: fail
+
+  # 6. disallow-latest-tag
+  - policy: disallow-latest-tag
+    rule: validate-image-tag
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: disallow-latest-tag
+    rule: validate-image-tag
+    resources:
+      - fail-latest-tag
+    kind: Pod
+    result: fail
+
+  # 7. require-resource-requests-limits
+  - policy: require-resource-requests-limits
+    rule: check-resources
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: require-resource-requests-limits
+    rule: check-resources
+    resources:
+      - fail-resource-limits
+    kind: Pod
+    result: fail
+
+  # 8. disallow-host-namespaces
+  - policy: disallow-host-namespaces
+    rule: check-host-namespaces
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: disallow-host-namespaces
+    rule: check-host-namespaces
+    resources:
+      - fail-host-namespaces
+    kind: Pod
+    result: fail
+
+  # 9. restrict-image-registries
+  - policy: restrict-image-registries
+    rule: check-image-registry
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: restrict-image-registries
+    rule: check-image-registry
+    resources:
+      - fail-untrusted-registry
+    kind: Pod
+    result: fail
+
+  # 10. require-security-labels
+  - policy: require-security-labels
+    rule: check-security-labels
+    resources:
+      - pass-compliant-workload
+    kind: Pod
+    result: pass
+  - policy: require-security-labels
+    rule: check-security-labels
+    resources:
+      - fail-missing-labels
+    kind: Pod
+    result: fail
+

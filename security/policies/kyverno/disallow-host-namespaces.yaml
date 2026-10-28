@@ -1,0 +1,27 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-host-namespaces
+  annotations:
+    policies.kyverno.io/title: Disallow Host Namespaces
+    policies.kyverno.io/category: Pod Security Standards (Baseline)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: Sharing host namespaces allows container processes to communicate directly with the host.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-host-namespaces
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Sharing host network, PID, or IPC namespaces is disallowed."
+        pattern:
+          spec:
+            =(hostNetwork): "false"
+            =(hostPID): "false"
+            =(hostIPC): "false"
+

@@ -302,7 +302,85 @@ jobs:
         run: python3 scripts/test_g13_dr_hardening.py
 
   # ---------------------------------------------------------------------------
-  # Job 6: CI Gate Summary (required status check for branch protection rules)
+  # Job 6: Kyverno Policy-as-Code & Security Validation (Gate G14)
+  # Pre-deployment static Kubernetes manifest validation & security assertions
+  # ---------------------------------------------------------------------------
+  security-policy-validate:
+    name: Kyverno Policy-as-Code & Security Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test dependencies
+        run: pip install --quiet pyyaml
+
+      - name: Install Pinned Kyverno CLI (v1.19.2)
+        run: |
+          KYVERNO_VERSION="v1.19.2"
+          curl -sSL "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/kyverno-cli_${KYVERNO_VERSION}_linux_x86_64.tar.gz" -o kyverno.tar.gz
+          tar -xzf kyverno.tar.gz kyverno
+          sudo mv kyverno /usr/local/bin/
+          rm -f kyverno.tar.gz
+          kyverno version
+
+      - name: Run Kyverno Test Suite (20 assertions across 10 security controls)
+        run: kyverno test security/policies/kyverno/tests
+
+      - name: Run Gate G14 Automated Security & Policy Suite
+        run: python3 scripts/test_g14_security.py
+
+      - name: Demonstrate Valid Compliant Manifest Passes All Policies
+        run: |
+          kyverno apply security/policies/kyverno/disallow-privileged-containers.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/disallow-privilege-escalation.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/require-run-as-non-root.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/require-drop-all-capabilities.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/require-seccomp-default.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/disallow-latest-tag.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/require-resource-requests-limits.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/disallow-host-namespaces.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/restrict-image-registries.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          kyverno apply security/policies/kyverno/require-security-labels.yaml --resource security/policies/kyverno/tests/pass-workload.yaml
+          echo "[PASS] Compliant workload manifest passed all 10 security policies."
+
+      - name: Demonstrate Privileged Test Manifest Rejection
+        run: |
+          if kyverno apply security/policies/kyverno/disallow-privileged-containers.yaml --resource security/policies/kyverno/tests/fail-privileged.yaml; then
+            echo "[FAIL] Privileged container was unexpectedly accepted!"
+            exit 1
+          else
+            echo "[PASS] Privileged container correctly rejected by policy."
+          fi
+
+      - name: Demonstrate Mutable Latest Image Tag Rejection
+        run: |
+          if kyverno apply security/policies/kyverno/disallow-latest-tag.yaml --resource security/policies/kyverno/tests/fail-latest-tag.yaml; then
+            echo "[FAIL] Latest image tag was unexpectedly accepted!"
+            exit 1
+          else
+            echo "[PASS] Latest image tag correctly rejected by policy."
+          fi
+
+      - name: Demonstrate Unsafe Security Context (Privilege Escalation) Rejection
+        run: |
+          if kyverno apply security/policies/kyverno/disallow-privilege-escalation.yaml --resource security/policies/kyverno/tests/fail-privilege-escalation.yaml; then
+            echo "[FAIL] Privilege escalation was unexpectedly accepted!"
+            exit 1
+          else
+            echo "[PASS] Privilege escalation correctly rejected by policy."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job 7: CI Gate Summary (required status check for branch protection rules)
   # ---------------------------------------------------------------------------
   ci-gate:
     name: CI Gate
@@ -313,24 +391,27 @@ jobs:
       - trivy-scan
       - gitleaks-scan
       - sre-hardening-validate
+      - security-policy-validate
     if: always()
 
     steps:
       - name: Evaluate gate status
         run: |
-          echo '=== G03/G12 CI Gate Summary ==='
-          echo "build-and-test:         ${{ needs.build-and-test.result }}"
-          echo "docker-build-validate:  ${{ needs.docker-build-validate.result }}"
-          echo "trivy-scan:             ${{ needs.trivy-scan.result }}"
-          echo "gitleaks-scan:          ${{ needs.gitleaks-scan.result }}"
-          echo "sre-hardening-validate: ${{ needs.sre-hardening-validate.result }}"
-          echo '==============================='
+          echo '=== G03/G12/G14 CI Gate Summary ==='
+          echo "build-and-test:           ${{ needs.build-and-test.result }}"
+          echo "docker-build-validate:    ${{ needs.docker-build-validate.result }}"
+          echo "trivy-scan:               ${{ needs.trivy-scan.result }}"
+          echo "gitleaks-scan:            ${{ needs.gitleaks-scan.result }}"
+          echo "sre-hardening-validate:   ${{ needs.sre-hardening-validate.result }}"
+          echo "security-policy-validate: ${{ needs.security-policy-validate.result }}"
+          echo '===================================='
           FAILED=0
           [ "${{ needs.build-and-test.result }}" != "success" ] && FAILED=1
           [ "${{ needs.docker-build-validate.result }}" != "success" ] && FAILED=1
           [ "${{ needs.trivy-scan.result }}" != "success" ] && FAILED=1
           [ "${{ needs.gitleaks-scan.result }}" != "success" ] && FAILED=1
           [ "${{ needs.sre-hardening-validate.result }}" != "success" ] && FAILED=1
+          [ "${{ needs.security-policy-validate.result }}" != "success" ] && FAILED=1
           if [ "$FAILED" = "1" ]; then
             echo "[FAIL] One or more required CI jobs failed. Merge is blocked."
             exit 1
