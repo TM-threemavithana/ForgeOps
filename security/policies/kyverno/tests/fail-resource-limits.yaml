@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-resource-limits
+  namespace: default
+  labels:
+    app.kubernetes.io/name: forgetasks-api
+    forgeops.dev/security-tier: tier-1
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: app
+      image: ghcr.io/tm-threemavithana/forgetasks:1.0.0
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+

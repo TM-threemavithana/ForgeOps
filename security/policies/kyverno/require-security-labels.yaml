@@ -1,0 +1,27 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-security-labels
+  annotations:
+    policies.kyverno.io/title: Require Security Tier Labels
+    policies.kyverno.io/category: Governance & Metadata
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/description: Application workloads must include standard Kubernetes metadata and security tier labels.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-security-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Workloads must declare 'app.kubernetes.io/name' and 'forgeops.dev/security-tier' labels."
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/name: "?*"
+              forgeops.dev/security-tier: "tier-1 | tier-2 | tier-3"
+

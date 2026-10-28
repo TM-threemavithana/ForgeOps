@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-seccomp
+  namespace: default
+  labels:
+    app.kubernetes.io/name: forgetasks-api
+    forgeops.dev/security-tier: tier-1
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: Unconfined
+  containers:
+    - name: app
+      image: ghcr.io/tm-threemavithana/forgetasks:1.0.0
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+
