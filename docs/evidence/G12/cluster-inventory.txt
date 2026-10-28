@@ -1,0 +1,57 @@
+=== G12 Cluster State & Post-Teardown Inventory ===
+NAME                     SYNC STATUS   HEALTH STATUS
+forgetasks-rehearsal     Synced        Healthy
+g09-monitoring           Synced        Healthy
+g10-alloy                Synced        Healthy
+g10-grafana-datasource   Synced        Healthy
+g10-loki                 Synced        Healthy
+g11-tempo                Synced        Progressing
+NAMESPACE                   NAME                                                     READY   STATUS             RESTARTS         AGE
+argocd                      argocd-application-controller-0                          1/1     Running            3 (3h41m ago)    39h
+argocd                      argocd-applicationset-controller-845fd4c76b-f8pb9        1/1     Running            3 (3h41m ago)    39h
+argocd                      argocd-redis-54fdb57fc6-bp7mw                            1/1     Running            3 (3h41m ago)    39h
+argocd                      argocd-repo-server-df7945d68-j8lc5                       1/1     Running            6 (3h41m ago)    39h
+argocd                      argocd-server-57cd8dc45d-hn6ps                           1/1     Running            9 (3h41m ago)    39h
+forgeops-dev                forgetasks-api-6c7f85944-cnngk                           1/1     Running            14 (3h15m ago)   2d10h
+forgeops-dev                forgetasks-db-0                                          1/1     Running            4 (3h41m ago)    2d10h
+forgeops-gitops-rehearsal   forgetasks-rehearsal-api-68fb7f76c7-4fk58                1/1     Running            0                117m
+forgeops-gitops-rehearsal   forgetasks-rehearsal-db-0                                1/1     Running            3 (3h41m ago)    38h
+forgeops-observability      alertmanager-g09-monitoring-kube-promet-alertmanager-0   2/2     Running            2 (3h41m ago)    23h
+forgeops-observability      alloy-84547b4558-qdcgl                                   2/2     Running            0                166m
+forgeops-observability      g09-monitoring-grafana-5575bd9d6b-hkzxd                  3/3     Running            3 (3h41m ago)    23h
+forgeops-observability      g09-monitoring-kube-promet-operator-75c84dd8bf-grvvc     1/1     Running            2 (3h41m ago)    23h
+forgeops-observability      loki-0                                                   1/1     Running            1 (3h41m ago)    13h
+forgeops-observability      prometheus-g09-monitoring-kube-promet-prometheus-0       2/2     Running            3 (3h41m ago)    23h
+forgeops-observability      tempo-0                                                  0/1     CrashLoopBackOff   8 (2m3s ago)     174m
+kube-system                 coredns-66bc5c9577-2rbqs                                 1/1     Running            4 (3h41m ago)    2d11h
+kube-system                 coredns-66bc5c9577-gcjsj                                 1/1     Running            4 (3h41m ago)    2d11h
+kube-system                 etcd-forgeops-control-plane                              1/1     Running            4 (3h41m ago)    2d11h
+kube-system                 kindnet-gn6g8                                            1/1     Running            4 (3h41m ago)    2d11h
+kube-system                 kube-apiserver-forgeops-control-plane                    1/1     Running            5 (3h41m ago)    2d11h
+kube-system                 kube-controller-manager-forgeops-control-plane           1/1     Running            46 (139m ago)    2d11h
+kube-system                 kube-proxy-5x6tc                                         1/1     Running            4 (3h41m ago)    2d11h
+kube-system                 kube-scheduler-forgeops-control-plane                    1/1     Running            45 (139m ago)    2d11h
+local-path-storage          local-path-provisioner-57f858859-fdzvc                   1/1     Running            6 (3h40m ago)    2d11h
+NAME                                      TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                                                                                   AGE
+alertmanager-operated                     ClusterIP   None            <none>        9093/TCP,9094/TCP,9094/UDP                                                                                23h
+alloy                                     ClusterIP   10.96.91.76     <none>        12345/TCP,4317/TCP,4318/TCP                                                                               13h
+g09-monitoring-grafana                    ClusterIP   10.96.14.231    <none>        80/TCP                                                                                                    25h
+g09-monitoring-kube-promet-alertmanager   ClusterIP   10.96.161.86    <none>        9093/TCP,8080/TCP                                                                                         25h
+g09-monitoring-kube-promet-operator       ClusterIP   10.96.218.57    <none>        8080/TCP                                                                                                  25h
+g09-monitoring-kube-promet-prometheus     ClusterIP   10.96.145.225   <none>        9090/TCP,8080/TCP                                                                                         25h
+loki                                      ClusterIP   10.96.100.61    <none>        3100/TCP,9095/TCP                                                                                         13h
+loki-headless                             ClusterIP   None            <none>        3100/TCP                                                                                                  13h
+loki-memberlist                           ClusterIP   None            <none>        7946/TCP                                                                                                  13h
+prometheus-operated                       ClusterIP   None            <none>        9090/TCP                                                                                                  23h
+tempo                                     ClusterIP   10.96.154.62    <none>        6831/UDP,6832/UDP,3200/TCP,14268/TCP,14250/TCP,9411/TCP,55680/TCP,55681/TCP,4317/TCP,4318/TCP,55678/TCP   174m
+NAME                        STATUS   AGE
+argocd                      Active   39h
+default                     Active   2d11h
+forgeops-dev                Active   2d10h
+forgeops-gitops-rehearsal   Active   38h
+forgeops-observability      Active   25h
+forgeops-staging            Active   2d10h
+kube-node-lease             Active   2d11h
+kube-public                 Active   2d11h
+kube-system                 Active   2d11h
+local-path-storage          Active   2d11h

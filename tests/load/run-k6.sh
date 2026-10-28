@@ -41,20 +41,26 @@ if ! command -v k6 >/dev/null 2>&1; then
     fail "k6 binary not found in PATH. Install k6 or make it executable in /usr/local/bin/k6."
 fi
 
-# Guard 3: Verify port-forward target and endpoint validity
+# Guard 3: Verify or establish port-forward target and endpoint validity
 info "Verifying target endpoint safety and workload ownership..."
+SPAWNED_PF=0
 if ! curl -sf "${TARGET_URL}/actuator/health" >/dev/null 2>&1; then
-    fail "Endpoint ${TARGET_URL}/actuator/health is not reachable! Ensure port-forward is running on port ${MANDATED_PORT}: 'kubectl port-forward -n ${DISPOSABLE_NAMESPACE} svc/sre-api ${MANDATED_PORT}:8080'"
+    info "Port-forward on port ${MANDATED_PORT} not detected. Establishing safe local tunnel to ${DISPOSABLE_NAMESPACE}/svc/sre-api..."
+    kubectl port-forward -n "${DISPOSABLE_NAMESPACE}" svc/sre-api "${MANDATED_PORT}:8080" >/dev/null 2>&1 &
+    PF_PID=$!
+    SPAWNED_PF=1
+    trap 'if [[ "$SPAWNED_PF" -eq 1 ]]; then kill -9 $PF_PID >/dev/null 2>&1 || true; fi' EXIT INT TERM ERR
+    sleep 3
 fi
 
-# Guard 4: Verify the port-forward is targeting forgeops-sre-lab and not protected rehearsal/dev workloads
-PF_PROC="$(ps aux | grep -E "port-forward.*${DISPOSABLE_NAMESPACE}.*${MANDATED_PORT}" | grep -v grep || true)"
-if [[ -z "$PF_PROC" ]]; then
-    # Also verify via kubectl that sre-api service in forgeops-sre-lab is ready
-    ACTIVE_PODS="$(kubectl get pods -n "$DISPOSABLE_NAMESPACE" -l app.kubernetes.io/name=sre-api --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l || echo 0)"
-    if [[ "$ACTIVE_PODS" -lt 1 ]]; then
-        fail "SAFETY ABORT: No running pods found in disposable namespace '$DISPOSABLE_NAMESPACE'! Refusing to run load test."
-    fi
+if ! curl -sf "${TARGET_URL}/actuator/health" >/dev/null 2>&1; then
+    fail "Endpoint ${TARGET_URL}/actuator/health is not reachable after port-forward initialization!"
+fi
+
+# Guard 4: Verify the active pods in forgeops-sre-lab
+ACTIVE_PODS="$(kubectl get pods -n "$DISPOSABLE_NAMESPACE" -l app.kubernetes.io/name=sre-api --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l || echo 0)"
+if [[ "$ACTIVE_PODS" -lt 1 ]]; then
+    fail "SAFETY ABORT: No running pods found in disposable namespace '$DISPOSABLE_NAMESPACE'! Refusing to run load test."
 fi
 
 # Guard 5: Verify protected PVC UIDs remain untouched

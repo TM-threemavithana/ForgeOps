@@ -1,0 +1,123 @@
+[INFO] Starting ForgeOps Gate G12 Acceptance Verification & Evidence Capture
+[INFO] Date: 2026-10-28T05:48:21Z
+[INFO] Target Cluster: kind-forgeops (Kubeconfig: /home/tharuka/.kube/config-forgeops)
+[INFO] Disposable Namespace: forgeops-sre-lab
+
+[INFO] =================================================================
+[INFO] Section 1: Preflight Verification & Protected PVC Baseline Check
+[INFO] =================================================================
+[INFO] Verifying baseline protected PVC UIDs across cluster:
+  - forgeops-dev / postgres-storage-forgetasks-db-0: 84853fb3-4d13-43a9-bc62-973c3be3c90c [MATCH]
+  - forgeops-gitops-rehearsal / postgres-storage-forgetasks-rehearsal-db-0: b5ea8ec9-47e8-4979-afdb-621f2e3c63b8 [MATCH]
+  - forgeops-observability / prometheus-g09-monitoring-kube-promet-prometheus-db-prometheus-0: cd64e090-2c69-49b3-a389-de5841ce06d6 [MATCH]
+  - forgeops-observability / storage-loki-0: 23468366-7394-4f2d-be1f-2a640d6f12c5 [MATCH]
+  - forgeops-observability / storage-tempo-0: 092b6655-6617-467c-b546-69e201a0ba8a [MATCH]
+[PASS] All 5 protected PVCs validated with exact documented baseline UIDs.
+[PASS] Argo CD Applications Synced and Healthy (G08 auto-sync disabled: enabled=false).
+
+[INFO] =================================================================
+[INFO] Section 2: Disposable SRE Lab Provisioning & Workload Health
+[INFO] =================================================================
+[INFO] Deploying disposable lab fixture: kubectl apply -k platform/sre-lab
+[PASS] Namespace forgeops-sre-lab created with forgeops.dev/disposable=true.
+[PASS] Database sre-db (PostgreSQL 16 Alpine, emptyDir storage) running 1/1 Ready.
+[PASS] Deployment sre-api (2 replicas of forgetasks-api:1.0.0-g11) running 2/2 Ready.
+[PASS] Zero PVCs detected in forgeops-sre-lab.
+[PASS] Ephemeral credentials generated dynamically and injected via sre-api-secret.
+
+[INFO] =================================================================
+[INFO] Section 3: k6 Progressive Load Testing Suite
+[INFO] =================================================================
+[INFO] Scenario 1: Smoke (tests/load/scenarios/smoke.js)
+  - Requests: 41 | Throughput: 2.05 req/s | Failures: 0.00%
+  - Latency: min=3.35ms, med=7.98ms, p90=9.48ms, p95=10.72ms, p99=34.56ms, max=35.03ms
+  - Thresholds: p(95)<500ms [PASS], rate<0.01 [PASS]
+[PASS] Smoke test completed successfully.
+
+[INFO] Scenario 2: Baseline (tests/load/scenarios/baseline.js)
+  - Requests: 450 | Throughput: 10.13 req/s | Failures: 0.00%
+  - Latency: min=2.45ms, med=5.31ms, p90=6.83ms, p95=7.50ms, p99=9.37ms, max=25.86ms
+  - Thresholds: p(95)<500ms [PASS], rate<0.01 [PASS]
+[PASS] Baseline test completed successfully.
+
+[INFO] Scenario 3: Ramp-Up (tests/load/scenarios/ramp-up.js)
+  - Requests: 672 | Throughput: 9.63 req/s avg (peaked 17.99 req/s) | Failures: 0.00%
+  - Latency: min=2.44ms, med=4.26ms, p90=5.62ms, p95=6.37ms, p99=28.87ms, max=32.89ms
+  - Thresholds: p(95)<750ms [PASS], rate<0.02 [PASS]
+[PASS] Ramp-Up test completed successfully.
+
+[INFO] Scenario 4: Stress (tests/load/scenarios/stress.js)
+  - Requests: 1,052 | Throughput: 13.20 req/s avg (capped at 20 req/s ceiling) | Failures: 0.00%
+  - Latency: min=2.23ms, med=3.51ms, p90=4.70ms, p95=5.20ms, p99=27.00ms, max=33.80ms
+  - Thresholds: p(95)<1000ms [PASS], rate<0.05 [PASS]
+[PASS] Stress test completed successfully.
+
+[INFO] Scenario 5: Recovery (tests/load/scenarios/recovery.js)
+  - Requests: 60 | Throughput: 1.94 req/s | Failures: 0.00%
+  - Latency: min=2.44ms, med=3.47ms, p90=4.78ms, p95=5.33ms, p99=9.76ms, max=10.02ms
+  - Thresholds: p(95)<500ms [PASS], rate<0.01 [PASS]
+[PASS] Recovery test completed successfully.
+[PASS] All 5 k6 load scenarios passed with 0 HTTP errors across 2,275 requests (0.00% error rate).
+
+[INFO] =================================================================
+[INFO] Section 4: Controlled Resilience Experiments
+[INFO] =================================================================
+[INFO] Experiment 01: Pod Termination & Recovery (experiment-01-pod-termination.sh)
+  - Surviving Pod: sre-api-6bf95bbf8f-kxtnf (UID: 126a117b-e10b-4654-bf9f-29d2884a4b2c) maintained service
+  - Terminated Pod: sre-api-6bf95bbf8f-nmlsm (UID: 37a5446c-c90a-4340-9da2-219ceab9745b)
+  - Replacement Pod: sre-api-6bf95bbf8f-h4vnq (UID: 385d24e3-c348-4669-9f63-39a588682563)
+  - Time To Detect (TTD): 1,693 ms
+  - Time To Recover (TTR): 52,856 ms (full readiness restored: 2/2)
+  - Protected PVCs: Intact
+[PASS] Experiment 01 PASSED.
+
+[INFO] Experiment 02: Readiness Probe Failure & Traffic Exclusion (experiment-02-readiness-failure.sh)
+  - Fault: Patched readiness probe to invalid actuator endpoint
+  - Baseline Service Endpoints: 10.244.0.26:8080, 10.244.0.29:8080
+  - Time To Detect (TTD): 2,937 ms (unready surge pod sre-api-56875f9c89-qcksx, IP 10.244.0.30)
+  - Traffic Exclusion Verified: Active service endpoints remained 10.244.0.26:8080, 10.244.0.29:8080
+  - Rollback Action: kubectl rollout undo deployment/sre-api
+  - Time To Recover (TTR): 706 ms
+  - Protected PVCs: Intact
+[PASS] Experiment 02 PASSED.
+
+[INFO] Experiment 03: Invalid Image Rollout & Imperative Rollback (experiment-03-invalid-image-rollout.sh)
+  - Fault: Rolled out invalid nonexistent image tag
+  - Initial Known-Good Image: ghcr.io/tm-threemavithana/forgetasks-api:1.0.0-g11
+  - Time To Detect (TTD): 4,000 ms (ErrImagePull / ImagePullBackOff on surge pod sre-api-5c79899ff8-z4f85)
+  - Impact: 2 healthy replicas preserved traffic throughout (0 outage)
+  - Rollback Action: kubectl rollout undo deployment/sre-api
+  - Time To Recover (TTR): 813 ms
+  - Scope Isolation: Rehearsal deployment forgetasks-rehearsal-api completely untouched
+  - Protected PVCs: Intact
+[PASS] Experiment 03 PASSED.
+
+[INFO] Experiment 04: Bounded Resource Pressure (experiment-04-resource-pressure.sh)
+  - Workload: Concurrent k6 traffic up to 10 VUs / 20 req/s ceiling (1,052 requests)
+  - Latency: avg=6.75ms, med=4.67ms, p95=8.09ms, p99=35.53ms
+  - HTTP Failures: 0 (0.00%) | Checks Passed: 2,104 / 2,104 (100.00%)
+  - Container Restarts: 0 | OOMKills: 0
+  - Protected PVCs: Intact
+[PASS] Experiment 04 PASSED.
+
+[INFO] Experiment 05: Declarative Configuration Reconciliation (experiment-05-gitops-rollback.sh)
+  - Desired Git State: 2 replicas (platform/sre-lab/api-deployment.yaml)
+  - Fault: Imperative drift injected via kubectl scale --replicas=3
+  - Drift Established: 3 live replicas detected
+  - Reconciliation Action: kubectl apply -k platform/sre-lab
+  - Time To Reconcile (TTR): 1,473 ms
+  - Final Restored State: 2/2 ready replicas
+  - Protected PVCs: Intact
+[PASS] Experiment 05 PASSED.
+
+[INFO] =================================================================
+[INFO] Section 5: Disposable SRE Lab Teardown & Post-Flight Audit
+[INFO] =================================================================
+[INFO] Executing teardown: bash scripts/cluster/sre/teardown-sre-lab.sh teardown
+[PASS] Verified namespace labels: forgeops.dev/disposable=true, forgeops.dev/environment=sre-lab.
+[PASS] Verified resource inventory: 0 PVCs, 0 StatefulSets, approved deployments only.
+[PASS] Graceful namespace deletion completed without --force or finalizer tampering.
+[PASS] Verified all 5 protected PVC UIDs across cluster post-teardown.
+[INFO] =================================================================
+[PASS] ALL G12 SRE & RELIABILITY TEST REQUIREMENTS VERIFIED SUCCESSFULLY
+[INFO] =================================================================

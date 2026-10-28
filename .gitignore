@@ -76,6 +76,7 @@ coverage/
 .scannerwork/
 trivy-results.json
 gitleaks-report.json
+tests/load/results/
 
 # --- OS & IDE Metadata ---
 .DS_Store
