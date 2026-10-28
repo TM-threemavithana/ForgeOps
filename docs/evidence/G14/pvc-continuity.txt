@@ -1,0 +1,6 @@
+NAMESPACE                   NAME                                                                                                     UID                                    STATUS
+forgeops-dev                postgres-storage-forgetasks-db-0                                                                         84853fb3-4d13-43a9-bc62-973c3be3c90c   Bound
+forgeops-gitops-rehearsal   postgres-storage-forgetasks-rehearsal-db-0                                                               b5ea8ec9-47e8-4979-afdb-621f2e3c63b8   Bound
+forgeops-observability      prometheus-g09-monitoring-kube-promet-prometheus-db-prometheus-g09-monitoring-kube-promet-prometheus-0   cd64e090-2c69-49b3-a389-de5841ce06d6   Bound
+forgeops-observability      storage-loki-0                                                                                           23468366-7394-4f2d-be1f-2a640d6f12c5   Bound
+forgeops-observability      storage-tempo-0                                                                                          092b6655-6617-467c-b546-69e201a0ba8a   Bound
