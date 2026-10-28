@@ -84,58 +84,91 @@ kubectl rollout status deployment/dr-api -n "$TARGET_NS" --timeout=120s
 
 # Step 6: Application-level smoke test via REST API queries against restored database
 log_info "Step 6: Conducting application-level REST API smoke test against restored database..."
+API_POD="$(kubectl get pods -n "$TARGET_NS" -l app=dr-api --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')"
+if [[ -z "$API_POD" ]]; then
+  log_err "CRITICAL: No running dr-api Pod found in '$TARGET_NS'!"
+  exit 1
+fi
+log_info "Identified running dr-api Pod: $API_POD"
+
 API_PORT=18083
-kubectl port-forward -n "$TARGET_NS" svc/dr-api "${API_PORT}:8080" >/dev/null 2>&1 &
+API_PF_LOG="$(mktemp)"
+kubectl port-forward -n "$TARGET_NS" "pod/${API_POD}" "${API_PORT}:8080" >"$API_PF_LOG" 2>&1 &
 API_PF_PID=$!
-sleep 3
+sleep 2
 
 kill_api_pf() {
   kill -9 "$API_PF_PID" >/dev/null 2>&1 || true
+  rm -f "$API_PF_LOG"
 }
 trap kill_api_pf EXIT INT TERM ERR
 
-# A: Probe actuator health
+# A: Probe actuator health (with connection retry loop for port-forward readiness)
 log_info "Verifying API Actuator health endpoint..."
-HEALTH_STATUS="$(curl -sf "http://127.0.0.1:${API_PORT}/actuator/health" 2>/dev/null | grep -o '"status":"UP"' || true)"
-if [[ "$HEALTH_STATUS" != '"status":"UP"' ]]; then
+ACTUATOR_HEALTH_UP=false
+for attempt in $(seq 1 15); do
+  if curl -sf "http://127.0.0.1:${API_PORT}/actuator/health" 2>/dev/null | grep -q '"status":"UP"'; then
+    ACTUATOR_HEALTH_UP=true
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$ACTUATOR_HEALTH_UP" != "true" ]]; then
   log_err "CRITICAL: API actuator health check failed! Endpoint did not return status: UP."
+  log_err "Port-forward log output:"
+  cat "$API_PF_LOG" >&2 || true
   exit 1
 fi
 log_pass "Actuator health verified: UP (connected to restored database)."
 
-# B: Authenticated REST query for projects (dr_admin)
+# B: Authenticated REST queries for projects across accounts
 log_info "Querying /api/v1/projects with synthetic dr_admin credentials..."
-ADMIN_AUTH_HEADER="Authorization: Basic $(printf '%s:%s' 'dr_admin' 'Password123!' | base64)"
-PROJECTS_RESP="$(curl -sf -H "$ADMIN_AUTH_HEADER" "http://127.0.0.1:${API_PORT}/api/v1/projects" || true)"
+ADMIN_AUTH_HEADER="Authorization: Basic $(printf '%s:%s' 'dr_admin' 'Password123!' | base64 | tr -d '\r\n')"
+ADMIN_PROJECTS_RESP="$(curl -sf -H "$ADMIN_AUTH_HEADER" "http://127.0.0.1:${API_PORT}/api/v1/projects" || true)"
 
-if [[ -z "$PROJECTS_RESP" ]]; then
-  log_err "CRITICAL: GET /api/v1/projects returned empty response!"
+if [[ -z "$ADMIN_PROJECTS_RESP" ]]; then
+  log_err "CRITICAL: GET /api/v1/projects (dr_admin) returned empty response!"
   exit 1
 fi
 
-if ! echo "$PROJECTS_RESP" | grep -q "DR Verification Project Alpha"; then
-  log_err "CRITICAL: Restored database missing expected project 'DR Verification Project Alpha'!"
+if ! echo "$ADMIN_PROJECTS_RESP" | grep -q "DR Verification Project Alpha"; then
+  log_err "CRITICAL: Restored database missing expected project 'DR Verification Project Alpha' for dr_admin!"
   exit 1
 fi
-if ! echo "$PROJECTS_RESP" | grep -q "DR Rehearsal Project Beta"; then
-  log_err "CRITICAL: Restored database missing expected project 'DR Rehearsal Project Beta'!"
+log_pass "GET /api/v1/projects (dr_admin) verified: 'DR Verification Project Alpha' present."
+
+log_info "Querying /api/v1/projects with synthetic dr_user credentials..."
+USER_AUTH_HEADER="Authorization: Basic $(printf '%s:%s' 'dr_user' 'Password123!' | base64 | tr -d '\r\n')"
+USER_PROJECTS_RESP="$(curl -sf -H "$USER_AUTH_HEADER" "http://127.0.0.1:${API_PORT}/api/v1/projects" || true)"
+
+if [[ -z "$USER_PROJECTS_RESP" ]]; then
+  log_err "CRITICAL: GET /api/v1/projects (dr_user) returned empty response!"
   exit 1
 fi
-log_pass "GET /api/v1/projects verified: synthetic projects present in restored database."
+
+if ! echo "$USER_PROJECTS_RESP" | grep -q "DR Rehearsal Project Beta"; then
+  log_err "CRITICAL: Restored database missing expected project 'DR Rehearsal Project Beta' for dr_user!"
+  exit 1
+fi
+log_pass "GET /api/v1/projects (dr_user) verified: 'DR Rehearsal Project Beta' present."
 
 # C: Authenticated REST query for tasks under project
-PROJECT_ID="d1000000-0000-0000-0000-000000000001"
-log_info "Querying /api/v1/projects/${PROJECT_ID}/tasks with synthetic dr_user credentials..."
-USER_AUTH_HEADER="Authorization: Basic $(printf '%s:%s' 'dr_user' 'Password123!' | base64)"
-TASKS_RESP="$(curl -sf -H "$USER_AUTH_HEADER" "http://127.0.0.1:${API_PORT}/api/v1/projects/${PROJECT_ID}/tasks" || true)"
+ALPHA_PROJECT_ID="d1000000-0000-0000-0000-000000000001"
+log_info "Querying /api/v1/projects/${ALPHA_PROJECT_ID}/tasks with synthetic dr_admin credentials..."
+TASKS_RESP="$(curl -sf -H "$ADMIN_AUTH_HEADER" "http://127.0.0.1:${API_PORT}/api/v1/projects/${ALPHA_PROJECT_ID}/tasks" || true)"
 
 if [[ -z "$TASKS_RESP" ]]; then
-  log_err "CRITICAL: GET /api/v1/projects/${PROJECT_ID}/tasks returned empty response!"
+  log_err "CRITICAL: GET /api/v1/projects/${ALPHA_PROJECT_ID}/tasks returned empty response!"
   exit 1
 fi
 
 if ! echo "$TASKS_RESP" | grep -q "Verify Backup Integrity"; then
   log_err "CRITICAL: Restored database missing expected task 'Verify Backup Integrity'!"
+  exit 1
+fi
+if ! echo "$TASKS_RESP" | grep -q "Rehearse Scratch Restore"; then
+  log_err "CRITICAL: Restored database missing expected task 'Rehearse Scratch Restore'!"
   exit 1
 fi
 log_pass "GET /api/v1/projects/{id}/tasks verified: synthetic tasks present in restored database."

@@ -86,6 +86,10 @@ log_pass "Secret dr-db-secret established before Deployment scheduling."
 log_info "Applying declarative manifests for $TARGET_NS..."
 kubectl apply -k "${REPO_ROOT}/platform/dr-lab"
 
+# Clean up any residual API deployment and ensure fresh empty storage on target DB
+kubectl delete deployment dr-api -n "$TARGET_NS" --ignore-not-found >/dev/null 2>&1 || true
+kubectl rollout restart deployment/dr-source-db deployment/dr-target-db -n "$TARGET_NS" >/dev/null 2>&1 || true
+
 # Step 5: Wait for database instances to become ready
 log_info "Waiting for dr-source-db deployment to become Ready (up to 90s)..."
 kubectl rollout status deployment/dr-source-db -n "$TARGET_NS" --timeout=90s
