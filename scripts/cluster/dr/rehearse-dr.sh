@@ -89,7 +89,7 @@ if [[ -z "$API_POD" ]]; then
   log_err "CRITICAL: No running dr-api Pod found in '$TARGET_NS'!"
   exit 1
 fi
-log_info "Identified running dr-api Pod: $API_POD"
+log_info "Identified running workload pod: $API_POD"
 
 API_PORT=18083
 API_PF_LOG="$(mktemp)"
