@@ -354,9 +354,31 @@ assert tempo_ds.get('url') == 'http://tempo.forgeops-observability.svc.cluster.l
 json_data = tempo_ds.get('jsonData', {})
 traces_to_logs = json_data.get('tracesToLogsV2', {})
 assert traces_to_logs.get('datasourceUid') == 'loki', 'tracesToLogsV2 does not link to loki datasource'
-assert '\$__trace.id' in traces_to_logs.get('query', ''), 'tracesToLogsV2 query does not filter by trace ID'
+assert traces_to_logs.get('customQuery') is True, 'tracesToLogsV2 customQuery must be true'
+query_str = traces_to_logs.get('query', '')
+assert '__trace.traceId' in query_str, f'tracesToLogsV2 query does not filter by __trace.traceId: {query_str}'
 "
-pass "Grafana Tempo datasource provisioned with active Trace-to-Logs navigation to Loki."
+pass "Grafana Tempo datasource provisioned with customQuery and active Trace-to-Logs navigation ($${__trace.traceId})."
+
+# Validate that the provisioned trace-to-logs LogQL query actually retrieves the matching ECS log from Loki
+info "Step 14b: Testing provisioned trace-to-logs LogQL query against Loki"
+LOKI_TRACE_QUERY=$(curl -s -G "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/query_range" \
+  --data-urlencode "query={app=\"rehearsal-api\"} |= \"${TRACE_ID}\"")
+
+echo "$LOKI_TRACE_QUERY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') == 'success', 'Loki query by traceId failed'
+results = d.get('data', {}).get('result', [])
+found = False
+for stream in results:
+    for entry in stream.get('values', []):
+        if '$TRACE_ID' in entry[1]:
+            found = True
+            break
+assert found, f'No matching log found in Loki using trace-to-logs query for traceId $TRACE_ID'
+"
+pass "Trace-to-logs navigation query executed against Loki returned matching ECS log event."
 
 # 15. Prometheus Target Continuity Check
 info "Step 15: Verifying Prometheus scrape targets remain UP via host-side curl"

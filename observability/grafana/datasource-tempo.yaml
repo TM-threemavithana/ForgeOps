@@ -2,6 +2,7 @@
 # Integrates with the existing G09 Grafana instance via sidecar discovery.
 # Label grafana_datasource: "1" ensures zero-downtime, non-destructive registration.
 # Configures tracesToLogsV2 to link Tempo traces directly to ECS JSON logs in Loki.
+# Escapes provisioning variable ($${__trace.traceId}) to prevent premature interpolation.
 # NOT APPROVED FOR CLUSTER DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
 apiVersion: v1
 kind: ConfigMap
@@ -30,7 +31,8 @@ data:
           spanEndTimeShift: "1m"
           filterByTrace: false
           filterBySpan: false
-          query: '{app="rehearsal-api"} |= "${__trace.id}"'
+          customQuery: true
+          query: '{app="rehearsal-api"} |= "$${__trace.traceId}"'
           tags:
             - key: "service.name"
               value: "service_name"
