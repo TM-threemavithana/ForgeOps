@@ -323,10 +323,12 @@ jobs:
       - name: Install Python test dependencies
         run: pip install --quiet pyyaml
 
-      - name: Install Pinned Kyverno CLI (v1.19.2)
+      - name: Install Pinned Kyverno CLI (v1.19.2) with Authentic Checksum Verification
         run: |
           KYVERNO_VERSION="v1.19.2"
+          KYVERNO_SHA256="357eaf1df8bc24ddd5a73979fadeaae6a032e8710f11af264229756e4956bf4a"
           curl -sSL "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/kyverno-cli_${KYVERNO_VERSION}_linux_x86_64.tar.gz" -o kyverno.tar.gz
+          echo "${KYVERNO_SHA256}  kyverno.tar.gz" | sha256sum -c -
           tar -xzf kyverno.tar.gz kyverno
           sudo mv kyverno /usr/local/bin/
           rm -f kyverno.tar.gz
