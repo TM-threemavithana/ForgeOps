@@ -275,6 +275,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Python test dependencies
+        run: pip install --quiet bcrypt
+
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
 

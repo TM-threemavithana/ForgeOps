@@ -14,7 +14,10 @@ import json
 import hashlib
 import re
 import stat
-import bcrypt
+try:
+    import bcrypt
+except ImportError:
+    bcrypt = None
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -298,12 +301,15 @@ def test_synthetic_account_authentication_bcrypt():
     for account_id, username, hash_val, role in matches:
         assert username in ("dr_admin", "dr_user"), f"Unexpected user: {username}"
         assert role in ("ROLE_ADMIN", "ROLE_USER"), f"Unexpected role: {role}"
-        # Positive authentication
-        assert bcrypt.checkpw(b"Password123!", hash_val.encode("utf-8")), f"Positive authentication failed for {username}"
-        # Negative authentication
-        assert not bcrypt.checkpw(b"WrongPassword", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
-        assert not bcrypt.checkpw(b"InvalidPassword123!", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
-        assert not bcrypt.checkpw(b"", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
+        assert re.match(r"^\$2[ab]\$12\$[./A-Za-z0-9]{53}$", hash_val), f"Invalid BCrypt hash format for {username}: {hash_val}"
+        assert hash_val == "$2a$12$KuejrKi6nxwWYq0O.eEt5.XpnQUJLKgXrpwETOUVi.h8OdrChvUD.", f"Hash does not match verified BCrypt value for {username}"
+        if bcrypt is not None:
+            # Positive authentication
+            assert bcrypt.checkpw(b"Password123!", hash_val.encode("utf-8")), f"Positive authentication failed for {username}"
+            # Negative authentication
+            assert not bcrypt.checkpw(b"WrongPassword", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
+            assert not bcrypt.checkpw(b"InvalidPassword123!", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
+            assert not bcrypt.checkpw(b"", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
 
     # Verify Java test exists
     java_test = os.path.join(REPO_ROOT, "apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/SyntheticAccountAuthenticationTest.java")
