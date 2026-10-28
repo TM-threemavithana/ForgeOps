@@ -1,4 +1,4 @@
-﻿# ForgeOps Continuous Integration Pipeline
+# ForgeOps Continuous Integration Pipeline
 # Gate G03: GitHub Actions CI/CD, Supply Chain Security and GHCR Publishing
 #
 # Trust boundary:
@@ -257,7 +257,38 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Job 5: CI Gate Summary (required status check for branch protection rules)
+  # Job 5: SRE Reliability & Hardening Validation (Gate G12)
+  # Validates k6 test suites, resilience experiment scripts, safety guards, manifests
+  # ---------------------------------------------------------------------------
+  sre-hardening-validate:
+    name: SRE Reliability & Hardening Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Verify tools
+        run: |
+          k6 version
+          kubectl version --client=true
+          python3 --version
+
+      - name: Run G12 Hardening Validation Suite
+        run: python3 scripts/test_g12_hardening.py
+
+  # ---------------------------------------------------------------------------
+  # Job 6: CI Gate Summary (required status check for branch protection rules)
   # ---------------------------------------------------------------------------
   ci-gate:
     name: CI Gate
@@ -267,22 +298,25 @@ jobs:
       - docker-build-validate
       - trivy-scan
       - gitleaks-scan
+      - sre-hardening-validate
     if: always()
 
     steps:
       - name: Evaluate gate status
         run: |
-          echo '=== G03 CI Gate Summary ==='
-          echo "build-and-test:        ${{ needs.build-and-test.result }}"
-          echo "docker-build-validate: ${{ needs.docker-build-validate.result }}"
-          echo "trivy-scan:            ${{ needs.trivy-scan.result }}"
-          echo "gitleaks-scan:         ${{ needs.gitleaks-scan.result }}"
-          echo '==========================='
+          echo '=== G03/G12 CI Gate Summary ==='
+          echo "build-and-test:         ${{ needs.build-and-test.result }}"
+          echo "docker-build-validate:  ${{ needs.docker-build-validate.result }}"
+          echo "trivy-scan:             ${{ needs.trivy-scan.result }}"
+          echo "gitleaks-scan:          ${{ needs.gitleaks-scan.result }}"
+          echo "sre-hardening-validate: ${{ needs.sre-hardening-validate.result }}"
+          echo '==============================='
           FAILED=0
           [ "${{ needs.build-and-test.result }}" != "success" ] && FAILED=1
           [ "${{ needs.docker-build-validate.result }}" != "success" ] && FAILED=1
           [ "${{ needs.trivy-scan.result }}" != "success" ] && FAILED=1
           [ "${{ needs.gitleaks-scan.result }}" != "success" ] && FAILED=1
+          [ "${{ needs.sre-hardening-validate.result }}" != "success" ] && FAILED=1
           if [ "$FAILED" = "1" ]; then
             echo "[FAIL] One or more required CI jobs failed. Merge is blocked."
             exit 1
