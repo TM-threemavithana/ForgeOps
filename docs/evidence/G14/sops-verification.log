@@ -1,0 +1,26 @@
+=======================================================================
+Starting Gate G14 SOPS + age Encrypted Secrets Validation Suite
+SOPS Binary: /home/tharuka/.local/bin/sops
+age Binary:  /home/tharuka/.local/bin/age
+=======================================================================
+--> Test 1: Verifying SOPS and age tool versions...
+  [PASS] SOPS operational: sops 3.13.3 (latest)
+  [PASS] age operational:  v1.2.1
+--> Test 2: Validating .sops.yaml configuration & recipient public keys...
+  [PASS] .sops.yaml contains valid dual-recipient configuration (2 public keys).
+--> Test 3: Validating structure of encrypted synthetic secret manifest...
+  [PASS] Encrypted manifest contains valid cleartext metadata and AES256_GCM ciphertext values without plaintext leakage.
+--> Test 4: Verifying committed encrypted fixture against intended recipient identities...
+  [PASS] Committed synthetic fixture verified decryptable using intended Primary operational identity (zero plaintext leaks).
+  [PASS] Committed synthetic fixture verified independently decryptable using intended Escrow Disaster Recovery identity (zero plaintext leaks).
+--> Test 5: Testing dynamic key generation, encryption, decryption, and recovery...
+  [PASS] Primary key decryption verified: matched synthetic fields without leaking plaintext.
+  [PASS] Recovery key decryption verified: independent recovery succeeds without primary key.
+  [PASS] Wrong-key decryption strictly failed and returned non-zero exit code.
+  [PASS] Missing-key decryption strictly failed and returned non-zero exit code.
+  [PASS] Tamper detection verified: altered ciphertext failed cryptographic MAC integrity check.
+--> Test 6: Verifying repository hygiene and absence of private age keys in Git...
+  [PASS] Zero private age keys detected across repository files.
+=======================================================================
+ALL GATE G14 SOPS + AGE ENCRYPTED SECRETS TESTS PASSED (6/6 suites successful)
+=======================================================================

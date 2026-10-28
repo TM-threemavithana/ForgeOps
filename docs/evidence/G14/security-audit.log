@@ -1,0 +1,59 @@
+=======================================================================
+Starting Gate G14 Policy-as-Code (Kyverno) Validation Suite
+Kyverno Binary: /home/tharuka/.local/bin/kyverno
+Policy Directory: /mnt/c/Project/ForgeOps/security/policies/kyverno
+=======================================================================
+--> Test 1: Verifying Kyverno CLI version & tool availability...
+  [PASS] Kyverno CLI operational: Version: 1.19.2
+--> Test 2: Validating YAML syntax and schema of all 10 Kyverno policies...
+  [PASS] Policy syntax valid: disallow-host-namespaces.yaml
+  [PASS] Policy syntax valid: disallow-latest-tag.yaml
+  [PASS] Policy syntax valid: disallow-privilege-escalation.yaml
+  [PASS] Policy syntax valid: disallow-privileged-containers.yaml
+  [PASS] Policy syntax valid: require-drop-all-capabilities.yaml
+  [PASS] Policy syntax valid: require-resource-requests-limits.yaml
+  [PASS] Policy syntax valid: require-run-as-non-root.yaml
+  [PASS] Policy syntax valid: require-seccomp-default.yaml
+  [PASS] Policy syntax valid: require-security-labels.yaml
+  [PASS] Policy syntax valid: restrict-image-registries.yaml
+--> Test 3: Executing comprehensive Kyverno CLI test suite (kyverno test)...
+  [PASS] All 20 Kyverno test cases passed (10 positive, 10 negative assertions).
+--> Test 4: Verifying compliant workload passes all 10 security policies via kyverno apply...
+  [PASS] Compliant workload passed disallow-host-namespaces.yaml
+  [PASS] Compliant workload passed disallow-latest-tag.yaml
+  [PASS] Compliant workload passed disallow-privilege-escalation.yaml
+  [PASS] Compliant workload passed disallow-privileged-containers.yaml
+  [PASS] Compliant workload passed require-drop-all-capabilities.yaml
+  [PASS] Compliant workload passed require-resource-requests-limits.yaml
+  [PASS] Compliant workload passed require-run-as-non-root.yaml
+  [PASS] Compliant workload passed require-seccomp-default.yaml
+  [PASS] Compliant workload passed require-security-labels.yaml
+  [PASS] Compliant workload passed restrict-image-registries.yaml
+--> Test 5: Verifying deliberate violation workloads are strictly rejected by policies...
+  [PASS] Correctly rejected fail-privileged.yaml with: 'Privileged mode is disallowed'
+  [PASS] Correctly rejected fail-privilege-escalation.yaml with: 'Privilege escalation is disallowed'
+  [PASS] Correctly rejected fail-run-as-root.yaml with: 'Running as root is disallowed'
+  [PASS] Correctly rejected fail-capabilities.yaml with: 'Containers must drop all capabilities'
+  [PASS] Correctly rejected fail-seccomp.yaml with: 'Seccomp profile must be set to RuntimeDefault'
+  [PASS] Correctly rejected fail-latest-tag.yaml with: 'Using the ':latest' tag is disallowed'
+  [PASS] Correctly rejected fail-resource-limits.yaml with: 'CPU and memory requests and limits must be specified'
+  [PASS] Correctly rejected fail-host-namespaces.yaml with: 'Sharing host network, PID, or IPC namespaces is disallowed'
+  [PASS] Correctly rejected fail-untrusted-registry.yaml with: 'Images must originate from approved registries'
+  [PASS] Correctly rejected fail-missing-labels.yaml with: 'Workloads must declare 'app.kubernetes.io/name' and 'forgeops.dev/security-tier' labels'
+--> Test 6: Verifying Helm-rendered ForgeTasks application workloads against container security policies...
+  [PASS] Rendered application workload passed disallow-privileged-containers.yaml
+  [PASS] Rendered application workload passed disallow-privilege-escalation.yaml
+  [PASS] Rendered application workload passed require-run-as-non-root.yaml
+  [PASS] Rendered application workload passed require-drop-all-capabilities.yaml
+  [PASS] Rendered application workload passed require-seccomp-default.yaml
+  [PASS] Rendered application workload passed disallow-latest-tag.yaml
+  [PASS] Rendered application workload passed require-resource-requests-limits.yaml
+  [PASS] Rendered application workload passed disallow-host-namespaces.yaml
+  [PASS] Rendered application workload passed restrict-image-registries.yaml
+  [PASS] Application Pod template passed all 9 applicable container security policies.
+  [NOTE] Policy fixtures validate 10/10 policies including tier-1 labels. Image registry rule validates host prefixes, not cryptographic signatures.
+--> Test 7: Verifying kyverno test fails closed on malformed test cases...
+  [PASS] kyverno test strictly returns non-zero code on test failure assertion.
+=======================================================================
+ALL GATE G14 KYVERNO POLICY-AS-CODE TESTS PASSED (7/7 suites successful)
+=======================================================================
