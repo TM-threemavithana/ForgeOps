@@ -5,8 +5,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common-dr.sh"
 
-TARGET_NS="${1:-$DISPOSABLE_DR_NAMESPACE}"
-MODE="${2:-teardown}"
+TARGET_NS="$DISPOSABLE_DR_NAMESPACE"
+MODE="teardown"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --validate-only|--dry-run)
+      MODE="--validate-only"; shift ;;
+    *)
+      if [[ "$1" != --* ]]; then
+        TARGET_NS="$1"
+      fi
+      shift ;;
+  esac
+done
 
 echo "======================================================================="
 echo "ForgeOps G13: Disposable Disaster Recovery Lab Teardown & Audit"

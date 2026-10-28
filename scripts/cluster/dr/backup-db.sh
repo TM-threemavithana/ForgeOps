@@ -7,12 +7,13 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 source "${SCRIPT_DIR}/common-dr.sh"
 
-SOURCE_NS="${1:-$DISPOSABLE_DR_NAMESPACE}"
-DB_NAME="${2:-forgetasks}"
-OUTPUT_DIR="${3:-$DEFAULT_BACKUP_DIR}"
-MODE="${4:-execute}"
+SOURCE_NS="$DISPOSABLE_DR_NAMESPACE"
+DB_NAME="forgetasks"
+OUTPUT_DIR="$DEFAULT_BACKUP_DIR"
+MODE="execute"
 
-# Parse optional flags
+# Parse flags and positional arguments
+POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --source-namespace)
@@ -24,9 +25,19 @@ while [[ $# -gt 0 ]]; do
     --dry-run|--validate-only)
       MODE="--validate-only"; shift ;;
     *)
-      shift ;;
+      POSITIONAL_ARGS+=("$1"); shift ;;
   esac
 done
+
+if [[ ${#POSITIONAL_ARGS[@]} -ge 1 ]]; then
+  SOURCE_NS="${POSITIONAL_ARGS[0]}"
+fi
+if [[ ${#POSITIONAL_ARGS[@]} -ge 2 ]]; then
+  DB_NAME="${POSITIONAL_ARGS[1]}"
+fi
+if [[ ${#POSITIONAL_ARGS[@]} -ge 3 ]]; then
+  OUTPUT_DIR="${POSITIONAL_ARGS[2]}"
+fi
 
 echo "======================================================================="
 echo "ForgeOps G13: PostgreSQL Automated Backup Workflow"

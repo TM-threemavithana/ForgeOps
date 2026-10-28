@@ -7,8 +7,20 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 source "${SCRIPT_DIR}/common-dr.sh"
 
-TARGET_NS="${1:-$DISPOSABLE_DR_NAMESPACE}"
-MODE="${2:-setup}"
+TARGET_NS="$DISPOSABLE_DR_NAMESPACE"
+MODE="setup"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --validate-only|--dry-run)
+      MODE="--validate-only"; shift ;;
+    *)
+      if [[ "$1" != --* ]]; then
+        TARGET_NS="$1"
+      fi
+      shift ;;
+  esac
+done
 
 echo "======================================================================="
 echo "ForgeOps G13: Provision Disposable Disaster Recovery Lab"
