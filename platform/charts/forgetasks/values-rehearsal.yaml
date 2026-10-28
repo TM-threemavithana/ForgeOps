@@ -21,6 +21,15 @@ api:
     limits:
       cpu: 1000m
       memory: 512Mi
+  extraEnv:
+    - name: MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT
+      value: "http://alloy.forgeops-observability.svc.cluster.local:4318/v1/traces"
+    - name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+      value: "1.0"
+    - name: MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED
+      value: "false"
+    - name: MANAGEMENT_OTLP_LOGGING_EXPORT_ENABLED
+      value: "false"
 
 postgresql:
   enabled: true

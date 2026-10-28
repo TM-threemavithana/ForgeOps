@@ -1,0 +1,66 @@
+# ForgeOps G11 — Grafana Tempo Architecture & Configuration
+# Pinned Chart: grafana/tempo 1.24.4 (App Version: 2.9.0)
+# Deployment Topology: Single-binary monolithic StatefulSet (1 replica)
+# Local filesystem persistent storage on 2Gi PVC (local-path-provisioner)
+# NOT APPROVED FOR CLUSTER DEPLOYMENT WITHOUT OPERATOR GATE CONFIRMATION.
+
+replicas: 1
+
+tempo:
+  repository: grafana/tempo
+  tag: "2.9.0"
+  pullPolicy: IfNotPresent
+
+  multitenancyEnabled: false
+  reportingEnabled: false
+
+  retention: 24h
+
+  server:
+    http_listen_port: 3200
+
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+  receivers:
+    jaeger:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:14250"
+        thrift_binary:
+          endpoint: "0.0.0.0:6832"
+        thrift_compact:
+          endpoint: "0.0.0.0:6831"
+        thrift_http:
+          endpoint: "0.0.0.0:14268"
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+persistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 2Gi
+
+service:
+  type: ClusterIP
+
+tempoQuery:
+  enabled: false
