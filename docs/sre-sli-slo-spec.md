@@ -108,3 +108,27 @@ flowchart LR
 2. **Log Correlation**: Spring Boot logs in ECS JSON format, embedding `trace_id` and `span_id`. Loki queries filter by `app="forgetasks-api"` and trace ID.
 3. **Trace Waterfall**: Grafana Tempo visualizes internal spans (controller dispatch, service layer, repository operations, HikariCP pool).
 4. **Metrics Correlation**: Prometheus captures requests, latencies, and JVM heap saturation.
+
+---
+
+## 5. Architectural Limitations & Reliability Testing Boundaries
+
+### 5.1 Port-Forward Single-Pod Routing Limitation
+When executing load tests via `kubectl port-forward svc/sre-api 8082:8080`, the Kubernetes API server and client tunnel traffic to a **single backend Pod** selected upon connection establishment. 
+- **Honest SRE Assessment**: Load generated through localhost port-forwarding does not test multi-replica round-robin distribution via kube-proxy. Instead, it measures **single-instance saturation, thread-pool contention, and individual pod resilience** under progressive concurrency.
+- Multi-replica failover is validated independently in Experiment 01 (pod kill and self-healing) and Experiment 02 (readiness probe traffic exclusion).
+
+### 5.2 Strict Arrival-Rate Ceiling & Concurrency Cap
+To safeguard the local developer workstation and Kind cgroups against resource starvation:
+- Aggregate traffic across all scenarios is **hard-capped at 20 requests/second**.
+- Concurrency is **bounded at a maximum of 25 Virtual Users (VUs)**.
+- Scenarios enforce rate limits using k6 `constant-arrival-rate` and `ramping-arrival-rate` executors, backed by `abortOnFail: true` safety thresholds.
+
+### 5.3 Declarative Reconciliation vs. Argo CD GitOps Controllers
+- Experiment 05 demonstrates **Kubernetes declarative reconciliation** (`kubectl apply -k`), proving that the declared Git source-of-truth automatically converges over imperative runtime drift.
+- While Argo CD implements this same declarative convergence pattern continuously via its GitOps reconciliation loop, this experiment is isolated to `forgeops-sre-lab` to guarantee zero interference with existing protected GitOps Applications (`forgetasks-rehearsal`, `monitoring`, `logging`, `tempo`).
+
+### 5.4 Ephemeral Database Credentials & Isolation
+- Database passwords for `forgeops-sre-lab` are generated dynamically at deployment time via `openssl rand -hex 16` and injected into ephemeral Secrets.
+- No database credentials are hardcoded or shared outside the disposable namespace.
+- Ephemeral PostgreSQL runs entirely on `emptyDir: {}` memory/disk scratch storage, ensuring zero new PersistentVolumeClaims.

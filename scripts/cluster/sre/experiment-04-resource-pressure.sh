@@ -34,7 +34,7 @@ PORT=8082
 log_info "Setting up temporary local port-forward to $SERVICE_NAME:8080 on port $PORT..."
 kubectl port-forward -n "$TARGET_NS" "svc/$SERVICE_NAME" "${PORT}:8080" >/dev/null 2>&1 &
 PF_PID=$!
-trap "kill -9 $PF_PID >/dev/null 2>&1 || true" EXIT
+trap "kill -9 $PF_PID >/dev/null 2>&1 || true" EXIT INT TERM ERR
 
 sleep 2
 

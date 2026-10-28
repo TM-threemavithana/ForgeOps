@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ForgeOps Gate G12 - Resilience Experiment 05: GitOps Drift Detection & Declarative Reconciliation Rehearsal
+# ForgeOps Gate G12 - Resilience Experiment 05: Kubernetes Declarative Configuration Reconciliation
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,12 +11,15 @@ DEPLOYMENT_NAME="sre-api"
 MODE="${2:-execute}"
 
 echo "======================================================================="
-echo "ForgeOps G12 Resilience Experiment 05: GitOps Declarative Reconciliation"
+echo "ForgeOps G12 Resilience Experiment 05: Declarative Reconciliation"
 echo "Target Namespace:      $TARGET_NS"
 echo "Target Deployment:     $DEPLOYMENT_NAME"
 echo "Drift Simulation:      Imperative replica scale out to 4"
 echo "Expected Impact:       Detected drift between Git manifest and cluster state"
-echo "Rollback / Mitigation: Declarative reconciliation via 'kubectl apply -k platform/sre-lab'"
+echo "Reconciliation Action: Declarative convergence via 'kubectl apply -k platform/sre-lab'"
+echo "Architectural Context: Validates Kubernetes declarative reconciliation against"
+echo "                       imperative drift, demonstrating the same reconciliation"
+echo "                       principle leveraged by GitOps engines (Argo CD)"
 echo "======================================================================="
 
 # Step 1: Preflight guards
@@ -38,6 +41,18 @@ if [[ "$LIVE_REPLICAS" -ne "$DECLARED_REPLICAS" ]]; then
   exit 1
 fi
 
+RESTORED=0
+cleanup() {
+  local exit_code=$?
+  if [[ "$RESTORED" -ne 1 ]]; then
+    log_warn "Executing emergency cleanup: Restoring declarative state via kubectl apply -k platform/sre-lab..."
+    kubectl apply -k "${REPO_ROOT}/platform/sre-lab" >/dev/null 2>&1 || true
+    kubectl rollout status deployment/"$DEPLOYMENT_NAME" -n "$TARGET_NS" --timeout=60s >/dev/null 2>&1 || true
+  fi
+  exit "$exit_code"
+}
+trap cleanup EXIT INT TERM ERR
+
 # Step 3: Inject configuration drift imperatively
 DRIFTED_COUNT=4
 log_warn "Simulating unapproved imperative drift: scaling $DEPLOYMENT_NAME to $DRIFTED_COUNT replicas..."
@@ -54,8 +69,8 @@ if [[ "$CURRENT_LIVE" -ne "$DRIFTED_COUNT" ]]; then
   exit 1
 fi
 
-# Step 4: Execute Declarative GitOps Self-Healing / Reconciliation
-log_info "Rehearsing declarative GitOps reconciliation: applying Git source-of-truth..."
+# Step 4: Execute Declarative Reconciliation
+log_info "Executing declarative reconciliation: applying Git source-of-truth manifests..."
 T_RECONCILE_START="$(date +%s%N)"
 
 kubectl apply -k "${REPO_ROOT}/platform/sre-lab"
@@ -76,6 +91,7 @@ if [[ "$RESTORED_REPLICAS" -ne "$DECLARED_REPLICAS" || "$FINAL_READY" -ne "$DECL
   exit 1
 fi
 
+RESTORED=1
 assert_protected_pvcs_intact
 
 log_pass "Resilience Experiment 05 PASSED! (Declarative State Restored: ${FINAL_READY}/${DECLARED_REPLICAS}, Protected PVCs: Intact)"

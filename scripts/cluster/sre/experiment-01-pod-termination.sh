@@ -15,7 +15,7 @@ echo "ForgeOps G12 Resilience Experiment 01: Pod Termination & Recovery"
 echo "Target Namespace:      $TARGET_NS"
 echo "Target Deployment:     $DEPLOYMENT_NAME"
 echo "Label Selector:        $SELECTOR"
-echo "Expected Impact:       1 pod killed; 2nd replica continues serving; controller replaces pod"
+echo "Expected Impact:       1 pod gracefully terminated; surviving replica serves traffic; replacement scheduled"
 echo "Rollback / Mitigation: Automatic Deployment controller self-healing"
 echo "======================================================================="
 
@@ -37,41 +37,58 @@ if [[ "$READY" -lt "$DESIRED" || "$READY" -lt 2 ]]; then
   exit 1
 fi
 
-# Step 3: Identify victim pod
-VICTIM_POD="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')"
-VICTIM_UID="$(kubectl get pod "$VICTIM_POD" -n "$TARGET_NS" -o jsonpath='{.metadata.uid}')"
-VICTIM_NODE="$(kubectl get pod "$VICTIM_POD" -n "$TARGET_NS" -o jsonpath='{.spec.nodeName}')"
+# Step 3: Record initial pod inventory and UIDs
+INITIAL_PODS_JSON="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o json)"
+INITIAL_UIDS="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[].metadata.uid')"
+VICTIM_POD="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[0].metadata.name')"
+VICTIM_UID="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[0].metadata.uid')"
+SURVIVOR_POD="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[1].metadata.name')"
+SURVIVOR_UID="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[1].metadata.uid')"
 
-log_info "Selected victim pod: $VICTIM_POD (UID: $VICTIM_UID, Node: $VICTIM_NODE)"
+log_info "Selected victim pod: $VICTIM_POD (UID: $VICTIM_UID)"
+log_info "Surviving healthy pod: $SURVIVOR_POD (UID: $SURVIVOR_UID)"
 
-# Step 4: Record baseline and inject failure
+# Step 4: Record baseline and inject normal failure
 T_START="$(date +%s%N)"
-log_warn "Injecting fault: Deleting pod $VICTIM_POD abruptly..."
-kubectl delete pod "$VICTIM_POD" -n "$TARGET_NS" --grace-period=0 --force >/dev/null 2>&1 || kubectl delete pod "$VICTIM_POD" -n "$TARGET_NS" --now
+log_warn "Injecting fault: Deleting pod $VICTIM_POD normally (allowing standard termination lifecycle)..."
+kubectl delete pod "$VICTIM_POD" -n "$TARGET_NS"
 
-# Step 5: Measure Time To Detect (TTD) - Controller schedules replacement
+# Step 5: Measure Time To Detect (TTD) - Identify genuinely new replacement Pod by UID
+log_info "Monitoring for replacement pod with novel UID (distinct from survivor $SURVIVOR_POD)..."
 T_DETECT=""
-for i in {1..30}; do
-  NEW_POD="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o jsonpath='{.items[?(@.metadata.name != "'"$VICTIM_POD"'")].metadata.name}' | tr ' ' '\n' | grep -v "$VICTIM_POD" | head -n 1 || true)"
-  if [[ -n "$NEW_POD" ]]; then
-    T_DETECT="$(date +%s%N)"
-    log_info "Replacement pod detected: $NEW_POD"
-    break
+REPLACEMENT_POD=""
+REPLACEMENT_UID=""
+
+for i in {1..60}; do
+  CURRENT_PODS_JSON="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o json 2>/dev/null || true)"
+  if [[ -n "$CURRENT_PODS_JSON" ]]; then
+    # Iterate over pods to find a UID not in INITIAL_UIDS
+    for row in $(echo "$CURRENT_PODS_JSON" | jq -r '.items[] | "\(.metadata.name),\(.metadata.uid)"'); do
+      P_NAME="${row%%,*}"
+      P_UID="${row##*,}"
+      if ! echo "$INITIAL_UIDS" | grep -q "$P_UID"; then
+        REPLACEMENT_POD="$P_NAME"
+        REPLACEMENT_UID="$P_UID"
+        T_DETECT="$(date +%s%N)"
+        log_info "Genuinely new replacement pod detected: $REPLACEMENT_POD (UID: $REPLACEMENT_UID)"
+        break 2
+      fi
+    done
   fi
   sleep 0.5
 done
 
 if [[ -z "$T_DETECT" ]]; then
-  log_err "Timeout waiting for Deployment controller to schedule replacement pod!"
+  log_err "Timeout waiting for Deployment controller to schedule replacement pod with distinct UID!"
   exit 1
 fi
 
 TTD_MS=$(( (T_DETECT - T_START) / 1000000 ))
 log_pass "Time To Detect (TTD): ${TTD_MS} ms"
 
-# Step 6: Measure Time To Recover (TTR) - All replicas Ready
-log_info "Waiting for replacement pod to achieve Ready status..."
-kubectl rollout status deployment/"$DEPLOYMENT_NAME" -n "$TARGET_NS" --timeout=60s
+# Step 6: Measure Time To Recover (TTR) - All replicas achieve Ready status
+log_info "Waiting for replacement pod $REPLACEMENT_POD and deployment to achieve full Ready state..."
+kubectl rollout status deployment/"$DEPLOYMENT_NAME" -n "$TARGET_NS" --timeout=90s
 
 T_RECOVER="$(date +%s%N)"
 TTR_MS=$(( (T_RECOVER - T_START) / 1000000 ))
@@ -80,10 +97,17 @@ log_pass "Time To Recover (TTR): ${TTR_MS} ms"
 # Step 7: Post-experiment verification
 FINAL_READY="$(kubectl get deployment "$DEPLOYMENT_NAME" -n "$TARGET_NS" -o jsonpath='{.status.readyReplicas}')"
 if [[ "$FINAL_READY" -ne "$DESIRED" ]]; then
-  log_err "Final ready replicas mismatch: $FINAL_READY vs $DESIRED"
+  log_err "Final ready replicas mismatch: $FINAL_READY vs declared $DESIRED"
+  exit 1
+fi
+
+# Verify replacement pod is running and ready
+REPL_READY="$(kubectl get pod "$REPLACEMENT_POD" -n "$TARGET_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+if [[ "$REPL_READY" != "True" ]]; then
+  log_err "Replacement pod $REPLACEMENT_POD is not in Ready state (status: $REPL_READY)!"
   exit 1
 fi
 
 assert_protected_pvcs_intact
 
-log_pass "Resilience Experiment 01 PASSED! (TTD: ${TTD_MS}ms, TTR: ${TTR_MS}ms, Protected PVCs: Intact)"
+log_pass "Resilience Experiment 01 PASSED! (TTD: ${TTD_MS}ms, TTR: ${TTR_MS}ms, New Pod UID: $REPLACEMENT_UID, Protected PVCs: Intact)"

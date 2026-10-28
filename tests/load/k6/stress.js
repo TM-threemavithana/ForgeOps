@@ -1,18 +1,19 @@
-import { sleep } from 'k6';
 import { DEFAULT_TARGET_URL, DEFAULT_ENDPOINT, executeRequest } from './common.js';
 
 export const options = {
     scenarios: {
         bounded_stress: {
-            executor: 'ramping-vus',
-            startVUs: 2,
+            executor: 'ramping-arrival-rate',
+            startRate: 5,
+            timeUnit: '1s',
+            preAllocatedVUs: 10,
+            maxVUs: 25, // Bounded at strictly max 25 VUs (protects workstation cgroup)
             stages: [
-                { duration: '10s', target: 10 }, // Ramp to 10 VUs
-                { duration: '20s', target: 20 }, // Step to 20 VUs
-                { duration: '20s', target: 25 }, // Bounded peak at 25 VUs (workstation safe)
-                { duration: '10s', target: 0 },  // Recovery ramp down
+                { duration: '15s', target: 10 }, // Ramp to 10 req/s
+                { duration: '25s', target: 16 }, // Step to 16 req/s
+                { duration: '25s', target: 20 }, // Bounded peak at strictly 20 req/s ceiling
+                { duration: '15s', target: 2 },  // Recovery ramp down
             ],
-            gracefulRampDown: '5s',
         },
     },
     thresholds: {
@@ -28,5 +29,4 @@ export const options = {
 export default function () {
     const url = `${DEFAULT_TARGET_URL}${DEFAULT_ENDPOINT}`;
     executeRequest(url, 200);
-    sleep(0.05);
 }

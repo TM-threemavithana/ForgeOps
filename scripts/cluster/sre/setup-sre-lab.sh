@@ -22,7 +22,18 @@ log_info "Starting deployment of disposable SRE lab fixture in '$DISPOSABLE_NAME
 # Step 1: Preflight checks
 run_sre_preflight_guards "$DISPOSABLE_NAMESPACE"
 
-# Step 2: Apply manifests
+# Step 2: Ensure namespace exists and inject dynamically generated ephemeral credentials
+log_info "Creating namespace and generating ephemeral database credentials..."
+kubectl apply -f "${REPO_ROOT}/platform/sre-lab/namespace.yaml"
+
+EPHEMERAL_DB_PASS="$(openssl rand -hex 16)"
+log_info "Injecting dynamically generated ephemeral credentials into sre-api-secret..."
+kubectl create secret generic sre-api-secret \
+  -n "$DISPOSABLE_NAMESPACE" \
+  --from-literal=SPRING_DATASOURCE_PASSWORD="$EPHEMERAL_DB_PASS" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Step 3: Apply remaining Kustomize manifests from platform/sre-lab
 log_info "Applying Kustomize manifests from platform/sre-lab..."
 kubectl apply -k "${REPO_ROOT}/platform/sre-lab"
 

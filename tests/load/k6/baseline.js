@@ -1,12 +1,14 @@
-import { sleep } from 'k6';
 import { DEFAULT_TARGET_URL, DEFAULT_ENDPOINT, executeRequest } from './common.js';
 
 export const options = {
     scenarios: {
         baseline: {
-            executor: 'constant-vus',
-            vus: Number(__ENV.VUS || 5),
+            executor: 'constant-arrival-rate',
+            rate: 10, // 10 requests per second (well below 20 req/s ceiling)
+            timeUnit: '1s',
             duration: __ENV.DURATION || '45s',
+            preAllocatedVUs: 5,
+            maxVUs: 10,
         },
     },
     thresholds: {
@@ -18,5 +20,4 @@ export const options = {
 export default function () {
     const url = `${DEFAULT_TARGET_URL}${DEFAULT_ENDPOINT}`;
     executeRequest(url, 200);
-    sleep(0.2);
 }

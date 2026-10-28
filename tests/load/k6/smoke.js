@@ -1,12 +1,14 @@
-import { sleep } from 'k6';
 import { DEFAULT_TARGET_URL, DEFAULT_ENDPOINT, executeRequest } from './common.js';
 
 export const options = {
     scenarios: {
         smoke: {
-            executor: 'constant-vus',
-            vus: 1,
+            executor: 'constant-arrival-rate',
+            rate: 2, // 2 requests per second
+            timeUnit: '1s',
             duration: '20s',
+            preAllocatedVUs: 1,
+            maxVUs: 2,
         },
     },
     thresholds: {
@@ -18,5 +20,4 @@ export const options = {
 export default function () {
     const url = `${DEFAULT_TARGET_URL}${DEFAULT_ENDPOINT}`;
     executeRequest(url, 200);
-    sleep(0.5);
 }
