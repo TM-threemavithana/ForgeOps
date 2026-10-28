@@ -25,11 +25,12 @@ This demo script provides a structured, professional 3 to 5-minute technical wal
 ### Phase 1: Architecture & Cluster Baseline (0:00 - 0:45)
 - **Speaker Narration:**
   > "Hello, I’m walking through ForgeOps, a production-inspired platform engineering lab built to model the full software delivery and operational lifecycle on a local developer workstation without paid cloud dependencies.
-  > Here in our Kind Kubernetes cluster, we have our core workloads running across strictly defined namespaces: `forgeops-dev` for the microservice and PostgreSQL, `forgeops-gitops` for Argo CD, and `forgeops-observability` hosting Prometheus, Grafana, Loki, Alloy, and Tempo."
+  > Here in our Kind Kubernetes cluster, we have our core workloads running across strictly defined namespaces: `forgeops-dev` for the microservice and PostgreSQL, `argocd` for Argo CD, and `forgeops-observability` hosting Prometheus, Grafana, Loki, Alloy, and Tempo."
 - **Terminal Command:**
   ```bash
   kubectl get nodes -o wide
   kubectl get pods -n forgeops-dev
+  kubectl get pods -n argocd
   kubectl get pods -n forgeops-observability
   ```
 - **Key Visual:** All pods in `Running` state, zero restarts, clear separation of namespaces.
@@ -54,7 +55,7 @@ This demo script provides a structured, professional 3 to 5-minute technical wal
 ### Phase 3: GitOps & Three-Pillar Correlated Observability (1:30 - 2:30)
 - **Speaker Narration:**
   > "Deployment is governed by Argo CD using declarative GitOps. Rather than CI pushing directly to the cluster, Argo CD continuously pulls desired state from Git.
-  > In our observability stack, we’ve unified metrics, logs, and traces. When an HTTP request hits our Spring Boot API, OpenTelemetry injects a W3C trace context.
+  > In our observability stack, we’ve unified metrics, logs, and traces. When an HTTP request hits our Spring Boot API, OpenTelemetry injects a W3C trace context, routing spans to Grafana Alloy's OTLP receiver which forwards to Tempo, while Alloy tails logs into Loki.
   > Inside Grafana, if an alert fires in Prometheus, an engineer clicks directly from the metric spike into the Tempo distributed trace, and with one click jumps to the exact Loki log lines bearing that `trace_id`."
 - **Browser Navigation:**
   1. Open Grafana (`http://localhost:3000`).
@@ -65,9 +66,9 @@ This demo script provides a structured, professional 3 to 5-minute technical wal
 
 ### Phase 4: SRE Chaos Injection & Automated Disaster Recovery (2:30 - 3:45)
 - **Speaker Narration:**
-  > "In Gate G12, we injected five chaos experiments under k6 load—including worker CPU exhaustion and sudden Pod termination. We recorded 2,275 HTTP requests with zero errors, and measured replica recovery in 52 seconds.
-  > In Gate G13, we engineered our PostgreSQL disaster recovery pipeline. Instead of running high-risk restores over production tables, our automation provisions a fresh, isolated database in `forgeops-dr-lab`, executes `pg_restore` with strict error handling, and validates relational integrity and BCrypt authentication.
-  > In our verified rehearsal, database restore took 252 milliseconds, achieving full end-to-end API recovery in 89 seconds."
+  > "In Gate G12, we executed five progressive k6 load scenarios and five controlled failure experiments—including stateless Pod termination, readiness probe failure injection, invalid image rollout guards, bounded resource pressure, and declarative drift reconciliation. Under our rate-governed port-forward, we recorded 2,275 HTTP requests with zero errors (p50: 4.21 ms, p95: 6.82 ms), and measured replacement pod readiness in 52.86 seconds.
+  > In Gate G13, we engineered our PostgreSQL disaster recovery pipeline using discrete point-in-time logical backups. Instead of running high-risk restores over production tables, our automation provisions a fresh, isolated database in `forgeops-dr-lab`, executes `pg_restore` with strict error handling, and validates relational integrity and BCrypt authentication.
+  > In our verified rehearsal, database restore command duration was 252 milliseconds, achieving full end-to-end API service recovery in 89.29 seconds."
 - **Terminal Execution:**
   ```bash
   python3 scripts/test_g13_dr_hardening.py
@@ -94,3 +95,4 @@ When recording or preparing presentation media for this project, capture the fol
 - [ ] **Artifact 4 (Screenshot):** Tempo trace view showing span breakdown linked to Loki logs via Trace-to-Logs.
 - [ ] **Artifact 5 (Screenshot):** Terminal output of `rehearse-dr.sh` showing SHA-256 backup verification, 252 ms restore, and zero PVC impact.
 - [ ] **Artifact 6 (Video - Optional):** 3-minute screen recording following the narration steps above.
+

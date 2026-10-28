@@ -19,14 +19,14 @@ The bullet points below are tailored for specific technical roles. They use quan
 ## 2. Role: Site Reliability Engineer (SRE) / Performance Engineer
 
 * **Chaos Engineering & Resilience Testing:**
-  * Designed and executed 5 progressive k6 load-testing scenarios generating 2,275 HTTP requests with 0.00% error rate, measuring p95 latencies and establishing baseline throughput limits.
-  * Orchestrated 5 controlled failure-injection experiments (Pod crash, CPU starvation, memory exhaustion, DB network partition, ingress failure), measuring automated replica recovery in 52.86 seconds.
+  * Designed and executed 5 progressive k6 load-testing scenarios generating 2,275 HTTP requests with 0.00% error rate (p50: 4.21 ms, p95: 6.82 ms, p99: 28.10 ms) under a rate-governed single-backend port-forward ceiling (20 req/s, max 25 VUs).
+  * Orchestrated 5 controlled failure-injection experiments (stateless Pod termination, readiness probe failure injection, invalid image rollout guards, bounded resource pressure, and declarative drift reconciliation), measuring automated replacement pod readiness in 52.86 seconds.
 * **Three-Pillar Correlated Observability:**
-  * Implemented an end-to-end observability stack integrating Prometheus, Alertmanager, Grafana, Loki (via Alloy), and Grafana Tempo (via OpenTelemetry).
+  * Implemented an end-to-end observability stack integrating Prometheus, Alertmanager, Grafana, Loki (via Alloy), and Grafana Tempo (via OpenTelemetry and Alloy OTLP pipelines).
   * Configured W3C distributed trace context propagation in a Java/Spring Boot microservice, enabling one-click Grafana Trace-to-Logs correlation by linking span IDs directly to indexed Loki log records.
 * **Disaster Recovery & Data Resilience:**
-  * Engineered an automated PostgreSQL backup and recovery pipeline utilizing SHA-256 manifest verification and isolated disposable target restoration (`forgeops-dr-lab`).
-  * Executed a live disaster recovery rehearsal achieving a 252 ms restore command time, an end-to-end API service RTO of 89.29 seconds, and zero data corruption or baseline PVC disruption.
+  * Engineered an automated PostgreSQL disaster recovery pipeline utilizing discrete point-in-time logical backups (`pg_dump -Fc`) with SHA-256 manifest verification and isolated disposable target restoration (`forgeops-dr-lab`).
+  * Executed a live disaster recovery rehearsal achieving a 252 ms restore command time, an end-to-end API service RTO of 89.29 seconds, a 12-second drill backup age, and preserving 100% of baseline PersistentVolumeClaims.
 
 ---
 
@@ -45,7 +45,7 @@ The bullet points below are tailored for specific technical roles. They use quan
 ## 4. Role: DevSecOps Engineer / Kubernetes Security Engineer
 
 * **Policy-as-Code & Container Hardening:**
-  * Implemented 10 Kyverno security policies in GitHub Actions CI auditing 100% of Helm-rendered application Pod templates against CIS Kubernetes benchmarks (enforcing non-root execution, read-only root filesystems, privilege escalation prevention, and dropping Linux capabilities).
+  * Implemented 10 Kyverno security policies in GitHub Actions CI auditing 100% of Helm-rendered application Pod templates against container security controls (enforcing non-root execution, read-only root filesystems, privilege escalation prevention, and dropping all Linux capabilities).
   * Validated policies across 20 positive and negative test fixtures, failing closed on security regressions prior to manifest merge.
 * **Encrypted Secrets Management:**
   * Deployed Mozilla SOPS with `age` asymmetric encryption for GitOps secrets management, utilizing a dual-recipient key escrow architecture (`Primary Operational` + `Recovery Escrow`).
@@ -59,7 +59,8 @@ The bullet points below are tailored for specific technical roles. They use quan
 ## 5. Concise Single-Section Summary (For Generalist Resumes)
 
 * **Platform Engineer / DevOps Engineer — ForgeOps (Capstone Project)**
-  * Engineered an enterprise-grade, self-hosted platform engineering lab utilizing Kubernetes (Kind), Helm, Argo CD, Terraform, and Ansible to deliver a microservices-based task platform with zero paid cloud dependencies.
+  * Engineered a production-inspired, self-hosted platform engineering lab utilizing Kubernetes (Kind), Helm, Argo CD, Terraform, and Ansible to deliver a microservices-based task platform with zero paid cloud dependencies.
   * Implemented 7-stage GitHub Actions CI/CD with Trivy, Gitleaks, Kyverno Policy-as-Code (10 security policies), and SOPS + age dual-recipient encrypted secrets.
   * Deployed a three-pillar observability suite (Prometheus, Loki, Tempo, Alloy) featuring W3C distributed trace-to-log correlation in Grafana.
   * Conducted SRE chaos engineering and load testing (2,275 requests, 0% errors, 52s replica self-healing) and engineered an automated PostgreSQL DR pipeline achieving an 89s end-to-end RTO with zero production PVC data loss.
+

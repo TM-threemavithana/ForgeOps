@@ -39,7 +39,7 @@ The technical evolution of ForgeOps is governed by formal ADRs located under `do
 
 ### ADR-0001: Local Kind Kubernetes Cluster Over Minikube / K3s
 - **Decision:** Selected `kind` (Kubernetes in Docker) as the primary local cluster engine.
-- **Rationale:** Kind runs multi-node control planes and workers inside standard Docker containers. This enables fast teardown, pinned node images (`v1.29.2`), and reproducible network bridges without Hyper-V or VirtualBox overhead.
+- **Rationale:** Kind runs multi-node control planes and workers inside standard Docker containers. This enables fast teardown, pinned node images (`v1.34.11`), and reproducible network bridges without Hyper-V or VirtualBox overhead.
 - **Trade-off:** Kind's default `kindnet` CNI implements basic host-local IPAM and iptables routing but lacks native eBPF or NetworkPolicy enforcement. NetworkPolicy resources are verified statically rather than actively dropped at the kernel layer.
 
 ### ADR-0003: Helm for Packaging, Argo CD for GitOps Synchronization
@@ -87,9 +87,9 @@ The technical evolution of ForgeOps is governed by formal ADRs located under `do
 ```
 
 1. **Ingress & Tracing:** Traffic hits the ForgeTasks API. The OpenTelemetry Java instrumentation agent intercepts the request, generates a W3C trace context, and attaches `trace_id` to the logging MDC.
-2. **Log & Trace Export:**
-   - The application writes structured JSON logs to stdout. Grafana Alloy scrapes container logs, extracts Kubernetes labels, strips sensitive data, and streams them to Grafana Loki.
-   - The OpenTelemetry agent exports trace spans via gRPC directly to Grafana Tempo (`:4317`).
+2. **Log & Trace Export Pipeline:**
+   - The OpenTelemetry Java agent exports trace spans (gRPC :4317 / HTTP :4318) to Grafana Alloy's OTLP receiver (`otelcol.receiver.otlp`), which forwards them directly to Grafana Tempo (`:4317`).
+   - The application writes structured JSON logs to stdout. Grafana Alloy tails pod logs from the Kubernetes API (`loki.source.kubernetes`), strips sensitive data, and streams them to Grafana Loki (`:3100`).
 3. **Database Transactions:** The API queries PostgreSQL over a managed connection pool. Data is committed to an ext4 volume backed by a persistent Kubernetes `HostPath` volume.
 4. **Metrics Scraping:** Prometheus scrapes the Spring Boot Actuator endpoint (`/actuator/prometheus`) every 15 seconds. If latency exceeds the 500 ms threshold or error rates rise, Alertmanager triggers alert states.
 

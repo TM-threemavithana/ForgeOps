@@ -44,7 +44,7 @@ In early iterations of Gate G12, running unconstrained k6 load tests caused high
 ### 3. Remediation & Long-Term Controls
 1. **Arrival-Rate Throttling:** Configured k6 scenarios with an explicit rate ceiling: maximum 20 requests/second and a cap of 25 Virtual Users (VUs).
 2. **Dedicated Target Verification:** Updated `tests/load/run-k6.sh` to mandate an explicit port-forward on port `8082` pointing exclusively to `forgeops-sre-lab`. The script checks endpoint headers to ensure load is never inadvertently directed at the production database or active dev microservice.
-3. **Results:** After rate governance was applied, the system processed **2,275 HTTP requests across 5 scenarios with zero errors (0.00% error rate)** and a median p50 latency of 2.1 ms.
+3. **Results:** After rate governance was applied, the system processed **2,275 HTTP requests across 5 scenarios with zero errors (0.00% error rate)**, recording aggregate latencies of p50: 4.21 ms, p95: 6.82 ms, and p99: 28.10 ms under single-backend port-forward constraints.
 
 ---
 
@@ -77,4 +77,5 @@ When designing Gate G14 Policy-as-Code, the initial proposal considered deployin
 ### 3. Remediation & Long-Term Controls
 1. **Shift-Left Static Validation:** Decoupled Kyverno from the Kubernetes runtime. We integrated the Kyverno CLI (`kyverno apply`) directly into the GitHub Actions CI pipeline and local test scripts.
 2. **Complete Coverage:** Kyverno audits 100% of Helm-rendered Kubernetes manifests across 10 security policies prior to code merge.
-3. **Outcome:** Achieved 100% policy enforcement against CIS benchmarks without consuming a single megabyte of cluster RAM or introducing cluster-deadlock failure modes.
+3. **Outcome:** Achieved 100% policy enforcement across 10 core container security controls without consuming a single megabyte of cluster RAM or introducing cluster-deadlock failure modes.
+

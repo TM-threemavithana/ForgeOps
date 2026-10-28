@@ -39,14 +39,15 @@ flowchart TD
                 Graf["Grafana Dashboards (127.0.0.1:13000)"]
                 AM["Alertmanager (Alert Dispatcher)"]
                 Loki["Grafana Loki (Log Chunks)"]
-                Alloy["Grafana Alloy (DaemonSet Log Agent)"]
+                Alloy["Grafana Alloy (Log & Trace Collector)"]
                 Tempo["Grafana Tempo (Trace Ingestion)"]
 
                 Prom --> Graf
                 Loki --> Graf
                 Tempo --> Graf
                 Prom --> AM
-                Alloy -->|Streams Logs| Loki
+                Alloy -->|OTLP Export (gRPC :4317)| Tempo
+                Alloy -->|Streams Logs (HTTP :3100)| Loki
             end
         end
 
@@ -69,9 +70,9 @@ flowchart TD
     Repo -->|Argo CD syncs manifests| ArgoCD
     ArgoCD -->|manages| RehAPI
 
-    RehAPI -.->|OTLP Traces| Tempo
+    RehAPI -.->|"OTLP Traces (gRPC :4317 / HTTP :4318)"| Alloy
     RehAPI -.->|Actuator Metrics| Prom
-    RehAPI -.->|Stdout ECS Logs| Alloy
+    RehAPI -.->|Stdout JSON Logs| Alloy
 ```
 
 ---
@@ -162,7 +163,7 @@ flowchart LR
             O2["Grafana (127.0.0.1:13000)"]
             O3["Loki (UID: 23468366...)"]
             O4["Tempo (UID: 092b6655...)"]
-            O5["Grafana Alloy (DaemonSet)"]
+            O5["Grafana Alloy (Deployment)"]
         end
     end
 ```
@@ -219,25 +220,27 @@ flowchart LR
         App -->|Auto-instruments| OTel
     end
 
-    subgraph TelemetryPipelines["Telemetry Collectors"]
-        Alloy["Grafana Alloy DaemonSet Agent"]
-        MDC -->|Stdout ECS JSON| Alloy
+    subgraph TelemetryPipelines["Telemetry Pipelines (Grafana Alloy)"]
+        AlloyOTLP["Alloy OTLP Receiver (otelcol.receiver.otlp :4317/:4318)"]
+        AlloyLogs["Alloy Log Tailer (loki.source.kubernetes)"]
 
-        TempoEngine["Grafana Tempo Engine (Port 4317 OTLP)"]
-        OTel -->|gRPC OTLP Traces| TempoEngine
+        OTel -->|"gRPC / HTTP OTLP"| AlloyOTLP
+        MDC -->|"Stdout JSON Stream"| AlloyLogs
     end
 
     subgraph Storage["Storage Backends"]
-        LokiChunks[("Loki Chunks (Local Path PVC)")]
-        TempoBlocks[("Tempo Trace Blocks (Local Path PVC)")]
+        TempoEngine["Grafana Tempo Engine (gRPC :4317)"]
+        TempoBlocks[("Tempo Trace Blocks (HostPath PVC)")]
+        LokiChunks[("Loki Chunks (HostPath PVC)")]
 
-        Alloy -->|Push LogQL Streams| LokiChunks
+        AlloyOTLP -->|"otelcol.exporter.otlp"| TempoEngine
         TempoEngine --> TempoBlocks
+        AlloyLogs -->|"loki.write HTTP :3100"| LokiChunks
     end
 
     subgraph GrafanaExplore["Grafana Explore UI"]
         UI["Unified Correlation View"]
-        LokiChunks -->|LogQL by Request-ID| UI
+        LokiChunks -->|LogQL by Request-ID / Trace-ID| UI
         TempoBlocks -->|TraceID Lookup| UI
         UI -.->|tracesToLogsV2 Navigation Bridge| UI
     end
@@ -332,3 +335,4 @@ flowchart TD
         PrivEscrow -->|Independent Decryption| K8sSecret
     end
 ```
+
