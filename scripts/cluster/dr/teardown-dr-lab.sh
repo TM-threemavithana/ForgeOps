@@ -45,17 +45,28 @@ if [[ "$DISPOSABLE_LABEL" != "true" || "$ENV_LABEL" != "dr-lab" ]]; then
   exit 1
 fi
 
-# Verify namespace UID if recorded during setup
-CURRENT_UID="$(kubectl get ns "$TARGET_NS" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
-if [[ -f "/tmp/forgeops-dr-lab.ns-uid" ]]; then
-  EXPECTED_UID="$(cat /tmp/forgeops-dr-lab.ns-uid | tr -d ' \r\n')"
-  if [[ -n "$EXPECTED_UID" && "$CURRENT_UID" != "$EXPECTED_UID" ]]; then
-    log_err "NAMESPACE IDENTITY MISMATCH: Current namespace UID '$CURRENT_UID' does not match recorded UID '$EXPECTED_UID'!"
-    log_err "Halting teardown to prevent terminating an unexpected namespace instance."
-    exit 1
-  fi
-  log_pass "Namespace UID verified: $CURRENT_UID"
+# Verify namespace UID recorded during setup (mandatory - never skipped)
+UID_FILE="${FORGEOPS_DR_UID_FILE:-/tmp/forgeops-dr-lab.ns-uid}"
+if [[ ! -f "$UID_FILE" ]]; then
+  log_err "CRITICAL REFUSAL: Missing recorded namespace UID file '$UID_FILE'!"
+  log_err "Teardown requires a valid recorded UID to confirm namespace identity. Halting teardown."
+  exit 1
 fi
+
+EXPECTED_UID="$(cat "$UID_FILE" | tr -d ' \r\n')"
+if [[ -z "$EXPECTED_UID" ]]; then
+  log_err "CRITICAL REFUSAL: Recorded namespace UID file '$UID_FILE' is empty!"
+  log_err "Teardown requires a non-empty recorded UID. Halting teardown."
+  exit 1
+fi
+
+CURRENT_UID="$(kubectl get ns "$TARGET_NS" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
+if [[ "$CURRENT_UID" != "$EXPECTED_UID" ]]; then
+  log_err "NAMESPACE IDENTITY MISMATCH: Current namespace UID '$CURRENT_UID' does not match recorded UID '$EXPECTED_UID'!"
+  log_err "Halting teardown to prevent terminating an unexpected namespace instance."
+  exit 1
+fi
+log_pass "Namespace UID verified: $CURRENT_UID"
 
 # Step 3: Complete resource inventory audit against allowlist
 log_info "Performing complete resource inventory audit in '$TARGET_NS' against allowlist..."
@@ -82,6 +93,12 @@ if [[ "$JOB_COUNT" -gt 0 ]]; then
   exit 1
 fi
 
+CRONJOB_COUNT="$(kubectl get cronjobs -n "$TARGET_NS" --no-headers 2>/dev/null | wc -l || echo 0)"
+if [[ "$CRONJOB_COUNT" -gt 0 ]]; then
+  log_err "UNEXPECTED RESOURCES: Found $CRONJOB_COUNT CronJob(s) in '$TARGET_NS'! Halting teardown."
+  exit 1
+fi
+
 ING_COUNT="$(kubectl get ingress -n "$TARGET_NS" --no-headers 2>/dev/null | wc -l || echo 0)"
 if [[ "$ING_COUNT" -gt 0 ]]; then
   log_err "UNEXPECTED RESOURCES: Found $ING_COUNT Ingress(es) in '$TARGET_NS'! Halting teardown."
@@ -93,6 +110,47 @@ DEP_LIST="$(kubectl get deployments -n "$TARGET_NS" -o jsonpath='{.items[*].meta
 for dep in $DEP_LIST; do
   if [[ "$dep" != "dr-source-db" && "$dep" != "dr-target-db" && "$dep" != "dr-api" ]]; then
     log_err "UNEXPECTED DEPLOYMENT: Found unapproved deployment '$dep' in '$TARGET_NS'! Preserving namespace and stopping."
+    exit 1
+  fi
+done
+
+# D: Check Services against strict allowlist (only dr-source-db, dr-target-db, dr-api permitted)
+SVC_LIST="$(kubectl get services -n "$TARGET_NS" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)"
+for svc in $SVC_LIST; do
+  if [[ "$svc" != "dr-source-db" && "$svc" != "dr-target-db" && "$svc" != "dr-api" ]]; then
+    log_err "UNEXPECTED SERVICE: Found unapproved service '$svc' in '$TARGET_NS'! Preserving namespace and stopping."
+    exit 1
+  fi
+done
+
+# E: Check Secrets against strict allowlist (dr-db-secret and standard ServiceAccount tokens)
+SECRET_NAMES="$(kubectl get secrets -n "$TARGET_NS" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)"
+for sec in $SECRET_NAMES; do
+  if [[ "$sec" == "dr-db-secret" ]]; then
+    continue
+  fi
+  SEC_TYPE="$(kubectl get secret "$sec" -n "$TARGET_NS" -o jsonpath='{.type}' 2>/dev/null || true)"
+  if [[ "$SEC_TYPE" == "kubernetes.io/service-account-token" || "$sec" == default-token-* || "$sec" == dr-serviceaccount-token-* ]]; then
+    continue
+  fi
+  log_err "UNEXPECTED SECRET: Found unapproved secret '$sec' (type '$SEC_TYPE') in '$TARGET_NS'! Preserving namespace and stopping."
+  exit 1
+done
+
+# F: Check ConfigMaps against strict allowlist (kube-root-ca.crt, dr-api-config)
+CM_LIST="$(kubectl get configmaps -n "$TARGET_NS" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)"
+for cm in $CM_LIST; do
+  if [[ "$cm" != "kube-root-ca.crt" && "$cm" != "dr-api-config" ]]; then
+    log_err "UNEXPECTED CONFIGMAP: Found unapproved configmap '$cm' in '$TARGET_NS'! Preserving namespace and stopping."
+    exit 1
+  fi
+done
+
+# G: Check ServiceAccounts against strict allowlist (default, dr-serviceaccount)
+SA_LIST="$(kubectl get serviceaccounts -n "$TARGET_NS" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)"
+for sa in $SA_LIST; do
+  if [[ "$sa" != "default" && "$sa" != "dr-serviceaccount" ]]; then
+    log_err "UNEXPECTED SERVICEACCOUNT: Found unapproved serviceaccount '$sa' in '$TARGET_NS'! Preserving namespace and stopping."
     exit 1
   fi
 done
@@ -116,7 +174,7 @@ if kubectl get ns "$TARGET_NS" >/dev/null 2>&1; then
   }
 fi
 
-rm -f /tmp/forgeops-dr-lab.ns-uid
+rm -f "$UID_FILE"
 
 # Step 7: Verify preservation of host backup archives
 if [[ -d "$DEFAULT_BACKUP_DIR" ]]; then

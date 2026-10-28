@@ -168,13 +168,37 @@ fi
 
 # Strict check: Target database MUST be fresh and empty before restoration
 log_info "Verifying target database '$TARGET_DB' is fresh and contains no existing application schema objects..."
-EXISTING_APP_TABLES="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "
+
+FRESHNESS_ERR_LOG="$(mktemp)"
+set +e
+EXISTING_APP_TABLES="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -A -c "
   SELECT count(*) FROM information_schema.tables 
   WHERE table_schema = 'public' 
   AND table_name IN ('accounts', 'projects', 'tasks', 'flyway_schema_history');
-" 2>/dev/null | xargs || true)"
+" 2>"$FRESHNESS_ERR_LOG")"
+FRESHNESS_QUERY_STATUS=$?
+set -e
 
-if [[ -n "$EXISTING_APP_TABLES" && "$EXISTING_APP_TABLES" -gt 0 ]]; then
+# Strip whitespace
+EXISTING_APP_TABLES="$(echo "$EXISTING_APP_TABLES" | tr -d ' \r\n\t')"
+
+if [[ "$FRESHNESS_QUERY_STATUS" -ne 0 ]]; then
+  log_err "DATABASE FRESHNESS QUERY FAILURE: psql query failed with exit code $FRESHNESS_QUERY_STATUS!"
+  cat "$FRESHNESS_ERR_LOG" >&2
+  rm -f "$FRESHNESS_ERR_LOG"
+  log_err "A failed query must never be interpreted as confirmation of an empty database."
+  exit 1
+fi
+rm -f "$FRESHNESS_ERR_LOG"
+
+# Validate that the result is a non-empty, non-negative integer
+if [[ -z "$EXISTING_APP_TABLES" ]] || [[ ! "$EXISTING_APP_TABLES" =~ ^[0-9]+$ ]]; then
+  log_err "DATABASE FRESHNESS QUERY CORRUPT: Expected non-negative integer from freshness query, received: '$EXISTING_APP_TABLES'!"
+  exit 1
+fi
+
+# Reject any count other than exactly 0
+if [[ "$EXISTING_APP_TABLES" -ne 0 ]]; then
   log_err "FRESH TARGET DATABASE REFUSAL: Target database '$TARGET_DB' already contains $EXISTING_APP_TABLES application table(s)!"
   log_err "Restoration requires a clean, empty destination database to prevent hybrid schema corruption."
   exit 1

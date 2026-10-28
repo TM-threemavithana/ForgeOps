@@ -34,14 +34,31 @@ if [[ "$MODE" == "--validate-only" || "$MODE" == "--dry-run" ]]; then
   exit 0
 fi
 
-# Step 2: Ensure namespace exists and record namespace UID
-log_info "Ensuring namespace '$TARGET_NS' exists..."
-kubectl apply -f "${REPO_ROOT}/platform/dr-lab/namespace.yaml"
+# Step 2: Reject pre-existing unowned lab namespaces; create or verify ownership
+if kubectl get ns "$TARGET_NS" >/dev/null 2>&1; then
+  log_info "Namespace '$TARGET_NS' already exists; verifying ownership labels..."
+  DISP_LABEL="$(kubectl get ns "$TARGET_NS" -o jsonpath='{.metadata.labels.forgeops\.dev/disposable}' 2>/dev/null || true)"
+  ENV_LABEL="$(kubectl get ns "$TARGET_NS" -o jsonpath='{.metadata.labels.forgeops\.dev/environment}' 2>/dev/null || true)"
+  if [[ "$DISP_LABEL" != "true" || "$ENV_LABEL" != "dr-lab" ]]; then
+    log_err "CRITICAL SAFETY REFUSAL: Pre-existing namespace '$TARGET_NS' is unowned or lacks required disposable labels (disposable='$DISP_LABEL', env='$ENV_LABEL')!"
+    log_err "Refusing setup to protect existing unverified namespace."
+    exit 1
+  fi
+  log_pass "Pre-existing namespace '$TARGET_NS' verified as an authorized disposable lab instance."
+else
+  log_info "Creating namespace '$TARGET_NS' from declarative manifest..."
+  kubectl apply -f "${REPO_ROOT}/platform/dr-lab/namespace.yaml"
+fi
 
 NS_UID="$(kubectl get ns "$TARGET_NS" -o jsonpath='{.metadata.uid}')"
-echo "$NS_UID" > /tmp/forgeops-dr-lab.ns-uid
-chmod 0600 /tmp/forgeops-dr-lab.ns-uid
-log_info "Recorded disposable lab namespace UID: $NS_UID"
+if [[ -z "$NS_UID" ]]; then
+  log_err "Failed to obtain namespace UID for '$TARGET_NS'!"
+  exit 1
+fi
+UID_FILE="${FORGEOPS_DR_UID_FILE:-/tmp/forgeops-dr-lab.ns-uid}"
+echo "$NS_UID" > "$UID_FILE"
+chmod 0600 "$UID_FILE"
+log_info "Recorded disposable lab namespace UID ($NS_UID) in '$UID_FILE'."
 
 # Step 3: Generate dynamic ephemeral credentials & Create Secret FIRST (prevents race condition)
 log_info "Generating dynamic ephemeral credentials and creating Secret BEFORE deploying workloads..."

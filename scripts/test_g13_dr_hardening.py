@@ -12,6 +12,9 @@ import glob
 import tempfile
 import json
 import hashlib
+import re
+import stat
+import bcrypt
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -281,6 +284,443 @@ def test_makefile_targets():
         assert res.returncode == 0, f"make -n {t} failed"
         print(f"  [PASS] make -n {t} syntax valid.")
 
+def test_synthetic_account_authentication_bcrypt():
+    print("--> Test 14: Verifying synthetic seed credentials and authentic BCrypt matching...")
+    seed_sql = os.path.join(REPO_ROOT, "platform/dr-lab/synthetic-seed.sql")
+    with open(seed_sql, "r") as f:
+        content = f.read()
+
+    # Extract BCrypt hashes
+    pattern = re.compile(r"\('([^']+)',\s*'([^']+)',\s*'(\$2[ab]\$12\$[^']+)',\s*'([^']+)'\)")
+    matches = pattern.findall(content)
+    assert len(matches) >= 2, f"Expected at least 2 synthetic accounts, found {len(matches)}"
+
+    for account_id, username, hash_val, role in matches:
+        assert username in ("dr_admin", "dr_user"), f"Unexpected user: {username}"
+        assert role in ("ROLE_ADMIN", "ROLE_USER"), f"Unexpected role: {role}"
+        # Positive authentication
+        assert bcrypt.checkpw(b"Password123!", hash_val.encode("utf-8")), f"Positive authentication failed for {username}"
+        # Negative authentication
+        assert not bcrypt.checkpw(b"WrongPassword", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
+        assert not bcrypt.checkpw(b"InvalidPassword123!", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
+        assert not bcrypt.checkpw(b"", hash_val.encode("utf-8")), f"Negative authentication failed for {username}"
+
+    # Verify Java test exists
+    java_test = os.path.join(REPO_ROOT, "apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/SyntheticAccountAuthenticationTest.java")
+    assert os.path.exists(java_test), f"Missing Java authentication test: {java_test}"
+    print("  [PASS] Synthetic accounts authentic BCrypt hashes verified for positive and negative authentication.")
+
+def test_freshness_query_negative_blocking_executable():
+    print("--> Test 15: Executable negative testing: proving failed freshness query blocks pg_restore...")
+    with tempfile.TemporaryDirectory() as td:
+        bin_dir = os.path.join(td, "bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        trace_file = os.path.join(td, "pg_restore_trace.log")
+
+        # Mock pg_restore
+        pg_restore_mock = os.path.join(bin_dir, "pg_restore")
+        with open(pg_restore_mock, "w") as f:
+            f.write(f"""#!/usr/bin/env bash
+if [[ "$1" == "--version" ]]; then
+  echo "pg_restore (PostgreSQL) 16.2"
+  exit 0
+fi
+if [[ "$*" == *"-l "* ]]; then
+  echo "TABLE public accounts forgeuser"
+  echo "TABLE public projects forgeuser"
+  echo "TABLE public tasks forgeuser"
+  echo "TABLE public flyway_schema_history forgeuser"
+  exit 0
+fi
+echo "RESTORE_EXECUTED" >> "{trace_file}"
+exit 0
+""")
+        os.chmod(pg_restore_mock, os.stat(pg_restore_mock).st_mode | stat.S_IEXEC)
+
+        # Mock kubectl
+        kubectl_mock = os.path.join(bin_dir, "kubectl")
+        with open(kubectl_mock, "w") as f:
+            f.write("""#!/usr/bin/env bash
+if [[ "$*" == *"config current-context"* ]]; then
+  echo "kind-forgeops"
+  exit 0
+fi
+if [[ "$*" == *"cluster-info"* ]]; then
+  exit 0
+fi
+if [[ "$*" == *"get pvc -n forgeops-dr-lab"* ]]; then
+  exit 0
+fi
+if [[ "$*" == *"get pvc"* ]]; then
+  case "$*" in
+    *postgres-storage-forgetasks-db-0*) echo "84853fb3-4d13-43a9-bc62-973c3be3c90c" ;;
+    *postgres-storage-forgetasks-rehearsal-db-0*) echo "b5ea8ec9-47e8-4979-afdb-621f2e3c63b8" ;;
+    *prometheus-g09-monitoring-kube-promet-prometheus-db-prometheus-g09-monitoring-kube-promet-prometheus-0*) echo "cd64e090-2c69-49b3-a389-de5841ce06d6" ;;
+    *storage-loki-0*) echo "23468366-7394-4f2d-be1f-2a640d6f12c5" ;;
+    *storage-tempo-0*) echo "092b6655-6617-467c-b546-69e201a0ba8a" ;;
+    *) exit 0 ;;
+  esac
+  exit 0
+fi
+if [[ "$*" == *"get pods -n forgeops-dr-lab -l app=dr-target-db"* ]]; then
+  echo "dr-target-db-pod"
+  exit 0
+fi
+if [[ "$*" == *"get pod dr-target-db-pod"* ]]; then
+  if [[ "$*" == *"ownerReferences"* ]]; then
+    echo "dr-target-db"
+    exit 0
+  fi
+  if [[ "$*" == *"uid"* ]]; then
+    echo "target-uid-1111"
+    exit 0
+  fi
+  if [[ "$*" == *"role"* ]]; then
+    echo "target"
+    exit 0
+  fi
+fi
+if [[ "$*" == *"get pods -n forgeops-dr-lab -l app=dr-source-db"* ]]; then
+  echo "source-uid-2222"
+  exit 0
+fi
+if [[ "$*" == *"get secrets -n forgeops-dr-lab"* ]]; then
+  echo "dr-db-secret"
+  exit 0
+fi
+if [[ "$*" == *"get secret dr-db-secret"* ]]; then
+  echo "cGFzc3dvcmQ=" # base64 "password"
+  exit 0
+fi
+if [[ "$*" == *"port-forward"* ]]; then
+  sleep 30 &
+  exit 0
+fi
+exit 0
+""")
+        os.chmod(kubectl_mock, os.stat(kubectl_mock).st_mode | stat.S_IEXEC)
+
+        # Mock psql
+        psql_mock = os.path.join(bin_dir, "psql")
+        with open(psql_mock, "w") as f:
+            f.write("""#!/usr/bin/env bash
+if [[ "$*" == *"SELECT 1;"* ]] || [[ "$*" == *"pg_database"* ]]; then
+  echo "1"
+  exit 0
+fi
+if [[ "$*" == *"information_schema.tables"* ]]; then
+  case "${TEST_MOCK_FRESHNESS_MODE:-}" in
+    query_failure)
+      echo "psql: error: connection lost during query" >&2
+      exit 2
+      ;;
+    non_empty)
+      echo "4"
+      exit 0
+      ;;
+    corrupt)
+      echo "unexpected_corrupt_text"
+      exit 0
+      ;;
+    clean)
+      echo "0"
+      exit 0
+      ;;
+  esac
+fi
+echo "1"
+exit 0
+""")
+        os.chmod(psql_mock, os.stat(psql_mock).st_mode | stat.S_IEXEC)
+
+        # Create valid dummy dump and manifest
+        dump_file = os.path.join(td, "test.dump")
+        manifest_file = os.path.join(td, "test.manifest.json")
+        payload = b"PGDMP_valid_custom_dump_header_data"
+        with open(dump_file, "wb") as f:
+            f.write(payload)
+        sha = hashlib.sha256(payload).hexdigest()
+        with open(manifest_file, "w") as f:
+            json.dump({
+                "manifest_schema_version": "1.0",
+                "sha256_checksum": sha,
+                "archive_size_bytes": len(payload),
+                "source_namespace": "forgeops-dr-lab",
+                "source_database": "forgetasks",
+                "backup_utc_timestamp": "20261028-120000Z",
+                "backup_epoch_seconds": 1730000000
+            }, f)
+
+        custom_env = os.environ.copy()
+        custom_env["PATH"] = f"{bin_dir}:{custom_env['PATH']}"
+
+        # Sub-test 1: Query failure (exit code 2 from psql)
+        if os.path.exists(trace_file):
+            os.remove(trace_file)
+        custom_env["TEST_MOCK_FRESHNESS_MODE"] = "query_failure"
+        res = subprocess.run(
+            f"bash scripts/cluster/dr/restore-db.sh {dump_file} --target-namespace forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "restore-db.sh should have failed when freshness query failed!"
+        assert "DATABASE FRESHNESS QUERY FAILURE" in res.stderr or "DATABASE FRESHNESS QUERY FAILURE" in res.stdout
+        assert not os.path.exists(trace_file), "CRITICAL: pg_restore was executed despite failed freshness query!"
+        print("  [PASS] Freshness query failure strictly blocked restoration and halted before pg_restore.")
+
+        # Sub-test 2: Non-empty target database (count = 4)
+        if os.path.exists(trace_file):
+            os.remove(trace_file)
+        custom_env["TEST_MOCK_FRESHNESS_MODE"] = "non_empty"
+        res = subprocess.run(
+            f"bash scripts/cluster/dr/restore-db.sh {dump_file} --target-namespace forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "restore-db.sh should have failed when target DB is non-empty!"
+        assert "FRESH TARGET DATABASE REFUSAL" in res.stderr or "FRESH TARGET DATABASE REFUSAL" in res.stdout
+        assert not os.path.exists(trace_file), "CRITICAL: pg_restore was executed on non-empty database!"
+        print("  [PASS] Non-empty destination database strictly blocked restoration and halted before pg_restore.")
+
+        # Sub-test 3: Corrupt freshness query output
+        if os.path.exists(trace_file):
+            os.remove(trace_file)
+        custom_env["TEST_MOCK_FRESHNESS_MODE"] = "corrupt"
+        res = subprocess.run(
+            f"bash scripts/cluster/dr/restore-db.sh {dump_file} --target-namespace forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "restore-db.sh should have failed on corrupt freshness query output!"
+        assert "DATABASE FRESHNESS QUERY CORRUPT" in res.stderr or "DATABASE FRESHNESS QUERY CORRUPT" in res.stdout
+        assert not os.path.exists(trace_file), "CRITICAL: pg_restore was executed on corrupt freshness query output!"
+        print("  [PASS] Corrupt freshness query output strictly blocked restoration and halted before pg_restore.")
+
+def test_teardown_and_setup_hardening_executable():
+    print("--> Test 16: Executable negative testing: UID identity, inventory allowlists, and unowned namespace refusal...")
+    with tempfile.TemporaryDirectory() as td:
+        bin_dir = os.path.join(td, "bin")
+        os.makedirs(bin_dir, exist_ok=True)
+
+        kubectl_mock = os.path.join(bin_dir, "kubectl")
+        with open(kubectl_mock, "w") as f:
+            f.write(r"""#!/usr/bin/env bash
+if [[ "$*" == *"config current-context"* ]]; then
+  echo "kind-forgeops"
+  exit 0
+fi
+if [[ "$*" == *"cluster-info"* ]]; then
+  exit 0
+fi
+if [[ "$*" == *"get pvc -n forgeops-dr-lab"* ]]; then
+  exit 0
+fi
+if [[ "$*" == *"get pvc"* ]]; then
+  case "$*" in
+    *postgres-storage-forgetasks-db-0*) echo "84853fb3-4d13-43a9-bc62-973c3be3c90c" ;;
+    *postgres-storage-forgetasks-rehearsal-db-0*) echo "b5ea8ec9-47e8-4979-afdb-621f2e3c63b8" ;;
+    *prometheus-g09-monitoring-kube-promet-prometheus-db-prometheus-g09-monitoring-kube-promet-prometheus-0*) echo "cd64e090-2c69-49b3-a389-de5841ce06d6" ;;
+    *storage-loki-0*) echo "23468366-7394-4f2d-be1f-2a640d6f12c5" ;;
+    *storage-tempo-0*) echo "092b6655-6617-467c-b546-69e201a0ba8a" ;;
+    *) exit 0 ;;
+  esac
+  exit 0
+fi
+if [[ "$*" == *"get ns forgeops-dr-lab"* ]]; then
+  if [[ "${MOCK_NS_STATE:-}" == "not_found" ]]; then
+    exit 1
+  fi
+  if [[ "$*" == *".metadata.name"* ]]; then
+    echo "forgeops-dr-lab"
+    exit 0
+  fi
+  if [[ "$*" == *"disposable"* ]]; then
+    if [[ "${MOCK_NS_STATE:-}" == "unowned" ]]; then
+      echo ""
+      exit 0
+    fi
+    echo "true"
+    exit 0
+  fi
+  if [[ "$*" == *"environment"* ]]; then
+    if [[ "${MOCK_NS_STATE:-}" == "unowned" ]]; then
+      echo ""
+      exit 0
+    fi
+    echo "dr-lab"
+    exit 0
+  fi
+  if [[ "$*" == *".metadata.uid"* ]]; then
+    echo "${MOCK_CURRENT_UID:-actual-uid-12345}"
+    exit 0
+  fi
+  exit 0
+fi
+
+# Resource allowlist checks
+if [[ "$*" == *"get statefulsets"* ]]; then
+  [[ -n "${MOCK_STS_OUTPUT:-}" ]] && echo "${MOCK_STS_OUTPUT}"
+  exit 0
+fi
+if [[ "$*" == *"get daemonsets"* ]]; then
+  [[ -n "${MOCK_DS_OUTPUT:-}" ]] && echo "${MOCK_DS_OUTPUT}"
+  exit 0
+fi
+if [[ "$*" == *"get jobs"* ]]; then
+  [[ -n "${MOCK_JOB_OUTPUT:-}" ]] && echo "${MOCK_JOB_OUTPUT}"
+  exit 0
+fi
+if [[ "$*" == *"get cronjobs"* ]]; then
+  [[ -n "${MOCK_CRONJOB_OUTPUT:-}" ]] && echo "${MOCK_CRONJOB_OUTPUT}"
+  exit 0
+fi
+if [[ "$*" == *"get ingress"* ]]; then
+  [[ -n "${MOCK_ING_OUTPUT:-}" ]] && echo "${MOCK_ING_OUTPUT}"
+  exit 0
+fi
+if [[ "$*" == *"get deployments"* ]]; then
+  echo "${MOCK_DEP_OUTPUT:-dr-source-db dr-target-db dr-api}"
+  exit 0
+fi
+if [[ "$*" == *"get services"* ]]; then
+  echo "${MOCK_SVC_OUTPUT:-dr-source-db dr-target-db dr-api}"
+  exit 0
+fi
+if [[ "$*" == *"get secrets"* ]]; then
+  echo "${MOCK_SEC_OUTPUT:-dr-db-secret}"
+  exit 0
+fi
+if [[ "$*" == *"get secret "* ]]; then
+  echo "Opaque"
+  exit 0
+fi
+if [[ "$*" == *"get configmaps"* ]]; then
+  echo "${MOCK_CM_OUTPUT:-kube-root-ca.crt dr-api-config}"
+  exit 0
+fi
+if [[ "$*" == *"get serviceaccounts"* ]]; then
+  echo "${MOCK_SA_OUTPUT:-default dr-serviceaccount}"
+  exit 0
+fi
+exit 0
+""")
+        os.chmod(kubectl_mock, os.stat(kubectl_mock).st_mode | stat.S_IEXEC)
+
+        custom_env = os.environ.copy()
+        custom_env["PATH"] = f"{bin_dir}:{custom_env['PATH']}"
+
+        # 1. Missing UID file
+        custom_env["FORGEOPS_DR_UID_FILE"] = os.path.join(td, "nonexistent.uid")
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail when UID file is missing!"
+        assert "Missing recorded namespace UID file" in res.stderr or "Missing recorded namespace UID file" in res.stdout
+        print("  [PASS] Missing UID file strictly halts teardown.")
+
+        # 2. Empty UID file
+        empty_uid_file = os.path.join(td, "empty.uid")
+        with open(empty_uid_file, "w") as f:
+            f.write("   \n")
+        custom_env["FORGEOPS_DR_UID_FILE"] = empty_uid_file
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail when UID file is empty!"
+        assert "is empty" in res.stderr or "is empty" in res.stdout
+        print("  [PASS] Empty UID file strictly halts teardown.")
+
+        # 3. Mismatched UID
+        mismatch_uid_file = os.path.join(td, "mismatch.uid")
+        with open(mismatch_uid_file, "w") as f:
+            f.write("recorded-uid-99999\n")
+        custom_env["FORGEOPS_DR_UID_FILE"] = mismatch_uid_file
+        custom_env["MOCK_CURRENT_UID"] = "actual-uid-12345"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail when UID does not match!"
+        assert "NAMESPACE IDENTITY MISMATCH" in res.stderr or "NAMESPACE IDENTITY MISMATCH" in res.stdout
+        print("  [PASS] Mismatched namespace UID strictly halts teardown.")
+
+        # Match UID for resource allowlist tests
+        valid_uid_file = os.path.join(td, "valid.uid")
+        with open(valid_uid_file, "w") as f:
+            f.write("actual-uid-12345\n")
+        custom_env["FORGEOPS_DR_UID_FILE"] = valid_uid_file
+        custom_env["MOCK_CURRENT_UID"] = "actual-uid-12345"
+
+        # 4. Unexpected Deployment
+        custom_env["MOCK_DEP_OUTPUT"] = "dr-source-db dr-target-db dr-api unapproved-deployment"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail on unapproved deployment!"
+        assert "UNEXPECTED DEPLOYMENT" in res.stderr or "UNEXPECTED DEPLOYMENT" in res.stdout
+        custom_env.pop("MOCK_DEP_OUTPUT")
+
+        # 5. Unexpected Service
+        custom_env["MOCK_SVC_OUTPUT"] = "dr-source-db dr-target-db unapproved-service"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail on unapproved service!"
+        assert "UNEXPECTED SERVICE" in res.stderr or "UNEXPECTED SERVICE" in res.stdout
+        custom_env.pop("MOCK_SVC_OUTPUT")
+
+        # 6. Unexpected Secret
+        custom_env["MOCK_SEC_OUTPUT"] = "dr-db-secret rogue-secret"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail on unapproved secret!"
+        assert "UNEXPECTED SECRET" in res.stderr or "UNEXPECTED SECRET" in res.stdout
+        custom_env.pop("MOCK_SEC_OUTPUT")
+
+        # 7. Unexpected ConfigMap
+        custom_env["MOCK_CM_OUTPUT"] = "kube-root-ca.crt rogue-cm"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail on unapproved configmap!"
+        assert "UNEXPECTED CONFIGMAP" in res.stderr or "UNEXPECTED CONFIGMAP" in res.stdout
+        custom_env.pop("MOCK_CM_OUTPUT")
+
+        # 8. Unexpected ServiceAccount
+        custom_env["MOCK_SA_OUTPUT"] = "default rogue-sa"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail on unapproved serviceaccount!"
+        assert "UNEXPECTED SERVICEACCOUNT" in res.stderr or "UNEXPECTED SERVICEACCOUNT" in res.stdout
+        custom_env.pop("MOCK_SA_OUTPUT")
+
+        # 9. Unexpected CronJob
+        custom_env["MOCK_CRONJOB_OUTPUT"] = "sample-cronjob"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/teardown-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "teardown should fail on unexpected cronjob!"
+        assert "CronJob(s)" in res.stderr or "CronJob(s)" in res.stdout
+        custom_env.pop("MOCK_CRONJOB_OUTPUT")
+        print("  [PASS] Resource allowlist checks strictly halt teardown on any unapproved resource.")
+
+        # 10. Setup rejects pre-existing unowned lab namespace
+        custom_env["MOCK_NS_STATE"] = "unowned"
+        res = subprocess.run(
+            "bash scripts/cluster/dr/setup-dr-lab.sh forgeops-dr-lab",
+            shell=True, capture_output=True, text=True, cwd=REPO_ROOT, env=custom_env
+        )
+        assert res.returncode != 0, "setup should fail on pre-existing unowned namespace!"
+        assert "is unowned or lacks required disposable labels" in res.stderr or "is unowned or lacks required disposable labels" in res.stdout
+        print("  [PASS] Pre-existing unowned namespace strictly rejected by setup-dr-lab.sh.")
+
 def main():
     print("=======================================================================")
     print("Starting Gate G13 Disaster Recovery & Hardening Validation Suite")
@@ -298,8 +738,11 @@ def main():
     test_kustomize_dr_manifests()
     test_runbooks_and_specs()
     test_makefile_targets()
+    test_synthetic_account_authentication_bcrypt()
+    test_freshness_query_negative_blocking_executable()
+    test_teardown_and_setup_hardening_executable()
     print("=======================================================================")
-    print("ALL GATE G13 HARDENING & STATIC TESTS PASSED (13/13 suites successful)")
+    print("ALL GATE G13 HARDENING & STATIC TESTS PASSED (16/16 suites successful)")
     print("=======================================================================")
 
 if __name__ == "__main__":

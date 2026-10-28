@@ -1,11 +1,11 @@
 -- ForgeOps Gate G13: Synthetic Test Dataset for Disaster Recovery Rehearsal
 -- Enforces clean relational schema without real or sensitive data
 
--- Insert synthetic accounts (BCrypt hash for 'Password123!')
+-- Insert synthetic accounts (genuine BCrypt hash for disposable 'Password123!')
 INSERT INTO accounts (id, username, password_hash, role)
 VALUES
-    ('d0000000-0000-0000-0000-000000000001', 'dr_admin', '$2a$12$Nq9v7e8Vn4X5K7e9W6z0OuY1t2r3s4a5b6c7d8e9f0g1h2i3j4k5l', 'ROLE_ADMIN'),
-    ('d0000000-0000-0000-0000-000000000002', 'dr_user', '$2a$12$Nq9v7e8Vn4X5K7e9W6z0OuY1t2r3s4a5b6c7d8e9f0g1h2i3j4k5l', 'ROLE_USER')
+    ('d0000000-0000-0000-0000-000000000001', 'dr_admin', '$2a$12$KuejrKi6nxwWYq0O.eEt5.XpnQUJLKgXrpwETOUVi.h8OdrChvUD.', 'ROLE_ADMIN'),
+    ('d0000000-0000-0000-0000-000000000002', 'dr_user', '$2a$12$KuejrKi6nxwWYq0O.eEt5.XpnQUJLKgXrpwETOUVi.h8OdrChvUD.', 'ROLE_USER')
 ON CONFLICT (username) DO NOTHING;
 
 -- Insert synthetic projects
