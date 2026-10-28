@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dr-source-db
+  namespace: forgeops-dr-lab
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: forgeops
+    forgeops.dev/environment: dr-lab
+    forgeops.dev/role: source
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dr-source-db
+  template:
+    metadata:
+      labels:
+        app: dr-source-db
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: forgeops
+        forgeops.dev/environment: dr-lab
+        forgeops.dev/role: source
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          env:
+            - name: POSTGRES_DB
+              value: "forgetasks"
+            - name: POSTGRES_USER
+              value: "forgeuser"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dr-db-secret
+                  key: postgres-password
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U forgeuser -d forgetasks -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U forgeuser -d forgetasks -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: ephemeral-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: ephemeral-storage
+          emptyDir: {}
