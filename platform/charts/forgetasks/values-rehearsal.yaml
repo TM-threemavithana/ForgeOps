@@ -11,8 +11,8 @@ api:
   replicaCount: 1
   image:
     repository: ghcr.io/tm-threemavithana/forgetasks-api
-    tag: "1.0.0"
-    digest: "sha256:0d2faee3fb0746be0557760a26118d5fa637609654028a7eaa573f09cbdca83b"
+    tag: "1.0.0-g11"
+    digest: "sha256:2d685ae46db121dfa4ccfbfc51859159dbc553b72897adf2c829d90357105bcf"
     pullPolicy: IfNotPresent
   resources:
     requests:
