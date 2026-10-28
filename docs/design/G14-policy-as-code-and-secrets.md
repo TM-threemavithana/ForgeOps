@@ -38,10 +38,10 @@ In modern Kubernetes environments and GitOps delivery pipelines, security vulner
   6. `disallow-latest-tag`: Rejects `:latest` tags or unversioned container images.
   7. `require-resource-requests-limits`: Mandates explicit `resources.requests` and `resources.limits` for CPU and memory on production application workloads.
   8. `disallow-host-namespaces`: Enforces `hostNetwork: false`, `hostPID: false`, and `hostIPC: false`.
-  9. `restrict-image-registries`: Restricts image repositories to approved registries (`ghcr.io/tm-threemavithana/*`, `docker.io/library/*`, etc.).
+  9. `restrict-image-registries`: Restricts image repositories to approved registries (`ghcr.io/tm-threemavithana/*`, `docker.io/library/*`, etc.). *(Note: Enforces approved hostname patterns; does not cryptographically verify image signatures, SLSA provenance, or Cosign attestations).*
   10. `require-security-labels`: Mandates mandatory ownership/tier metadata (`app.kubernetes.io/name`, `forgeops.dev/security-tier`).
 - **Policy Scoping & Safeguards:**
-  - Policies are specifically scoped to application and synthetic test workloads.
+  - **Scope & Manifest Enforcement:** Policy fixtures (`pass-workload.yaml` and 10 targeted failure manifests) establish comprehensive rule correctness across all 10 controls. Applicable container security policies are also verified against Helm-rendered application Pod templates (`forgetasks-api`). Static policy evaluation tests workload compliance prior to cluster admission without running webhook controllers.
   - System and monitoring workloads (such as Prometheus, Loki, Tempo, Alloy) requiring specialized host metrics or logging privileges are not misclassified as insecure.
 - **Positive & Negative Test Framework:**
   - Built-in `kyverno test` test fixtures containing both accepted (`pass-*.yaml`) and rejected (`fail-*.yaml`) manifests.
