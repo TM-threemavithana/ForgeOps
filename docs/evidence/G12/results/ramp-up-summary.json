@@ -1,0 +1,141 @@
+{
+    "metrics": {
+        "iterations": {
+            "count": 672,
+            "rate": 9.632891025035658
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 4.914960967261896,
+            "min": 3.12742,
+            "med": 4.2655995,
+            "max": 56.262047,
+            "p(90)": 5.4445505999999995,
+            "p(95)": 6.374937349999999
+        },
+        "http_req_receiving": {
+            "med": 0.18178650000000002,
+            "max": 1.346096,
+            "p(90)": 0.4208751999999999,
+            "p(95)": 0.5140086999999995,
+            "avg": 0.22662883482142854,
+            "min": 0.068037
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_waiting": {
+            "max": 55.988754,
+            "p(90)": 4.9915281999999985,
+            "p(95)": 5.880248649999999,
+            "avg": 4.642663374999997,
+            "min": 2.848367,
+            "med": 4.007763
+        },
+        "vus_max": {
+            "value": 5,
+            "min": 5,
+            "max": 5
+        },
+        "iteration_duration": {
+            "avg": 5.24965977827381,
+            "min": 3.472811,
+            "med": 4.5882965,
+            "max": 56.571381,
+            "p(90)": 5.7543936,
+            "p(95)": 6.818564249999997
+        },
+        "http_req_blocked": {
+            "med": 0.006084,
+            "max": 0.346802,
+            "p(90)": 0.0088311,
+            "p(95)": 0.01065329999999999,
+            "avg": 0.010943215773809533,
+            "min": 0.004354
+        },
+        "http_req_duration": {
+            "avg": 4.914960967261896,
+            "min": 3.12742,
+            "med": 4.2655995,
+            "max": 56.262047,
+            "p(90)": 5.4445505999999995,
+            "p(95)": 6.374937349999999,
+            "thresholds": {
+                "p(99)<750": false,
+                "p(95)<350": false
+            }
+        },
+        "http_req_connecting": {
+            "min": 0,
+            "med": 0,
+            "max": 0.24056,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.0026676592261904762
+        },
+        "checks": {
+            "passes": 1344,
+            "fails": 0,
+            "value": 1
+        },
+        "vus": {
+            "value": 0,
+            "min": 0,
+            "max": 1
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 672,
+            "thresholds": {
+                "rate<0.02": false
+            },
+            "value": 0
+        },
+        "data_received": {
+            "count": 235417,
+            "rate": 3374.622479822648
+        },
+        "http_reqs": {
+            "count": 672,
+            "rate": 9.632891025035658
+        },
+        "http_req_sending": {
+            "med": 0.041389,
+            "max": 0.217554,
+            "p(90)": 0.05843849999999997,
+            "p(95)": 0.0675614,
+            "avg": 0.045668757440476215,
+            "min": 0.023006
+        },
+        "data_sent": {
+            "count": 169466,
+            "rate": 2429.237366739126
+        }
+    },
+    "root_group": {
+        "groups": {},
+        "checks": {
+                "status is expected": {
+                    "name": "status is expected",
+                    "path": "::status is expected",
+                    "id": "7900b1724c781e002b4ea556d2517ccc",
+                    "passes": 672,
+                    "fails": 0
+                },
+                "response received within 2s": {
+                    "name": "response received within 2s",
+                    "path": "::response received within 2s",
+                    "id": "984e53c34b8f9b91806798779f910c0a",
+                    "passes": 672,
+                    "fails": 0
+                }
+            },
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e"
+    }
+}

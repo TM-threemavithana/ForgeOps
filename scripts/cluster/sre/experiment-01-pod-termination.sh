@@ -38,12 +38,11 @@ if [[ "$READY" -lt "$DESIRED" || "$READY" -lt 2 ]]; then
 fi
 
 # Step 3: Record initial pod inventory and UIDs
-INITIAL_PODS_JSON="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o json)"
-INITIAL_UIDS="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[].metadata.uid')"
-VICTIM_POD="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[0].metadata.name')"
-VICTIM_UID="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[0].metadata.uid')"
-SURVIVOR_POD="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[1].metadata.name')"
-SURVIVOR_UID="$(echo "$INITIAL_PODS_JSON" | jq -r '.items[1].metadata.uid')"
+INITIAL_UIDS="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o jsonpath='{.items[*].metadata.uid}')"
+VICTIM_POD="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o jsonpath='{.items[0].metadata.name}')"
+VICTIM_UID="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o jsonpath='{.items[0].metadata.uid}')"
+SURVIVOR_POD="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o jsonpath='{.items[1].metadata.name}')"
+SURVIVOR_UID="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o jsonpath='{.items[1].metadata.uid}')"
 
 log_info "Selected victim pod: $VICTIM_POD (UID: $VICTIM_UID)"
 log_info "Surviving healthy pod: $SURVIVOR_POD (UID: $SURVIVOR_UID)"
@@ -60,21 +59,18 @@ REPLACEMENT_POD=""
 REPLACEMENT_UID=""
 
 for i in {1..60}; do
-  CURRENT_PODS_JSON="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o json 2>/dev/null || true)"
-  if [[ -n "$CURRENT_PODS_JSON" ]]; then
-    # Iterate over pods to find a UID not in INITIAL_UIDS
-    for row in $(echo "$CURRENT_PODS_JSON" | jq -r '.items[] | "\(.metadata.name),\(.metadata.uid)"'); do
-      P_NAME="${row%%,*}"
-      P_UID="${row##*,}"
-      if ! echo "$INITIAL_UIDS" | grep -q "$P_UID"; then
-        REPLACEMENT_POD="$P_NAME"
-        REPLACEMENT_UID="$P_UID"
-        T_DETECT="$(date +%s%N)"
-        log_info "Genuinely new replacement pod detected: $REPLACEMENT_POD (UID: $REPLACEMENT_UID)"
-        break 2
-      fi
-    done
-  fi
+  ALL_CURRENT="$(kubectl get pods -n "$TARGET_NS" -l "$SELECTOR" -o jsonpath='{range .items[*]}{.metadata.name}{","}{.metadata.uid}{" "}{end}' 2>/dev/null || true)"
+  for item in $ALL_CURRENT; do
+    P_NAME="${item%%,*}"
+    P_UID="${item##*,}"
+    if ! echo "$INITIAL_UIDS" | grep -qw "$P_UID"; then
+      REPLACEMENT_POD="$P_NAME"
+      REPLACEMENT_UID="$P_UID"
+      T_DETECT="$(date +%s%N)"
+      log_info "Genuinely new replacement pod detected: $REPLACEMENT_POD (UID: $REPLACEMENT_UID)"
+      break 2
+    fi
+  done
   sleep 0.5
 done
 

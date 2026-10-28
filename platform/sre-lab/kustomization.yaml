@@ -5,6 +5,7 @@ namespace: forgeops-sre-lab
 
 resources:
   - namespace.yaml
+  - serviceaccount.yaml
   - db-deployment.yaml
   - db-service.yaml
   - api-configmap.yaml
