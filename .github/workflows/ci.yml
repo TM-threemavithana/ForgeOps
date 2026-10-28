@@ -334,16 +334,20 @@ jobs:
           rm -f kyverno.tar.gz
           kyverno version
 
-      - name: Install Pinned SOPS (v3.13.3) and age (v1.2.1)
+      - name: Install Pinned SOPS (v3.13.3) and age (v1.2.1) with Authentic Checksum Verification
         run: |
           SOPS_VERSION="v3.13.3"
+          SOPS_SHA256="e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b"
           curl -sSL "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64" -o sops
+          echo "${SOPS_SHA256}  sops" | sha256sum -c -
           sudo install -m 0755 sops /usr/local/bin/sops
           rm -f sops
           sops --version
 
           AGE_VERSION="v1.2.1"
+          AGE_SHA256="7df45a6cc87d4da11cc03a539a7470c15b1041ab2b396af088fe9990f7c79d50"
           curl -sSL "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-amd64.tar.gz" -o age.tar.gz
+          echo "${AGE_SHA256}  age.tar.gz" | sha256sum -c -
           tar -xzf age.tar.gz
           sudo mv age/age age/age-keygen /usr/local/bin/
           rm -rf age.tar.gz age

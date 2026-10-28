@@ -15,13 +15,16 @@ To mitigate this, ForgeOps uses **SOPS** with **age** asymmetric encryption:
 
 ## Recipient Configuration
 
-As defined in the repository root [`.sops.yaml`](file:///c:/Project/ForgeOps/.sops.yaml):
+As defined in the repository root [`.sops.yaml`](../../.sops.yaml):
 
 ```yaml
 creation_rules:
   - path_regex: security/sops/.*\.enc\.ya?ml$
+    encrypted_regex: '^(data|stringData)$'
     age: "age144mfts76hsnncvzpzutqhl9pe5vlf78dnyjev39lqtgzknyucppsg5g54v,age1g3thfc5hcd2cnsp86z8rqd7ps5a5vl4h9wq38fhcr47qr7efw5kqhz970y"
 ```
+
+The `encrypted_regex: '^(data|stringData)$'` rule ensures Kubernetes metadata (`apiVersion`, `kind`, `metadata.name`, `metadata.namespace`, `type`, and labels) remains human-readable for GitOps diffing and policy-as-code validation, while sensitive values under `stringData` or `data` are encrypted with AES-256-GCM.
 
 > [!IMPORTANT]
 > **Zero Private Keys in Version Control:** Only public recipient keys (`age1...`) are ever committed to Git. Private keys (age secret identity keys) are generated outside the repository with restricted filesystem permissions (`0600`) and stored in secure credential stores.

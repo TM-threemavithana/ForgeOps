@@ -80,11 +80,12 @@ chmod 0600 ~/.forgeops/keys/forgeops-escrow-recovery.agekey
 
 ### 3.1 Repository Configuration (`.sops.yaml`)
 
-The repository root [`.sops.yaml`](file:///c:/Project/ForgeOps/.sops.yaml) configures path regex and recipients:
+The repository root [`.sops.yaml`](../../.sops.yaml) configures path regex, encryption scope, and recipients:
 
 ```yaml
 creation_rules:
   - path_regex: security/sops/.*\.enc\.ya?ml$
+    encrypted_regex: '^(data|stringData)$'
     age: "age144mfts76hsnncvzpzutqhl9pe5vlf78dnyjev39lqtgzknyucppsg5g54v,age1g3thfc5hcd2cnsp86z8rqd7ps5a5vl4h9wq38fhcr47qr7efw5kqhz970y"
 ```
 
