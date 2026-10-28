@@ -1,6 +1,6 @@
 # ForgeOps SRE Specification — Database Backup & Disaster Recovery (G13)
 
-**Document Version:** `1.0.0`  
+**Document Version:** `1.1.0`  
 **Gate:** G13 — PostgreSQL Backup, Recovery Automation, Disaster Recovery Testing  
 **Status:** Approved Specification  
 
@@ -10,7 +10,7 @@
 
 This specification defines the reliability standards, Service Level Objectives (SLOs), Service Level Indicators (SLIs), storage architecture, and data integrity guarantees for PostgreSQL database backups and disaster recovery within the ForgeOps platform.
 
-The implementation operates strictly under the **Local-First, Zero-Paid-Cloud** architecture, using native PostgreSQL 16 custom format (`-Fc`) archives, cryptographic checksum verification, and isolated disposable recovery environments.
+The implementation operates strictly under the **Local-First, Zero-Paid-Cloud** architecture, using native PostgreSQL 16 custom format (`-Fc`) archives, cryptographic checksum verification, authentic Flyway schema validation, and isolated disposable recovery environments.
 
 ---
 
@@ -18,11 +18,13 @@ The implementation operates strictly under the **Local-First, Zero-Paid-Cloud** 
 
 | Metric | SLO Target (Lab Context) | Measured SLI Definition | Enforcement Mechanism |
 |:---|:---|:---|:---|
-| **Recovery Time Objective (RTO)** | $\le 15$ minutes | Elapsed time from `restore-db.sh` invocation to complete database readiness and verified record queries. | Automated measurement logged in restore report (`RTO_MS`). |
-| **Recovery Point Objective (RPO)** | $\le 24$ hours (scheduled)<br>$\le 5$ minutes (on-demand) | Data age: difference between current restoration timestamp and `backup_epoch_seconds` from manifest. | Automated calculation in `restore-db.sh` (`RPO_SECONDS`). |
+| **Recovery Time Objective (RTO)** | $\le 15$ minutes | Elapsed time from `restore-db.sh` invocation to complete database readiness and verified record queries. | Automated measurement logged in restore report (`RESTORE_DURATION_MS`). |
+| **End-to-End Recovery Time** | $\le 15$ minutes | Total elapsed time from disaster rehearsal start to restored API healthy and verified. | Automated measurement logged in rehearsal report (`E2E_DURATION_MS`). |
+| **Recovery Point Objective (RPO)** | $\le 24$ hours (scheduled)<br>$\le 5$ minutes (on-demand) | Data age: difference between current restoration timestamp and `backup_epoch_seconds` from manifest. | Automated calculation in `restore-db.sh` (`BACKUP_AGE_SECONDS`). |
 | **Backup Integrity** | **100%** | Fraction of generated backups where live SHA-256 and TOC match manifest without error. | `verify-backup.sh` pre-restoration gate. |
-| **Relational Consistency** | **0 Errors (100%)** | Zero foreign key orphans in restored schema (`accounts` $\rightarrow$ `projects` $\rightarrow$ `tasks`). | Post-restore SQL assertion queries. |
-| **Constraint Validity** | **0 Violations** | Zero invalid values violating domain check constraints (`chk_tasks_status`, `chk_tasks_priority`). | Post-restore SQL constraint checks. |
+| **Schema Integrity** | **100% Authentic** | Post-restore schema checksum matches genuine Flyway migrations without fabricated checksums. | `FlywayMigrationRunner validate` execution. |
+| **Relational Consistency** | **0 Errors (100%)** | Zero foreign key orphans in restored schema (`accounts` $\rightarrow$ `projects` $\rightarrow$ `tasks`). | Post-restore SQL assertion queries (`ON_ERROR_STOP=1`). |
+| **Constraint Validity** | **0 Violations** | Zero invalid values violating domain check constraints (`chk_tasks_status`, `chk_tasks_priority`). | Post-restore SQL constraint checks (`ON_ERROR_STOP=1`). |
 
 ---
 
@@ -90,3 +92,13 @@ Every backup archive must be accompanied by an immutable manifest file generated
 Upstream PostgreSQL provides `pg_verifybackup` specifically for physical base backups produced by `pg_basebackup` (validating WAL records and manifest checksums of raw data directories).
 
 Because ForgeOps utilizes logical custom archives (`pg_dump -Fc`), `pg_verifybackup` is architecturally inapplicable. Archive integrity is verified via cryptographic SHA-256 matching and `pg_restore -l` TOC parsing, ensuring full logical consistency without tool misapplication.
+
+---
+
+## 6. Target Isolation, Credential Race Prevention & Flyway Authenticity
+
+1. **Credential Race Prevention:** Ephemeral database credentials and the Kubernetes Secret `dr-db-secret` are provisioned *before* PostgreSQL Deployments are applied.
+2. **Target Isolation:** Restoration is strictly restricted to `forgeops-dr-lab` with verified `app=dr-target-db` pod ownership. Source and destination Pod UIDs must differ.
+3. **Target Freshness Enforcement:** Target database must contain zero pre-existing application tables prior to restoration. Restoration into a populated database is rejected.
+4. **Authentic Flyway History:** Schema is initialized and validated using the genuine Flyway migration runner (`FlywayMigrationRunner`), verifying the exact migration version, description, execution record, and authentic checksum (`-308033445`). Fabricated checksums (`12345678`) are strictly rejected.
+5. **Post-Restore Smoke Testing:** `dr-api` is deployed strictly after database restoration and verification. REST queries authenticate against `/api/v1/projects` and `/api/v1/projects/{projectId}/tasks` with positive and negative authentication checks.

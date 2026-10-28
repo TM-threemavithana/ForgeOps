@@ -2,6 +2,11 @@
 # ForgeOps Gate G13 - Disaster Recovery & Database Backup Common Utilities & Fail-Closed Safety Guards
 set -euo pipefail
 
+# Auto-detect ForgeOps lab kubeconfig if not explicitly set
+if [[ -z "${KUBECONFIG:-}" && -f "${HOME}/.kube/config-forgeops" ]]; then
+  export KUBECONFIG="${HOME}/.kube/config-forgeops"
+fi
+
 # Documented protected baseline PVC UIDs (Zero Data Loss Invariant)
 EXPECTED_G06_PVC_UID="84853fb3-4d13-43a9-bc62-973c3be3c90c"
 EXPECTED_G08_PVC_UID="b5ea8ec9-47e8-4979-afdb-621f2e3c63b8"
@@ -87,7 +92,9 @@ assert_restore_target_namespace() {
   done
 
   if [[ "$target_ns" != "$DISPOSABLE_DR_NAMESPACE" ]]; then
-    log_warn "Target namespace '$target_ns' differs from default disposable namespace '$DISPOSABLE_DR_NAMESPACE'."
+    log_err "SAFETY REFUSAL: Target namespace '$target_ns' is NOT the approved disposable namespace '$DISPOSABLE_DR_NAMESPACE'!"
+    log_err "For this rehearsal, restoration is strictly restricted to '$DISPOSABLE_DR_NAMESPACE'."
+    return 1
   fi
 }
 
@@ -175,4 +182,28 @@ run_dr_preflight_guards() {
   log_info "Executing fail-closed Disaster Recovery safety guards..."
   assert_cluster_connectivity
   assert_protected_pvcs_intact
+}
+
+# Execute authentic Flyway migration runner
+run_flyway_migration_runner() {
+  local action="${1:-info}"
+  local host="${2:-127.0.0.1}"
+  local port="${3:-5432}"
+  local db_name="${4:-forgetasks}"
+  local db_user="${5:-forgeuser}"
+  local db_pass="${6:-}"
+
+  local jdbc_url="jdbc:postgresql://${host}:${port}/${db_name}"
+  log_info "Invoking authentic Flyway engine ($action) against $jdbc_url..."
+
+  local api_dir="${REPO_ROOT}/apps/forgetasks-api"
+  if [[ ! -f "${api_dir}/mvnw" ]]; then
+    log_err "Maven wrapper not found in ${api_dir}!"
+    return 1
+  fi
+
+  # Pass password via FLYWAY_PASSWORD environment variable to avoid process table exposure
+  FLYWAY_PASSWORD="$db_pass" "${api_dir}/mvnw" -q -f "${api_dir}/pom.xml" exec:java \
+    -Dexec.mainClass="com.forgeops.forgetasks.FlywayMigrationRunner" \
+    -Dexec.args="${action} ${jdbc_url} ${db_user}"
 }

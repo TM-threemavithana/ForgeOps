@@ -6,11 +6,8 @@ namespace: forgeops-dr-lab
 resources:
   - namespace.yaml
   - serviceaccount.yaml
-  - secret.yaml
   - db-source-deployment.yaml
   - db-source-service.yaml
   - db-target-deployment.yaml
   - db-target-service.yaml
-  - api-configmap.yaml
-  - api-service.yaml
-  - api-deployment.yaml
+

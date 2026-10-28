@@ -46,35 +46,64 @@ if [[ "$MODE" == "--validate-only" ]]; then
   exit 0
 fi
 
-# Step 2: Discover target database pod
-log_info "Discovering running PostgreSQL database pod in '$SOURCE_NS'..."
-POD="$(kubectl get pods -n "$SOURCE_NS" -l app.kubernetes.io/name=postgres --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-if [[ -z "$POD" ]]; then
-  # Fallback to search by component=database or app=dr-source-db
-  POD="$(kubectl get pods -n "$SOURCE_NS" -l app.kubernetes.io/component=database --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-fi
-if [[ -z "$POD" ]]; then
-  # Fallback to direct pod name matching postgres or db
-  POD="$(kubectl get pods -n "$SOURCE_NS" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' 2>/dev/null | tr ' ' '\n' | grep -E 'postgres|db' | head -n 1 || true)"
+# Step 2: Discover target database pod strictly
+log_info "Discovering running source PostgreSQL pod in '$SOURCE_NS'..."
+
+if [[ "$SOURCE_NS" == "$DISPOSABLE_DR_NAMESPACE" ]]; then
+  # Strictly select only deployment/dr-source-db
+  mapfile -t CANDIDATES < <(kubectl get pods -n "$SOURCE_NS" -l app=dr-source-db --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep -v '^$' || true)
+  
+  if [[ "${#CANDIDATES[@]}" -eq 0 ]]; then
+    log_err "CRITICAL: No running Pods found for deployment/dr-source-db in namespace '$SOURCE_NS'!"
+    exit 1
+  fi
+  if [[ "${#CANDIDATES[@]}" -gt 1 ]]; then
+    log_err "CRITICAL: Multiple running Pods found for deployment/dr-source-db (${#CANDIDATES[@]}). Expected exactly 1!"
+    exit 1
+  fi
+
+  POD="${CANDIDATES[0]}"
+
+  # Strict safety check: Refuse if target pod is dr-target-db
+  ROLE_LABEL="$(kubectl get pod "$POD" -n "$SOURCE_NS" -o jsonpath='{.metadata.labels.forgeops\.dev/role}' 2>/dev/null || true)"
+  APP_LABEL="$(kubectl get pod "$POD" -n "$SOURCE_NS" -o jsonpath='{.metadata.labels.app}' 2>/dev/null || true)"
+  if [[ "$APP_LABEL" == "dr-target-db" || "$ROLE_LABEL" == "target" ]]; then
+    log_err "CRITICAL SAFETY REFUSAL: Discovered pod '$POD' carries target role label! Refusing to backup dr-target-db."
+    exit 1
+  fi
+
+  # Verify owning deployment/replicaset
+  OWNER_NAME="$(kubectl get pod "$POD" -n "$SOURCE_NS" -o jsonpath='{.metadata.ownerReferences[0].name}' 2>/dev/null || true)"
+  if [[ "$OWNER_NAME" != *"dr-source-db"* ]]; then
+    log_err "CRITICAL SAFETY REFUSAL: Discovered pod '$POD' owner reference '$OWNER_NAME' is not dr-source-db!"
+    exit 1
+  fi
+else
+  # Non-disposable source (e.g. dev or gitops rehearsal)
+  mapfile -t CANDIDATES < <(kubectl get pods -n "$SOURCE_NS" -l app.kubernetes.io/name=postgres --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep -v '^$' || true)
+  if [[ "${#CANDIDATES[@]}" -eq 0 ]]; then
+    log_err "CRITICAL: No running PostgreSQL pod found in namespace '$SOURCE_NS'!"
+    exit 1
+  fi
+  if [[ "${#CANDIDATES[@]}" -gt 1 ]]; then
+    log_err "CRITICAL: Ambiguous database pods in '$SOURCE_NS' (${#CANDIDATES[@]} found). Refusing unverified source."
+    exit 1
+  fi
+  POD="${CANDIDATES[0]}"
 fi
 
-if [[ -z "$POD" ]]; then
-  log_err "CRITICAL: No running PostgreSQL pod found in namespace '$SOURCE_NS'!"
-  exit 1
-fi
-log_info "Identified PostgreSQL pod: $POD"
+log_info "Identified and verified source PostgreSQL pod: $POD"
 
 # Step 3: Secure runtime credential retrieval (never printed to logs or disk)
 log_info "Securely retrieving database credentials from Kubernetes secret..."
 SECRET_NAME="$(kubectl get secrets -n "$SOURCE_NS" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | tr ' ' '\n' | grep -E 'forgetasks-db-secret|dr-db-secret' | head -n 1 || true)"
 if [[ -z "$SECRET_NAME" ]]; then
-  SECRET_NAME="forgetasks-db-secret"
+  SECRET_NAME="dr-db-secret"
 fi
 
 DB_USER="forgeuser"
 DB_PASS="$(kubectl get secret "$SECRET_NAME" -n "$SOURCE_NS" -o jsonpath='{.data.postgres-password}' 2>/dev/null | base64 -d || true)"
 if [[ -z "$DB_PASS" ]]; then
-  # Check if password is under 'password' or 'POSTGRES_PASSWORD'
   DB_PASS="$(kubectl get secret "$SECRET_NAME" -n "$SOURCE_NS" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)"
 fi
 
@@ -116,16 +145,29 @@ kubectl port-forward -n "$SOURCE_NS" "pod/${POD}" "${LOCAL_PORT}:5432" >/dev/nul
 PF_PID=$!
 sleep 2
 
-# Ensure port-forward is killed on exit
 kill_pf() {
   kill -9 "$PF_PID" >/dev/null 2>&1 || true
 }
 trap 'kill_pf; cleanup' EXIT INT TERM ERR
 
-# Step 6: Execute pg_dump custom format (-Fc)
+# Step 6: Verify source database and non-empty synthetic dataset before dumping
+log_info "Verifying source database and synthetic dataset before backup..."
+SRC_ACCOUNTS="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT count(*) FROM accounts;" 2>/dev/null | xargs || true)"
+SRC_PROJECTS="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT count(*) FROM projects;" 2>/dev/null | xargs || true)"
+SRC_TASKS="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT count(*) FROM tasks;" 2>/dev/null | xargs || true)"
+
+if [[ -z "$SRC_ACCOUNTS" || "$SRC_ACCOUNTS" -lt 1 || -z "$SRC_PROJECTS" || "$SRC_PROJECTS" -lt 1 || -z "$SRC_TASKS" || "$SRC_TASKS" -lt 1 ]]; then
+  log_err "DATA PRE-VALIDATION FAILURE: Source database '$DB_NAME' in '$SOURCE_NS' has missing or empty dataset (accounts=${SRC_ACCOUNTS:-0}, projects=${SRC_PROJECTS:-0}, tasks=${SRC_TASKS:-0})!"
+  exit 1
+fi
+log_pass "Source dataset verified prior to dump: $SRC_ACCOUNTS accounts, $SRC_PROJECTS projects, $SRC_TASKS tasks."
+
+# Step 7: Execute pg_dump custom format (-Fc)
 log_info "Executing pg_dump custom archive (-Fc) to temporary file..."
 T_START="$(date +%s%N)"
 
+DUMP_ERR_LOG="$(mktemp)"
+set +e
 PGPASSWORD="$DB_PASS" pg_dump \
   -h 127.0.0.1 \
   -p "$LOCAL_PORT" \
@@ -134,13 +176,23 @@ PGPASSWORD="$DB_PASS" pg_dump \
   -Fc \
   -b \
   -v \
-  -f "$TEMP_FILE" 2>/dev/null
+  -f "$TEMP_FILE" 2>"$DUMP_ERR_LOG"
+DUMP_STATUS=$?
+set -e
 
 T_END="$(date +%s%N)"
 DUMP_DURATION_MS=$(( (T_END - T_START) / 1000000 ))
-log_pass "pg_dump completed in ${DUMP_DURATION_MS} ms."
 
-# Step 7: Validate temporary archive readability & integrity before committing
+if [[ "$DUMP_STATUS" -ne 0 ]]; then
+  log_err "pg_dump failed with exit code $DUMP_STATUS!"
+  cat "$DUMP_ERR_LOG" >&2
+  rm -f "$DUMP_ERR_LOG"
+  exit 1
+fi
+rm -f "$DUMP_ERR_LOG"
+log_pass "pg_dump completed successfully in ${DUMP_DURATION_MS} ms."
+
+# Step 8: Validate temporary archive readability & integrity before committing
 log_info "Validating archive readability and structure via pg_restore -l..."
 if ! pg_restore -l "$TEMP_FILE" >/dev/null 2>&1; then
   log_err "INTEGRITY FAILURE: pg_restore failed to read generated backup archive!"
@@ -153,12 +205,12 @@ if [[ "$ARCHIVE_SIZE_BYTES" -lt 1024 ]]; then
   exit 1
 fi
 
-# Step 8: Atomic finalize move
+# Step 9: Atomic finalize move
 mv "$TEMP_FILE" "$TARGET_BACKUP_FILE"
 chmod 0600 "$TARGET_BACKUP_FILE"
 log_pass "Backup archive committed atomically: $TARGET_BACKUP_FILE (${ARCHIVE_SIZE_BYTES} bytes)"
 
-# Step 9: Compute SHA-256 and gather metadata
+# Step 10: Compute SHA-256 and gather metadata
 SHA256="$(sha256sum "$TARGET_BACKUP_FILE" | awk '{print $1}')"
 PG_CLIENT_VER="$(pg_dump --version | head -n 1)"
 PG_SERVER_VER="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "SHOW server_version;" 2>/dev/null | xargs || echo "16.x")"
@@ -171,7 +223,7 @@ done < <(pg_restore -l "$TARGET_BACKUP_FILE" | awk '$6=="TABLE" {print $8}' | so
 
 TABLES_JSON_ARRAY="$(printf '%s\n' "${TABLES_IN_ARCHIVE[@]}" | jq -R . | jq -s . 2>/dev/null || echo '["accounts","projects","tasks","flyway_schema_history"]')"
 
-# Step 10: Generate immutable manifest JSON
+# Step 11: Generate immutable manifest JSON
 log_info "Generating immutable backup manifest: $TARGET_MANIFEST_FILE..."
 cat <<EOF > "$TARGET_MANIFEST_FILE"
 {
@@ -195,7 +247,7 @@ EOF
 chmod 0600 "$TARGET_MANIFEST_FILE"
 log_pass "Manifest written successfully (SHA-256: $SHA256)."
 
-# Step 11: Teardown port-forward and final checks
+# Step 12: Teardown port-forward and final checks
 kill_pf
 trap - EXIT INT TERM ERR
 

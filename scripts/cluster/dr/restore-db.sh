@@ -52,7 +52,7 @@ echo "Backup Archive:        $BACKUP_FILE"
 echo "Manifest File:         $MANIFEST_FILE"
 echo "Target Namespace:      $TARGET_NS"
 echo "Target Database:       $TARGET_DB"
-echo "Safety Rule:           Strict refusal to overwrite G06/G08 databases"
+echo "Safety Rule:           Strict refusal to restore outside $DISPOSABLE_DR_NAMESPACE"
 echo "======================================================================="
 
 # Step 1: Preflight guards & Strict target namespace validation
@@ -79,28 +79,52 @@ if [[ ! "$CLIENT_VER" =~ ^16\. ]]; then
 fi
 log_pass "Tool version compatibility confirmed (PostgreSQL 16)."
 
-# Step 4: Discover destination database pod
+# Step 4: Discover destination database pod with strict isolation guards
 log_info "Step 4: Discovering running target PostgreSQL pod in '$TARGET_NS'..."
-# Look for target pod (e.g. dr-target-db or postgres)
-POD="$(kubectl get pods -n "$TARGET_NS" -l app=dr-target-db --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-if [[ -z "$POD" ]]; then
-  POD="$(kubectl get pods -n "$TARGET_NS" -l app.kubernetes.io/name=postgres --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-fi
-if [[ -z "$POD" ]]; then
-  POD="$(kubectl get pods -n "$TARGET_NS" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' 2>/dev/null | tr ' ' '\n' | grep -E 'postgres|db' | head -n 1 || true)"
-fi
 
-if [[ -z "$POD" ]]; then
-  log_err "CRITICAL: No running destination PostgreSQL pod found in namespace '$TARGET_NS'!"
+# For this rehearsal, target pod MUST strictly belong to deployment/dr-target-db
+mapfile -t TARGET_CANDIDATES < <(kubectl get pods -n "$TARGET_NS" -l app=dr-target-db --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep -v '^$' || true)
+
+if [[ "${#TARGET_CANDIDATES[@]}" -eq 0 ]]; then
+  log_err "CRITICAL: No running destination PostgreSQL pod found with app=dr-target-db in '$TARGET_NS'!"
   exit 1
 fi
-log_info "Identified target PostgreSQL pod: $POD in namespace '$TARGET_NS'"
+if [[ "${#TARGET_CANDIDATES[@]}" -gt 1 ]]; then
+  log_err "CRITICAL: Multiple target database pods found (${#TARGET_CANDIDATES[@]}). Expected exactly 1!"
+  exit 1
+fi
+
+POD="${TARGET_CANDIDATES[0]}"
+
+# Verify owning Deployment is dr-target-db
+OWNER_NAME="$(kubectl get pod "$POD" -n "$TARGET_NS" -o jsonpath='{.metadata.ownerReferences[0].name}' 2>/dev/null || true)"
+if [[ "$OWNER_NAME" != *"dr-target-db"* ]]; then
+  log_err "CRITICAL: Target pod '$POD' owner reference '$OWNER_NAME' is not dr-target-db!"
+  exit 1
+fi
+
+# Verify target pod UID is distinct from any source pod UID
+TARGET_POD_UID="$(kubectl get pod "$POD" -n "$TARGET_NS" -o jsonpath='{.metadata.uid}')"
+SOURCE_POD_UID="$(kubectl get pods -n "$TARGET_NS" -l app=dr-source-db -o jsonpath='{.items[0].metadata.uid}' 2>/dev/null || true)"
+
+if [[ -n "$SOURCE_POD_UID" && "$TARGET_POD_UID" == "$SOURCE_POD_UID" ]]; then
+  log_err "CRITICAL SAFETY REFUSAL: Target Pod UID matches Source Pod UID ($TARGET_POD_UID)! Refusing to restore into source pod."
+  exit 1
+fi
+
+ROLE_LABEL="$(kubectl get pod "$POD" -n "$TARGET_NS" -o jsonpath='{.metadata.labels.forgeops\.dev/role}' 2>/dev/null || true)"
+if [[ "$ROLE_LABEL" == "source" ]]; then
+  log_err "CRITICAL SAFETY REFUSAL: Target pod '$POD' carries source role label! Refusing to restore into source pod."
+  exit 1
+fi
+
+log_info "Identified and verified target PostgreSQL pod: $POD (UID: $TARGET_POD_UID)"
 
 # Step 5: Secure runtime credential retrieval for target database
 log_info "Step 5: Securely retrieving target database credentials..."
 SECRET_NAME="$(kubectl get secrets -n "$TARGET_NS" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' | tr ' ' '\n' | grep -E 'forgetasks-db-secret|dr-db-secret' | head -n 1 || true)"
 if [[ -z "$SECRET_NAME" ]]; then
-  SECRET_NAME="forgetasks-db-secret"
+  SECRET_NAME="dr-db-secret"
 fi
 
 DB_USER="forgeuser"
@@ -113,7 +137,7 @@ if [[ -z "$DB_PASS" ]]; then
   log_err "CRITICAL: Failed to retrieve target database credentials from secret '$SECRET_NAME'!"
   exit 1
 fi
-log_pass "Target credentials retrieved securely in memory."
+log_pass "Target credentials retrieved securely in memory (redacted from logs)."
 
 # Step 6: Establish temporary port-forward to target database
 LOCAL_PORT=15433
@@ -127,11 +151,10 @@ kill_pf() {
 }
 trap kill_pf EXIT INT TERM ERR
 
-# Verify connectivity to target
+# Verify connectivity to target instance
 if ! PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "postgres" -c "SELECT 1;" >/dev/null 2>&1; then
-  # Try connecting directly to TARGET_DB
   if ! PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -c "SELECT 1;" >/dev/null 2>&1; then
-    log_err "Failed to connect to target PostgreSQL instance on port ${LOCAL_PORT}!"
+    log_err "Failed to authenticate with target PostgreSQL instance on port ${LOCAL_PORT}!"
     exit 1
   fi
 fi
@@ -140,49 +163,87 @@ fi
 DB_EXISTS="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "postgres" -t -c "SELECT 1 FROM pg_database WHERE datname='$TARGET_DB';" 2>/dev/null | xargs || true)"
 if [[ "$DB_EXISTS" != "1" ]]; then
   log_info "Creating target database '$TARGET_DB'..."
-  PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "postgres" -c "CREATE DATABASE $TARGET_DB;" 2>/dev/null || true
+  PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "postgres" -c "CREATE DATABASE $TARGET_DB;"
 fi
 
-# Step 7: Execute pg_restore into target database & Measure RTO
+# Strict check: Target database MUST be fresh and empty before restoration
+log_info "Verifying target database '$TARGET_DB' is fresh and contains no existing application schema objects..."
+EXISTING_APP_TABLES="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "
+  SELECT count(*) FROM information_schema.tables 
+  WHERE table_schema = 'public' 
+  AND table_name IN ('accounts', 'projects', 'tasks', 'flyway_schema_history');
+" 2>/dev/null | xargs || true)"
+
+if [[ -n "$EXISTING_APP_TABLES" && "$EXISTING_APP_TABLES" -gt 0 ]]; then
+  log_err "FRESH TARGET DATABASE REFUSAL: Target database '$TARGET_DB' already contains $EXISTING_APP_TABLES application table(s)!"
+  log_err "Restoration requires a clean, empty destination database to prevent hybrid schema corruption."
+  exit 1
+fi
+log_pass "Target database '$TARGET_DB' verified clean and empty (0 pre-existing application tables)."
+
+# Step 7: Execute pg_restore with strict error handling (--exit-on-error, no error suppression)
 log_info "Step 7: Executing pg_restore into database '$TARGET_DB'..."
+RESTORE_ERR_LOG="$(mktemp)"
 T_RESTORE_START="$(date +%s%N)"
 
+set +e
 PGPASSWORD="$DB_PASS" pg_restore \
   -h 127.0.0.1 \
   -p "$LOCAL_PORT" \
   -U "$DB_USER" \
   -d "$TARGET_DB" \
-  --clean \
-  --if-exists \
+  --exit-on-error \
   --no-owner \
   --no-privileges \
-  "$BACKUP_FILE" >/dev/null 2>&1 || true
+  "$BACKUP_FILE" >/dev/null 2>"$RESTORE_ERR_LOG"
+RESTORE_STATUS=$?
+set -e
 
 T_RESTORE_END="$(date +%s%N)"
-RTO_MS=$(( (T_RESTORE_END - T_RESTORE_START) / 1000000 ))
-log_pass "Database restoration completed. Measured Restoration Time (RTO): ${RTO_MS} ms."
+RESTORE_DURATION_MS=$(( (T_RESTORE_END - T_RESTORE_START) / 1000000 ))
 
-# Step 8: Calculate Data Age / Measured RPO
+if [[ "$RESTORE_STATUS" -ne 0 ]]; then
+  log_err "CRITICAL RESTORATION FAILURE: pg_restore exited with non-zero exit code $RESTORE_STATUS!"
+  log_err "pg_restore stderr output:"
+  cat "$RESTORE_ERR_LOG" >&2
+  rm -f "$RESTORE_ERR_LOG"
+  exit 1
+fi
+rm -f "$RESTORE_ERR_LOG"
+log_pass "pg_restore executed successfully in ${RESTORE_DURATION_MS} ms (exit code 0)."
+
+# Step 8: Calculate Data Age / Measured RPO (clearly distinct from restore duration)
 BACKUP_EPOCH="$(grep -o '"backup_epoch_seconds": [0-9]*' "$MANIFEST_FILE" | awk '{print $2}' || true)"
 CURRENT_EPOCH="$(date -u +"%s")"
-RPO_SECONDS=$(( CURRENT_EPOCH - BACKUP_EPOCH ))
-log_info "Measured Recovery Point (RPO / Data Age): ${RPO_SECONDS} seconds since backup creation."
+BACKUP_AGE_SECONDS=$(( CURRENT_EPOCH - BACKUP_EPOCH ))
+log_info "Backup Age / Measured Recovery Point (RPO): ${BACKUP_AGE_SECONDS} seconds since backup creation."
 
 # Step 9: Comprehensive Data Integrity & Schema Validation
 log_info "Step 9: Executing comprehensive post-restore data integrity validation..."
 
-# A: Flyway schema history
-MIGRATIONS_COUNT="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM flyway_schema_history WHERE success=true;" 2>/dev/null | xargs || echo 0)"
+# A: Flyway schema validation via genuine Flyway engine
+log_info "Validating schema against authentic Flyway migrations..."
+run_flyway_migration_runner "validate" "127.0.0.1" "$LOCAL_PORT" "$TARGET_DB" "$DB_USER" "$DB_PASS"
+
+# Direct query of flyway_schema_history
+MIGRATIONS_COUNT="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM flyway_schema_history WHERE success=true;" | xargs)"
 log_info "Verified successful schema migrations: $MIGRATIONS_COUNT"
 if [[ "$MIGRATIONS_COUNT" -lt 1 ]]; then
   log_err "INTEGRITY FAILURE: No successful Flyway migrations found in restored database!"
   exit 1
 fi
 
-# B: Table row counts
-ACCOUNTS_COUNT="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM accounts;" 2>/dev/null | xargs || echo 0)"
-PROJECTS_COUNT="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM projects;" 2>/dev/null | xargs || echo 0)"
-TASKS_COUNT="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM tasks;" 2>/dev/null | xargs || echo 0)"
+FABRICATED_CHECKSUMS="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM flyway_schema_history WHERE checksum = 12345678;" | xargs)"
+if [[ "$FABRICATED_CHECKSUMS" -gt 0 ]]; then
+  log_err "INTEGRITY FAILURE: Restored database contains fabricated checksum (12345678)!"
+  exit 1
+fi
+log_pass "Flyway schema history verified genuine."
+
+# B: Table row counts (strict error handling, zero error suppression)
+ACCOUNTS_COUNT="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM accounts;" | xargs)"
+PROJECTS_COUNT="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM projects;" | xargs)"
+TASKS_COUNT="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM tasks;" | xargs)"
 
 log_info "Restored Record Inventory:"
 log_info "  - accounts: $ACCOUNTS_COUNT rows"
@@ -202,9 +263,9 @@ if [[ "$TASKS_COUNT" -lt 4 ]]; then
   exit 1
 fi
 
-# C: Relational foreign key integrity
-ORPHAN_PROJECTS="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM projects WHERE owner_id NOT IN (SELECT id FROM accounts);" 2>/dev/null | xargs || echo 0)"
-ORPHAN_TASKS="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM tasks WHERE project_id NOT IN (SELECT id FROM projects);" 2>/dev/null | xargs || echo 0)"
+# C: Relational foreign key integrity (strict error handling, zero error suppression)
+ORPHAN_PROJECTS="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM projects WHERE owner_id NOT IN (SELECT id FROM accounts);" | xargs)"
+ORPHAN_TASKS="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM tasks WHERE project_id NOT IN (SELECT id FROM projects);" | xargs)"
 
 if [[ "$ORPHAN_PROJECTS" -ne 0 ]]; then
   log_err "RELATIONAL INTEGRITY FAILURE: Found $ORPHAN_PROJECTS orphaned project(s)!"
@@ -216,8 +277,8 @@ if [[ "$ORPHAN_TASKS" -ne 0 ]]; then
 fi
 log_pass "Relational integrity verified: 0 orphaned projects, 0 orphaned tasks."
 
-# D: Task check constraint verification
-INVALID_TASK_STATUSES="$(PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM tasks WHERE status NOT IN ('TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE');" 2>/dev/null | xargs || echo 0)"
+# D: Task check constraint verification (strict error handling, zero error suppression)
+INVALID_TASK_STATUSES="$(PGPASSWORD="$DB_PASS" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$LOCAL_PORT" -U "$DB_USER" -d "$TARGET_DB" -t -c "SELECT count(*) FROM tasks WHERE status NOT IN ('TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE');" | xargs)"
 if [[ "$INVALID_TASK_STATUSES" -ne 0 ]]; then
   log_err "CONSTRAINT INTEGRITY FAILURE: Found $INVALID_TASK_STATUSES task(s) with invalid status!"
   exit 1
@@ -249,8 +310,8 @@ assert_protected_pvcs_intact
 echo "======================================================================="
 log_pass "PostgreSQL Database Restoration & Validation PASSED!"
 echo "Restored Database: $TARGET_NS / $TARGET_DB"
-echo "Measured RTO:      ${RTO_MS} ms"
-echo "Measured RPO:      ${RPO_SECONDS} seconds"
+echo "Restore Time:      ${RESTORE_DURATION_MS} ms (pg_restore execution)"
+echo "Backup Age (RPO):  ${BACKUP_AGE_SECONDS} seconds"
 echo "Verified Records:  $ACCOUNTS_COUNT accounts, $PROJECTS_COUNT projects, $TASKS_COUNT tasks"
-echo "Integrity Status:  All foreign keys and constraints 100% verified"
+echo "Integrity Status:  All foreign keys, check constraints, and Flyway checksums 100% verified"
 echo "======================================================================="
