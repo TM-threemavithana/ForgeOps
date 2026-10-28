@@ -106,8 +106,8 @@ kubectl get pods -n forgeops-observability
 ### Step 5: Observability Dashboards & Telemetry Correlation
 Forward ports to access local observability UIs:
 ```bash
-# Access Grafana (User: admin, Password configured out-of-band)
-kubectl port-forward svc/kube-prometheus-stack-grafana -n forgeops-observability 13000:80 &
+# Access Grafana (Credentials managed via cluster secrets)
+kubectl port-forward svc/g09-monitoring-grafana -n forgeops-observability 13000:80 &
 
 # Access Argo CD Web UI
 kubectl port-forward svc/argocd-server -n argocd 18081:443 &
@@ -132,3 +132,4 @@ Detailed operational runbooks are located in `docs/runbooks/`:
 ## 5. Audit Conclusion
 
 The ForgeOps repository is **100% reproducible on commodity developer hardware** without requiring proprietary credentials, external cloud subscriptions, or undisclosed dependencies.
+

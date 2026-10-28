@@ -128,3 +128,4 @@ The ForgeOps platform satisfies all operational security invariants:
 3. **0 Mutating Admission Controllers** in Kind cluster.
 4. **0 Live Secrets Modified** (synthetic lab demonstration only).
 5. **100% Protected PVC Continuity** (5 / 5 volumes intact with original UIDs).
+

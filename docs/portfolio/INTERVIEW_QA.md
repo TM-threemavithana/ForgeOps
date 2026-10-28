@@ -64,8 +64,8 @@ In Gate G08, during our failed-release recovery drill, we observed that auto-syn
 We unified the three pillars using OpenTelemetry and W3C standard trace propagation:
 1. When an HTTP request enters the Spring Boot microservice, the OpenTelemetry Java instrumentation agent creates a trace and injects `trace_id` and `span_id` into the SLF4J MDC (Mapped Diagnostic Context).
 2. The application logs formatted JSON containing the `trace_id`.
-3. Grafana Alloy scrapes these logs and ships them to Loki.
-4. Traces are exported via gRPC directly to Grafana Tempo.
+3. OpenTelemetry exports trace spans (gRPC :4317 / HTTP :4318) to Grafana Alloy's OTLP receiver, which forwards them directly to Grafana Tempo (`:4317`).
+4. Grafana Alloy tails container logs from the Kubernetes API and ships them to Grafana Loki (`:3100`).
 5. In Grafana, we configured a "Trace to Logs" data source link that maps Tempo's `trace_id` to Loki queries (`{app="forgetasks-api"} |= "$${__trace.id}"`). An engineer viewing a high-latency trace in Tempo can click one button to view the exact log lines emitted during that execution.
 
 ### Q9: What metric alerts did you configure in Prometheus and Alertmanager?
@@ -82,13 +82,16 @@ Alertmanager routes alerts through a staged pipeline (pending -> firing -> resol
 
 ### Q10: How did you design your k6 load-testing scenarios without overwhelming the local machine?
 **Answer:**
-In Gate G12, we implemented progressive load profiles capped at 25 Virtual Users (VUs) and 20 requests/second. We targeted an explicitly bound port-forward (`localhost:8082`) directed exclusively to a disposable rehearsal service (`forgeops-sre-lab`), refusing arbitrary endpoints. Across 5 scenarios, the system processed 2,275 HTTP requests with zero errors, recording a median latency (p50) of 2.1 ms and a 95th percentile (p95) of 6.8 ms.
+In Gate G12, we implemented progressive load profiles capped at 25 Virtual Users (VUs) and 20 requests/second. We targeted an explicitly bound port-forward (`localhost:8082`) directed exclusively to a disposable rehearsal service (`forgeops-sre-lab`), refusing arbitrary endpoints. Across 5 progressive scenarios (Smoke, Baseline, Ramp-Up, Stress, Recovery), the system processed 2,275 HTTP requests with zero errors (0.00% error rate). The aggregate suite recorded a median latency (p50) of **4.21 ms**, a 95th percentile (p95) of **6.82 ms**, and a 99th percentile (p99) of **28.10 ms**. Testing honestly documents that `kubectl port-forward` binds to a single backend pod, reflecting single-pod saturation characteristics rather than multi-pod round-robin distribution.
 
-### Q11: Walk me through one of your controlled chaos experiments and how the system recovered.
+### Q11: Walk me through your controlled resilience experiments and how the system recovered.
 **Answer:**
-In Experiment 1, we executed a sudden termination of the active `forgetasks-api` Pod under load. The Kubernetes Deployment controller detected the replica count mismatch, scheduled a new pod on the node, initiated image pull from local cache, and waited for Spring Boot's `/actuator/health/readiness` probe.
-- **Measured Recovery Time:** It took exactly **52.86 seconds** from pod deletion to reaching full two-replica readiness.
-- **Zero Ingress Loss:** Because Kubernetes keeps the healthy surviving replica in the service endpoints while the new pod boots, k6 recorded zero HTTP dropped connections during the drill.
+We conducted five controlled failure experiments in the isolated `forgeops-sre-lab` namespace:
+1. **Stateless Pod Termination:** Deleted victim pod under load; replacement pod detected in 1.69s and reached full 2/2 ready state in **52.86 seconds** while the surviving replica served uninterrupted traffic.
+2. **Readiness Probe Failure Injection:** Patched readiness probe to an invalid endpoint; the surge pod became unready and was immediately excluded from Service endpoints; restored via rollout undo in **706 ms**.
+3. **Invalid Image Rollout Guard:** Updated image to nonexistent tag `1.0.0-g12-invalid`; deployment stalled safely in `ErrImagePull` while existing replicas served traffic without downtime; rolled back in **813 ms**.
+4. **Bounded Resource Pressure:** Subjected service to 1,052 requests up to 10 VUs / 20 req/s ceiling; 0 OOMKills, 0 container restarts.
+5. **Declarative Drift Reconciliation:** Scaled deployment imperatively to 3 replicas; declarative `kubectl apply -k platform/sre-lab` restored Git desired state (2 replicas) in **1.47 seconds**.
 
 ---
 
@@ -97,7 +100,7 @@ In Experiment 1, we executed a sudden termination of the active `forgetasks-api`
 ### Q12: What was your strategy for PostgreSQL backup and disaster recovery?
 **Answer:**
 We implemented an automated, non-destructive DR pipeline governed by `rehearse-dr.sh`:
-1. **Backup Phase:** Triggers `pg_dump` on the source database in compressed custom archive format (`-Fc`), calculates a SHA-256 checksum manifest, and archives it to an isolated volume.
+1. **Backup Phase:** Triggers `pg_dump` on the source database in compressed custom archive format (`-Fc`), calculates a SHA-256 checksum manifest, and archives it to an isolated volume. This provides a discrete point-in-time logical backup, not continuous WAL streaming or PITR.
 2. **Fresh Disposable Target:** Rather than restoring over production tables with dangerous `--clean` flags, we spin up an isolated database in a dedicated namespace (`forgeops-dr-lab`).
 3. **Restoration Phase:** Executes `pg_restore` with `--exit-on-error` and strict exit-code trapping.
 4. **Validation Phase:** Executes automated SQL integrity checks verifying schema migrations, relational row counts, and verifies application authentication by checking BCrypt password hashes.
@@ -105,10 +108,10 @@ We implemented an automated, non-destructive DR pipeline governed by `rehearse-d
 ### Q13: What were your measured RTO and RPO numbers in Gate G13?
 **Answer:**
 We distinguish low-level command durations from true business recovery:
-- `pg_dump` execution duration: **273 ms**.
-- `pg_restore` command execution duration: **252 ms**.
-- **End-to-End Service RTO:** **89.29 seconds** (measuring total elapsed time from disaster initiation, target pod readiness, schema restoration, API startup, to healthy synthetic user authentication).
-- **Drill Backup Age:** **12.00 seconds** (the time elapsed between snapshot generation and restoration during the drill). In production, true RPO is bounded by the backup cron interval.
+- `pg_dump` execution duration: **273 ms** (discrete point-in-time logical backup).
+- `pg_restore` command execution duration: **252 ms** (strictly restoring into fresh disposable target).
+- **End-to-End Service RTO:** **89.29 seconds** (measuring total elapsed time from disaster initiation, disposable target pod readiness, schema restoration, API startup, to healthy synthetic user authentication).
+- **Drill Backup Age:** **12.00 seconds** (the age of the test snapshot when restored during the rehearsal drill). In production, true RPO is bounded by the backup cron interval. Continuous streaming PITR is deferred because it requires external cloud object storage.
 
 ---
 
@@ -161,3 +164,4 @@ The two primary limitations are:
 ### Q22: If you had to scale ForgeOps to a multi-cloud enterprise production deployment, what would you change first?
 **Answer:**
 First, I would replace Kind with a managed Kubernetes control plane (AWS EKS or GCP GKE) with multi-AZ node pools and an eBPF-based CNI (Cilium) to enforce live NetworkPolicies. Second, I would migrate PostgreSQL to a managed database with automated cross-region read replicas and WAL archiving (e.g., AWS Aurora or Cloud SQL). Third, I would configure Argo CD with automated progressive delivery (Argo Rollouts) using canary deployments governed by Prometheus latency analysis.
+

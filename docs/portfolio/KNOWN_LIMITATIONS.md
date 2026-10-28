@@ -69,3 +69,4 @@ ForgeOps is a **production-inspired local platform engineering lab**, not an ent
 | **Database DR** | Multi-AZ replica + continuous WAL | Periodic `pg_dump` to disposable target | Models DR verification without multi-terabyte storage. |
 | **Policy-as-Code** | In-cluster validating webhooks | Shift-left CI CLI validation | Eliminates cluster-deadlock and OOM failure modes. |
 | **Ingress & TLS** | Public DNS + Let's Encrypt / ALB | Localhost port-forwards / NodePort | Secures lab from Internet scanning; loopback only. |
+
