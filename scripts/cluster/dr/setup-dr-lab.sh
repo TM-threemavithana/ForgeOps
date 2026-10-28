@@ -7,8 +7,20 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 source "${SCRIPT_DIR}/common-dr.sh"
 
-TARGET_NS="${1:-$DISPOSABLE_DR_NAMESPACE}"
-MODE="${2:-setup}"
+TARGET_NS="$DISPOSABLE_DR_NAMESPACE"
+MODE="setup"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --validate-only|--dry-run)
+      MODE="--validate-only"; shift ;;
+    *)
+      if [[ "$1" != --* ]]; then
+        TARGET_NS="$1"
+      fi
+      shift ;;
+  esac
+done
 
 echo "======================================================================="
 echo "ForgeOps G13: Provision Disposable Disaster Recovery Lab"
@@ -73,6 +85,10 @@ log_pass "Secret dr-db-secret established before Deployment scheduling."
 # Step 4: Deploy database workloads declaratively via Kustomize
 log_info "Applying declarative manifests for $TARGET_NS..."
 kubectl apply -k "${REPO_ROOT}/platform/dr-lab"
+
+# Clean up any residual API deployment and ensure fresh empty storage on target DB
+kubectl delete deployment dr-api -n "$TARGET_NS" --ignore-not-found >/dev/null 2>&1 || true
+kubectl rollout restart deployment/dr-source-db deployment/dr-target-db -n "$TARGET_NS" >/dev/null 2>&1 || true
 
 # Step 5: Wait for database instances to become ready
 log_info "Waiting for dr-source-db deployment to become Ready (up to 90s)..."

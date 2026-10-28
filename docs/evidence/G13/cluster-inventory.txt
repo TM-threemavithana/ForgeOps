@@ -1,0 +1,164 @@
+NAMESPACE                   NAME                                                         READY   STATUS             RESTARTS         AGE
+argocd                      pod/argocd-application-controller-0                          1/1     Running            3 (7h54m ago)    43h
+argocd                      pod/argocd-applicationset-controller-845fd4c76b-f8pb9        1/1     Running            3 (7h54m ago)    43h
+argocd                      pod/argocd-redis-54fdb57fc6-bp7mw                            1/1     Running            3 (7h54m ago)    43h
+argocd                      pod/argocd-repo-server-df7945d68-j8lc5                       1/1     Running            6 (7h54m ago)    43h
+argocd                      pod/argocd-server-57cd8dc45d-hn6ps                           1/1     Running            9 (7h54m ago)    43h
+forgeops-dev                pod/forgetasks-api-6c7f85944-cnngk                           1/1     Running            15 (3h45m ago)   2d14h
+forgeops-dev                pod/forgetasks-db-0                                          1/1     Running            4 (7h54m ago)    2d14h
+forgeops-gitops-rehearsal   pod/forgetasks-rehearsal-api-68fb7f76c7-4fk58                1/1     Running            0                6h10m
+forgeops-gitops-rehearsal   pod/forgetasks-rehearsal-db-0                                1/1     Running            3 (7h54m ago)    42h
+forgeops-observability      pod/alertmanager-g09-monitoring-kube-promet-alertmanager-0   2/2     Running            2 (7h54m ago)    27h
+forgeops-observability      pod/alloy-84547b4558-qdcgl                                   1/2     Running            0                6h59m
+forgeops-observability      pod/g09-monitoring-grafana-5575bd9d6b-hkzxd                  3/3     Running            3 (7h54m ago)    27h
+forgeops-observability      pod/g09-monitoring-kube-promet-operator-75c84dd8bf-grvvc     1/1     Running            2 (7h54m ago)    27h
+forgeops-observability      pod/loki-0                                                   1/1     Running            1 (7h54m ago)    17h
+forgeops-observability      pod/prometheus-g09-monitoring-kube-promet-prometheus-0       2/2     Running            3 (7h54m ago)    27h
+forgeops-observability      pod/tempo-0                                                  0/1     CrashLoopBackOff   57 (18s ago)     7h7m
+kube-system                 pod/coredns-66bc5c9577-2rbqs                                 1/1     Running            4 (7h54m ago)    2d15h
+kube-system                 pod/coredns-66bc5c9577-gcjsj                                 1/1     Running            4 (7h54m ago)    2d15h
+kube-system                 pod/etcd-forgeops-control-plane                              1/1     Running            4 (7h54m ago)    2d15h
+kube-system                 pod/kindnet-gn6g8                                            1/1     Running            4 (7h54m ago)    2d15h
+kube-system                 pod/kube-apiserver-forgeops-control-plane                    1/1     Running            5 (7h54m ago)    2d15h
+kube-system                 pod/kube-controller-manager-forgeops-control-plane           1/1     Running            52 (51m ago)     2d15h
+kube-system                 pod/kube-proxy-5x6tc                                         1/1     Running            4 (7h54m ago)    2d15h
+kube-system                 pod/kube-scheduler-forgeops-control-plane                    1/1     Running            52 (19m ago)     2d15h
+local-path-storage          pod/local-path-provisioner-57f858859-fdzvc                   1/1     Running            6 (7h53m ago)    2d15h
+
+NAMESPACE                   NAME                                              TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                                                                                   AGE
+argocd                      service/argocd-applicationset-controller          ClusterIP   10.96.243.245   <none>        7000/TCP                                                                                                  43h
+argocd                      service/argocd-redis                              ClusterIP   10.96.79.223    <none>        6379/TCP                                                                                                  43h
+argocd                      service/argocd-repo-server                        ClusterIP   10.96.132.163   <none>        8081/TCP                                                                                                  43h
+argocd                      service/argocd-server                             ClusterIP   10.96.67.163    <none>        80/TCP,443/TCP                                                                                            43h
+default                     service/kubernetes                                ClusterIP   10.96.0.1       <none>        443/TCP                                                                                                   2d15h
+forgeops-dev                service/forgetasks-api                            ClusterIP   10.96.246.85    <none>        8080/TCP                                                                                                  2d15h
+forgeops-dev                service/forgetasks-db                             ClusterIP   10.96.223.37    <none>        5432/TCP                                                                                                  2d15h
+forgeops-dev                service/forgetasks-db-headless                    ClusterIP   None            <none>        5432/TCP                                                                                                  2d15h
+forgeops-gitops-rehearsal   service/forgetasks-rehearsal-api                  ClusterIP   10.96.212.58    <none>        8080/TCP                                                                                                  42h
+forgeops-gitops-rehearsal   service/forgetasks-rehearsal-db                   ClusterIP   10.96.9.251     <none>        5432/TCP                                                                                                  42h
+forgeops-gitops-rehearsal   service/forgetasks-rehearsal-db-headless          ClusterIP   None            <none>        5432/TCP                                                                                                  42h
+forgeops-observability      service/alertmanager-operated                     ClusterIP   None            <none>        9093/TCP,9094/TCP,9094/UDP                                                                                27h
+forgeops-observability      service/alloy                                     ClusterIP   10.96.91.76     <none>        12345/TCP,4317/TCP,4318/TCP                                                                               17h
+forgeops-observability      service/g09-monitoring-grafana                    ClusterIP   10.96.14.231    <none>        80/TCP                                                                                                    29h
+forgeops-observability      service/g09-monitoring-kube-promet-alertmanager   ClusterIP   10.96.161.86    <none>        9093/TCP,8080/TCP                                                                                         29h
+forgeops-observability      service/g09-monitoring-kube-promet-operator       ClusterIP   10.96.218.57    <none>        8080/TCP                                                                                                  29h
+forgeops-observability      service/g09-monitoring-kube-promet-prometheus     ClusterIP   10.96.145.225   <none>        9090/TCP,8080/TCP                                                                                         29h
+forgeops-observability      service/loki                                      ClusterIP   10.96.100.61    <none>        3100/TCP,9095/TCP                                                                                         17h
+forgeops-observability      service/loki-headless                             ClusterIP   None            <none>        3100/TCP                                                                                                  17h
+forgeops-observability      service/loki-memberlist                           ClusterIP   None            <none>        7946/TCP                                                                                                  17h
+forgeops-observability      service/prometheus-operated                       ClusterIP   None            <none>        9090/TCP                                                                                                  27h
+forgeops-observability      service/tempo                                     ClusterIP   10.96.154.62    <none>        6831/UDP,6832/UDP,3200/TCP,14268/TCP,14250/TCP,9411/TCP,55680/TCP,55681/TCP,4317/TCP,4318/TCP,55678/TCP   7h7m
+kube-system                 service/kube-dns                                  ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP                                                                                    2d15h
+
+NAMESPACE     NAME                        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+kube-system   daemonset.apps/kindnet      1         1         1       1            1           kubernetes.io/os=linux   2d15h
+kube-system   daemonset.apps/kube-proxy   1         1         1       1            1           kubernetes.io/os=linux   2d15h
+
+NAMESPACE                   NAME                                                  READY   UP-TO-DATE   AVAILABLE   AGE
+argocd                      deployment.apps/argocd-applicationset-controller      1/1     1            1           43h
+argocd                      deployment.apps/argocd-redis                          1/1     1            1           43h
+argocd                      deployment.apps/argocd-repo-server                    1/1     1            1           43h
+argocd                      deployment.apps/argocd-server                         1/1     1            1           43h
+forgeops-dev                deployment.apps/forgetasks-api                        1/1     1            1           2d15h
+forgeops-gitops-rehearsal   deployment.apps/forgetasks-rehearsal-api              1/1     1            1           42h
+forgeops-observability      deployment.apps/alloy                                 0/1     1            0           17h
+forgeops-observability      deployment.apps/g09-monitoring-grafana                1/1     1            1           29h
+forgeops-observability      deployment.apps/g09-monitoring-kube-promet-operator   1/1     1            1           29h
+kube-system                 deployment.apps/coredns                               2/2     2            2           2d15h
+local-path-storage          deployment.apps/local-path-provisioner                1/1     1            1           2d15h
+
+NAMESPACE                   NAME                                                             DESIRED   CURRENT   READY   AGE
+argocd                      replicaset.apps/argocd-applicationset-controller-845fd4c76b      1         1         1       43h
+argocd                      replicaset.apps/argocd-redis-54fdb57fc6                          1         1         1       43h
+argocd                      replicaset.apps/argocd-repo-server-df7945d68                     1         1         1       43h
+argocd                      replicaset.apps/argocd-server-57cd8dc45d                         1         1         1       43h
+forgeops-dev                replicaset.apps/forgetasks-api-6c7f85944                         1         1         1       2d14h
+forgeops-dev                replicaset.apps/forgetasks-api-6ccdf6cb64                        0         0         0       2d15h
+forgeops-gitops-rehearsal   replicaset.apps/forgetasks-rehearsal-api-59996d7cf4              0         0         0       21h
+forgeops-gitops-rehearsal   replicaset.apps/forgetasks-rehearsal-api-5bbb4959cc              0         0         0       41h
+forgeops-gitops-rehearsal   replicaset.apps/forgetasks-rehearsal-api-68fb7f76c7              1         1         1       6h10m
+forgeops-gitops-rehearsal   replicaset.apps/forgetasks-rehearsal-api-76c5d4c75d              0         0         0       20h
+forgeops-gitops-rehearsal   replicaset.apps/forgetasks-rehearsal-api-fb69d46cf               0         0         0       42h
+forgeops-observability      replicaset.apps/alloy-5bd65f9dd5                                 0         0         0       17h
+forgeops-observability      replicaset.apps/alloy-84547b4558                                 1         1         0       6h59m
+forgeops-observability      replicaset.apps/g09-monitoring-grafana-5575bd9d6b                1         1         1       27h
+forgeops-observability      replicaset.apps/g09-monitoring-grafana-6b97cbb8d9                0         0         0       29h
+forgeops-observability      replicaset.apps/g09-monitoring-kube-promet-operator-68cd9d7c9    0         0         0       29h
+forgeops-observability      replicaset.apps/g09-monitoring-kube-promet-operator-75c84dd8bf   1         1         1       27h
+kube-system                 replicaset.apps/coredns-66bc5c9577                               2         2         2       2d15h
+local-path-storage          replicaset.apps/local-path-provisioner-57f858859                 1         1         1       2d15h
+
+NAMESPACE                   NAME                                                                    READY   AGE
+argocd                      statefulset.apps/argocd-application-controller                          1/1     43h
+forgeops-dev                statefulset.apps/forgetasks-db                                          1/1     2d15h
+forgeops-gitops-rehearsal   statefulset.apps/forgetasks-rehearsal-db                                1/1     42h
+forgeops-observability      statefulset.apps/alertmanager-g09-monitoring-kube-promet-alertmanager   1/1     27h
+forgeops-observability      statefulset.apps/loki                                                   1/1     17h
+forgeops-observability      statefulset.apps/prometheus-g09-monitoring-kube-promet-prometheus       1/1     27h
+forgeops-observability      statefulset.apps/tempo                                                  0/1     7h7m
+
+NAMESPACE                   NAME                                                                                                                           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+forgeops-dev                persistentvolumeclaim/postgres-storage-forgetasks-db-0                                                                         Bound    pvc-84853fb3-4d13-43a9-bc62-973c3be3c90c   1Gi        RWO            standard       <unset>                 2d15h
+forgeops-gitops-rehearsal   persistentvolumeclaim/postgres-storage-forgetasks-rehearsal-db-0                                                               Bound    pvc-b5ea8ec9-47e8-4979-afdb-621f2e3c63b8   1Gi        RWO            standard       <unset>                 42h
+forgeops-observability      persistentvolumeclaim/prometheus-g09-monitoring-kube-promet-prometheus-db-prometheus-g09-monitoring-kube-promet-prometheus-0   Bound    pvc-cd64e090-2c69-49b3-a389-de5841ce06d6   2Gi        RWO            standard       <unset>                 27h
+forgeops-observability      persistentvolumeclaim/storage-loki-0                                                                                           Bound    pvc-23468366-7394-4f2d-be1f-2a640d6f12c5   2Gi        RWO            standard       <unset>                 17h
+forgeops-observability      persistentvolumeclaim/storage-tempo-0                                                                                          Bound    pvc-092b6655-6617-467c-b546-69e201a0ba8a   2Gi        RWO            standard       <unset>                 7h7m
+
+NAMESPACE                   NAME                                                                                         TYPE                 DATA   AGE
+argocd                      secret/argocd-initial-admin-secret                                                           Opaque               1      43h
+argocd                      secret/argocd-redis                                                                          Opaque               1      43h
+argocd                      secret/argocd-secret                                                                         Opaque               5      43h
+argocd                      secret/g09-monitoring-helm-oci-repository                                                    Opaque               4      29h
+argocd                      secret/g10-grafana-helm-repository                                                           Opaque               3      17h
+argocd                      secret/sh.helm.release.v1.argocd.v1                                                          helm.sh/release.v1   1      44h
+forgeops-dev                secret/forgetasks-db-secret                                                                  Opaque               1      2d15h
+forgeops-gitops-rehearsal   secret/forgetasks-rehearsal-db-secret                                                        Opaque               1      42h
+forgeops-observability      secret/alertmanager-g09-monitoring-kube-promet-alertmanager                                  Opaque               1      29h
+forgeops-observability      secret/alertmanager-g09-monitoring-kube-promet-alertmanager-cluster-tls-config               Opaque               1      27h
+forgeops-observability      secret/alertmanager-g09-monitoring-kube-promet-alertmanager-generated                        Opaque               1      27h
+forgeops-observability      secret/alertmanager-g09-monitoring-kube-promet-alertmanager-tls-assets-0                     Opaque               0      27h
+forgeops-observability      secret/alertmanager-g09-monitoring-kube-promet-alertmanager-web-config                       Opaque               1      27h
+forgeops-observability      secret/g09-grafana-admin                                                                     Opaque               2      29h
+forgeops-observability      secret/prometheus-g09-monitoring-kube-promet-prometheus                                      Opaque               1      27h
+forgeops-observability      secret/prometheus-g09-monitoring-kube-promet-prometheus-thanos-prometheus-http-client-file   Opaque               1      27h
+forgeops-observability      secret/prometheus-g09-monitoring-kube-promet-prometheus-tls-assets-0                         Opaque               0      27h
+forgeops-observability      secret/prometheus-g09-monitoring-kube-promet-prometheus-web-config                           Opaque               1      27h
+
+NAMESPACE                   NAME                                                                     DATA   AGE
+argocd                      configmap/argocd-cm                                                      18     43h
+argocd                      configmap/argocd-cmd-params-cm                                           18     43h
+argocd                      configmap/argocd-gpg-keys-cm                                             0      43h
+argocd                      configmap/argocd-rbac-cm                                                 4      43h
+argocd                      configmap/argocd-redis-health-configmap                                  2      43h
+argocd                      configmap/argocd-ssh-known-hosts-cm                                      1      43h
+argocd                      configmap/argocd-tls-certs-cm                                            0      43h
+argocd                      configmap/kube-root-ca.crt                                               1      44h
+default                     configmap/kube-root-ca.crt                                               1      2d15h
+forgeops-dev                configmap/forgetasks-api-config                                          5      2d15h
+forgeops-dev                configmap/kube-root-ca.crt                                               1      2d15h
+forgeops-gitops-rehearsal   configmap/forgetasks-rehearsal-api-config                                5      42h
+forgeops-gitops-rehearsal   configmap/kube-root-ca.crt                                               1      43h
+forgeops-observability      configmap/alloy                                                          1      17h
+forgeops-observability      configmap/g09-monitoring-grafana                                         1      29h
+forgeops-observability      configmap/g09-monitoring-grafana-config-dashboards                       1      29h
+forgeops-observability      configmap/g09-monitoring-kube-promet-grafana-datasource                  1      29h
+forgeops-observability      configmap/g10-grafana-datasource-loki                                    1      17h
+forgeops-observability      configmap/g11-grafana-datasource-tempo                                   1      7h5m
+forgeops-observability      configmap/kube-root-ca.crt                                               1      29h
+forgeops-observability      configmap/loki                                                           1      17h
+forgeops-observability      configmap/loki-runtime                                                   1      17h
+forgeops-observability      configmap/prometheus-g09-monitoring-kube-promet-prometheus-rulefiles-0   1      27h
+forgeops-observability      configmap/tempo                                                          2      7h7m
+forgeops-staging            configmap/kube-root-ca.crt                                               1      2d15h
+kube-node-lease             configmap/kube-root-ca.crt                                               1      2d15h
+kube-public                 configmap/cluster-info                                                   1      2d15h
+kube-public                 configmap/kube-root-ca.crt                                               1      2d15h
+kube-system                 configmap/coredns                                                        1      2d15h
+kube-system                 configmap/extension-apiserver-authentication                             6      2d15h
+kube-system                 configmap/kube-apiserver-legacy-service-account-token-tracking           1      2d15h
+kube-system                 configmap/kube-proxy                                                     2      2d15h
+kube-system                 configmap/kube-root-ca.crt                                               1      2d15h
+kube-system                 configmap/kubeadm-config                                                 1      2d15h
+kube-system                 configmap/kubelet-config                                                 1      2d15h
+local-path-storage          configmap/kube-root-ca.crt                                               1      2d15h
+local-path-storage          configmap/local-path-config                                              4      2d15h
