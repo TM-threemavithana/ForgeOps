@@ -1,0 +1,46 @@
+=== G11 Cluster State & Inventory ===
+Timestamp: Wed Oct 28 04:11:50 UTC 2026
+
+--- Argo CD Applications ---
+NAME                     PROJECT                          SYNC     HEALTH    AUTO_SYNC
+forgetasks-rehearsal     forgeops-rehearsal-project       Synced   Healthy   {'allowEmpty': False, 'enabled': False, 'prune': False, 'selfHeal': True}
+g09-monitoring           forgeops-observability-project   Synced   Healthy   None
+g10-alloy                forgeops-logging-project         Synced   Healthy   None
+g10-grafana-datasource   forgeops-logging-project         Synced   Healthy   None
+g10-loki                 forgeops-logging-project         Synced   Healthy   None
+g11-tempo                forgeops-logging-project         Synced   Healthy   None
+
+--- Pods across Relevant Namespaces ---
+Namespace: forgeops-dev
+NAME                             READY   STATUS    RESTARTS       AGE    IP            NODE                     NOMINATED NODE   READINESS GATES
+forgetasks-api-6c7f85944-cnngk   1/1     Running   14 (98m ago)   2d8h   10.244.0.5    forgeops-control-plane   <none>           <none>
+forgetasks-db-0                  1/1     Running   4 (124m ago)   2d8h   10.244.0.14   forgeops-control-plane   <none>           <none>
+
+Namespace: forgeops-gitops-rehearsal
+NAME                                        READY   STATUS    RESTARTS       AGE   IP            NODE                     NOMINATED NODE   READINESS GATES
+forgetasks-rehearsal-api-68fb7f76c7-4fk58   1/1     Running   0              20m   10.244.0.25   forgeops-control-plane   <none>           <none>
+forgetasks-rehearsal-db-0                   1/1     Running   3 (124m ago)   36h   10.244.0.11   forgeops-control-plane   <none>           <none>
+
+Namespace: forgeops-observability
+NAME                                                     READY   STATUS    RESTARTS       AGE   IP            NODE                     NOMINATED NODE   READINESS GATES
+alertmanager-g09-monitoring-kube-promet-alertmanager-0   2/2     Running   2 (124m ago)   21h   10.244.0.19   forgeops-control-plane   <none>           <none>
+alloy-84547b4558-qdcgl                                   2/2     Running   0              69m   10.244.0.24   forgeops-control-plane   <none>           <none>
+g09-monitoring-grafana-5575bd9d6b-hkzxd                  3/3     Running   3 (124m ago)   21h   10.244.0.13   forgeops-control-plane   <none>           <none>
+g09-monitoring-kube-promet-operator-75c84dd8bf-grvvc     1/1     Running   2 (124m ago)   21h   10.244.0.10   forgeops-control-plane   <none>           <none>
+loki-0                                                   1/1     Running   1 (124m ago)   11h   10.244.0.16   forgeops-control-plane   <none>           <none>
+prometheus-g09-monitoring-kube-promet-prometheus-0       2/2     Running   3 (124m ago)   21h   10.244.0.18   forgeops-control-plane   <none>           <none>
+tempo-0                                                  1/1     Running   0              77m   10.244.0.23   forgeops-control-plane   <none>           <none>
+
+--- Services in forgeops-observability ---
+NAME                                      TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                                                                                   AGE
+alertmanager-operated                     ClusterIP   None            <none>        9093/TCP,9094/TCP,9094/UDP                                                                                21h
+alloy                                     ClusterIP   10.96.91.76     <none>        12345/TCP,4317/TCP,4318/TCP                                                                               11h
+g09-monitoring-grafana                    ClusterIP   10.96.14.231    <none>        80/TCP                                                                                                    23h
+g09-monitoring-kube-promet-alertmanager   ClusterIP   10.96.161.86    <none>        9093/TCP,8080/TCP                                                                                         23h
+g09-monitoring-kube-promet-operator       ClusterIP   10.96.218.57    <none>        8080/TCP                                                                                                  23h
+g09-monitoring-kube-promet-prometheus     ClusterIP   10.96.145.225   <none>        9090/TCP,8080/TCP                                                                                         23h
+loki                                      ClusterIP   10.96.100.61    <none>        3100/TCP,9095/TCP                                                                                         11h
+loki-headless                             ClusterIP   None            <none>        3100/TCP                                                                                                  11h
+loki-memberlist                           ClusterIP   None            <none>        7946/TCP                                                                                                  11h
+prometheus-operated                       ClusterIP   None            <none>        9090/TCP                                                                                                  21h
+tempo                                     ClusterIP   10.96.154.62    <none>        6831/UDP,6832/UDP,3200/TCP,14268/TCP,14250/TCP,9411/TCP,55680/TCP,55681/TCP,4317/TCP,4318/TCP,55678/TCP   77m

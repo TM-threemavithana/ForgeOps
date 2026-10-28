@@ -146,19 +146,19 @@ if [[ "$AUTH_REHEARSAL" != "yes" ]]; then
 fi
 pass "Positive RBAC: Alloy SA can get pods in forgeops-gitops-rehearsal."
 
-AUTH_DEV=$(kubectl auth can-i get pods --as=system:serviceaccount:forgeops-observability:alloy -n forgeops-dev 2>&1 || true)
+AUTH_DEV=$(kubectl auth can-i get pods --as=system:serviceaccount:forgeops-observability:alloy -n forgeops-dev 2>/dev/null || true)
 if [[ "$AUTH_DEV" != "no" ]]; then
   fail "Negative RBAC failed: Alloy SA must NOT get pods in forgeops-dev, got $AUTH_DEV"
 fi
 pass "Negative RBAC: Alloy SA denied pod access in forgeops-dev."
 
-AUTH_SECRET=$(kubectl auth can-i get secrets --as=system:serviceaccount:forgeops-observability:alloy -n forgeops-gitops-rehearsal 2>&1 || true)
+AUTH_SECRET=$(kubectl auth can-i get secrets --as=system:serviceaccount:forgeops-observability:alloy -n forgeops-gitops-rehearsal 2>/dev/null || true)
 if [[ "$AUTH_SECRET" != "no" ]]; then
   fail "Negative RBAC failed: Alloy SA must NOT get secrets in rehearsal, got $AUTH_SECRET"
 fi
 pass "Negative RBAC: Alloy SA denied secret access."
 
-AUTH_TEMPO_CLUSTER=$(kubectl auth can-i get nodes --as=system:serviceaccount:forgeops-observability:tempo 2>&1 || true)
+AUTH_TEMPO_CLUSTER=$(kubectl auth can-i get nodes --as=system:serviceaccount:forgeops-observability:tempo 2>/dev/null || true)
 if [[ "$AUTH_TEMPO_CLUSTER" != "no" ]]; then
   fail "Negative RBAC failed: Tempo SA must NOT have cluster node read privileges"
 fi
@@ -184,12 +184,13 @@ info "Probe W3C Traceparent: $W3C_TRACEPARENT"
 PROBE_HEADERS_FILE=$(mktemp)
 PROBE_BODY_FILE=$(mktemp)
 
+PROBE_SECRET="SuperSecretProbePassword999!"
 HTTP_STATUS=$(curl -s -o "$PROBE_BODY_FILE" -D "$PROBE_HEADERS_FILE" -w "%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
   -H "X-Request-ID: ${TEST_CORRELATION_ID}" \
   -H "traceparent: ${W3C_TRACEPARENT}" \
-  -d '{"username":"a","password":"123"}' \
+  -d "{\"username\":\"a\",\"password\":\"${PROBE_SECRET}\"}" \
   "http://127.0.0.1:${API_LOCAL_PORT}/api/v1/accounts")
 
 if [[ "$HTTP_STATUS" != "400" ]]; then
@@ -281,7 +282,8 @@ import sys, json
 try:
     data = json.load(sys.stdin)
     batches = data.get('batches', [])
-    if len(batches) > 0:
+    data_list = data.get('data', [])
+    if len(batches) > 0 or len(data_list) > 0:
         print('true')
     else:
         print('false')
@@ -309,20 +311,36 @@ echo "$TRACE_JSON" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 raw_text = json.dumps(data).lower()
-forbidden_strings = ['password', '123', 'authorization', 'bearer', 'cookie', 'secret']
-for f in forbidden_strings:
-    # Notice: 'password' could appear in schema if field name, but raw values like '123' must not
-    assert '123' not in raw_text, 'Sensitive credential value 123 leaked into span attributes'
-    assert 'bearer' not in raw_text, 'Sensitive bearer token detected in spans'
+
+# Verify that sensitive probe payload contents or bearer tokens never appear anywhere in the trace
+assert '$PROBE_SECRET'.lower() not in raw_text, 'Sensitive probe payload leaked into trace'
+assert 'bearer ' not in raw_text, 'Bearer token leaked into trace'
+
+# Deeply inspect all span and resource attributes and event names
+for batch in data.get('batches', []):
+    for ss in batch.get('scopeSpans', []):
+        for span in ss.get('spans', []):
+            for attr in span.get('attributes', []):
+                key = attr.get('key', '').lower()
+                val = str(attr.get('value', {})).lower()
+                assert 'header.authorization' not in key, f'Authorization header leaked in attribute: {key}'
+                assert 'header.cookie' not in key, f'Cookie header leaked in attribute: {key}'
+                assert 'password' not in key, f'Sensitive attribute key detected: {key}'
+                assert '$PROBE_SECRET'.lower() not in val, f'Payload secret leaked in attribute: {key}'
+            for ev in span.get('events', []):
+                ev_name = ev.get('name', '').lower()
+                ev_attrs = str(ev.get('attributes', [])).lower()
+                assert '$PROBE_SECRET'.lower() not in ev_name, f'Payload secret leaked in event name: {ev_name}'
+                assert '$PROBE_SECRET'.lower() not in ev_attrs, f'Payload secret leaked in event attributes'
 "
 pass "Tempo spans verified: zero passwords, tokens, or sensitive payload values leaked."
 
 # 13. Low-Cardinality Index Labels Check in Loki
 info "Step 13: Verifying Loki stream index labels"
 LOKI_LABELS_JSON=$(curl -s "http://127.0.0.1:${LOKI_LOCAL_PORT}/loki/api/v1/labels")
-python3 -c "
+echo "$LOKI_LABELS_JSON" | python3 -c "
 import sys, json
-d = json.loads('''$LOKI_LABELS_JSON''')
+d = json.load(sys.stdin)
 assert d.get('status') == 'success', 'Failed to retrieve labels'
 labels = set(d.get('data', []))
 forbidden = {'correlationId', 'traceId', 'spanId', 'X-Request-ID', 'timestamp', 'token', 'pod'}
