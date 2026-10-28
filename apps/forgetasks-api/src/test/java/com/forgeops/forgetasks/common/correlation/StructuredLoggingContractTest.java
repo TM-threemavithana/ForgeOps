@@ -108,4 +108,45 @@ class StructuredLoggingContractTest {
         assertThat(json.path("ecs").path("version").asString())
                 .isNotBlank();
     }
+
+    @Test
+    void traceAndSpanIdsAreSerializedInEcsJson() throws Exception {
+        var context = new ContextBase();
+        context.putObject(
+                Environment.class.getName(),
+                new MockEnvironment()
+                        .withProperty("spring.application.name", "forgetasks-api")
+        );
+
+        var encoder = new StructuredLogEncoder();
+        encoder.setContext(context);
+        encoder.setFormat("ecs");
+        encoder.start();
+
+        try {
+            var event = new LoggingEvent();
+            event.setInstant(Instant.now());
+            event.setLevel(Level.INFO);
+            event.setLoggerName("forgeops.g11.test");
+            event.setThreadName("main");
+            event.setMessage("g11-trace-test");
+            event.setMDCPropertyMap(Map.of(
+                    "traceId", "0af7651916cd43dd8448eb211c80319c",
+                    "spanId", "b7ad6b7169203331",
+                    "correlationId", "req-test-123"
+            ));
+
+            String encoded = new String(encoder.encode(event), StandardCharsets.UTF_8);
+            System.out.println("ENCODED_ECS_JSON=" + encoded);
+            var json = new JsonMapper().readTree(encoded);
+            assertThat(json.path("correlationId").asString()).isEqualTo("req-test-123");
+            // Check if traceId is top-level or under trace.id
+            System.out.println("traceId path: " + json.path("traceId"));
+            System.out.println("trace.id path: " + json.path("trace").path("id"));
+            System.out.println("spanId path: " + json.path("spanId"));
+            System.out.println("span.id path: " + json.path("span").path("id"));
+        } finally {
+            encoder.stop();
+        }
+    }
 }
