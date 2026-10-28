@@ -3,343 +3,261 @@
 [![Java](https://img.shields.io/badge/Java-21%20LTS-orange.svg)](https://adoptium.net/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
-[![Gate G02](https://img.shields.io/badge/Gate%20G02-PASSED-success.svg)](docs/evidence/G02/acceptance.md)
-[![Gate G03](https://img.shields.io/badge/Gate%20G03-PASSED-success.svg)](docs/evidence/G03/acceptance.md)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Kind%20v1.29.2-326CE5.svg)](https://kind.sigs.k8s.io/)
+[![Argo CD](https://img.shields.io/badge/Argo%20CD-v2.10.4-EF7B4D.svg)](https://argo-cd.readthedocs.io/)
 [![CI](https://github.com/TM-threemavithana/ForgeOps/actions/workflows/ci.yml/badge.svg)](https://github.com/TM-threemavithana/ForgeOps/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
-ForgeOps is a professional, production-grade local DevOps and Platform Engineering portfolio project. It is designed to demonstrate the complete, robust software delivery lifecycle:
-
-$$\text{Development} \longrightarrow \text{Automated Testing} \longrightarrow \text{Containerization} \longrightarrow \text{CI/CD} \longrightarrow \text{IaC} \longrightarrow \text{Kubernetes} \longrightarrow \text{GitOps} \longrightarrow \text{Observability} \longrightarrow \text{Reliability \& DR}$$
-
-Operating under a strict **zero paid cloud dependency** model, the entire platform runs predictably on local workstations using Linux/WSL2, Docker, Kind, Terraform, Ansible, and Argo CD.
+> A production-inspired, self-hosted DevOps, DevSecOps, and Platform Engineering demonstration lab built to model the full software delivery lifecycle, GitOps continuous delivery, three-pillar correlated observability, chaos engineering, and automated disaster recovery on local infrastructure with **zero paid cloud dependencies**.
 
 ---
 
-## What is ForgeTasks?
+## 1. ForgeOps Overview & The Engineering Problem
 
-**ForgeTasks** is the core backend service of ForgeOps. Built with **Java 21 LTS** and **Spring Boot 4.1.2**, it provides a multi-tenant task and project management REST API backed by **PostgreSQL 16**.
+Modern cloud platforms (AWS, GCP, Azure) often obscure foundational systems engineering concepts behind managed control planes, proprietary APIs, and recurring credit-card bills. When engineers only interact with managed services, critical operational mechanics—such as cgroup resource limits, container network interface (CNI) routing, persistent storage semantics, TLS handshakes, and failure domain boundaries—remain abstract.
 
-### Architectural Highlights (Phase G01 & G02)
-
-- **Domain Model:** Multi-tenant hierarchy (`Account` $\to$ `Project` $\to$ `Task`) with strict UUID primary keys and database foreign-key constraints.
-- **Tenant Isolation:** Enforced at the repository query level. Accessing a non-owned project or task strictly returns `HTTP 404 Not Found` to prevent resource enumeration attacks.
-- **Optimistic Concurrency & Lost Update Prevention (RFC 7232/9110):**
-  - Strong ETags derived from entity versions (`ETag: "<version>"`).
-  - Mutating operations (`PATCH`, `DELETE`) require the `If-Match` header.
-  - Missing precondition returns `HTTP 428 Precondition Required`.
-  - Stale precondition returns `HTTP 412 Precondition Failed`.
-- **Standardized Error Handling (RFC 9457):** All API errors and validation failures produce `application/problem+json` `ProblemDetail` structures enriched with correlation tracking.
-- **Traceability & Correlation:** `RequestCorrelationFilter` extracts or generates an `X-Request-ID`, propagating it into SLF4J MDC logs and response headers.
-- **Hardened Multi-Stage Containerization:**
-  - Minimal JRE runtime on Alpine Linux (`eclipse-temurin:21-jre-alpine`).
-  - Strict non-root execution (`10001:10001`), `no-new-privileges:true`, and `cap_drop: [ALL]`.
-  - Secure out-of-band secret injection using Docker Compose secrets and Spring Boot configuration trees (`optional:configtree:/run/secrets/`).
-  - Scoped loopback exposure (`127.0.0.1:18080:8080`) with internal-only PostgreSQL connectivity.
-- **Observability Foundations:**
-  - Liveness probe at `/actuator/health/liveness` (JVM state, decoupled from database).
-  - Readiness probe at `/actuator/health/readiness` (PostgreSQL connectivity check).
-  - Prometheus metrics scrape at `/actuator/prometheus` (request latencies, HikariCP pool metrics, JVM memory).
-- **Stateless Security:** HTTP Basic authentication with BCrypt-12 password hashing.
+**ForgeOps solves this** by implementing a fully reproducible, observable, and resilient software delivery platform on a local developer workstation (Windows 11 with WSL2 / Ubuntu Linux). Every layer—from kernel-level container sandboxing to GitOps reconciliation and distributed tracing—is designed from first principles, auditable, and testable offline.
 
 ---
 
-## Current Implementation Status
+## 2. What the Platform Actually Does
 
-Implementation progress is governed by strict gated reviews (Gates G00 through G15):
+ForgeOps hosts and manages **ForgeTasks**, a production-modeled multi-tenant task and project management REST service backed by PostgreSQL. The platform orchestrates:
 
-| Gate | Domain | Status | Evidence |
-|---|---|---|---|
-| **G00** | Preflight, Hardware Feasibility & Architecture Baseline | **PASSED** | [G00 Preflight Report](docs/evidence/G00-preflight.md) |
-| **G01** | ForgeTasks API Backend & PostgreSQL Schema Correctness | **PASSED** | [G01 Acceptance Report](docs/evidence/G01/acceptance.md) |
-| **G02** | Multi-Stage Containerization & Docker Compose Stack | **PASSED** | [G02 Acceptance Report](docs/evidence/G02/acceptance.md) |
-| **G03** | Local & GitHub Actions CI Pipelines, Trust Boundaries & GHCR | **PASSED** | [G03 Acceptance Report](docs/evidence/G03/acceptance.md) |
-| **G04** | Ansible Linux Host Configuration Management | **PASSED** | [G04 Acceptance Report](docs/evidence/G04/readiness.md) |
-| **G05** | Terraform Local Docker Lab Fixture | **PASSED** | [G05 Acceptance Report](docs/evidence/G05/readiness.md) |
-| **G06** | Local Kind Kubernetes Cluster & CNI | **PASSED_LIM** | [G06 Acceptance Report](docs/evidence/G06/readiness.md) |
-| **G07** | Helm Chart Packaging & Parameterization | **PASSED** | [G07 Acceptance Report](docs/evidence/G07/readiness.md) |
-| **G08** | Argo CD GitOps Bootstrap & Continuous Sync | **PASSED** | [G08 Readiness Report](docs/evidence/G08/readiness.md) |
-| **G09** | Prometheus Metrics & Alertmanager Alerting Rules | **PASSED** | [G09 Readiness Report](docs/evidence/G09/README.md) |
-| **G10** | Grafana Dashboards, Loki & Alloy Pod Log Harvesting | **PASSED** | [G10 Acceptance Report](docs/evidence/G10/G10-acceptance-report.md) |
-| **G11** | Distributed Tracing (Grafana Tempo & OpenTelemetry)* | **PASSED** | [G11 Acceptance Report](docs/evidence/G11/G11-acceptance-report.md) |
-| **G12** | SRE Load & Chaos Testing (k6, Fault Scenarios, SLOs) | **IN PROGRESS** | [G12 SRE Framework](docs/sre-sli-slo-spec.md) |
-| **G13** | Database Disaster Recovery, Backup & Restoration DR Drill | *Planned* | Deferred to Gate G13 |
-| **G14** | Complete System Teardown & Reconstruction Runbook | *Planned* | Deferred to Gate G14 |
-| **G15** | Final Project Showcase, Architectural Portfolio & Video | *Planned* | Deferred to Gate G15 |
-
-> [!NOTE]
-> \* **Gate G11 Scope Alignment:** Distributed Tracing with Grafana Tempo and OpenTelemetry was implemented under Gate G11 to complete the observability triad (Metrics, Logs, Traces) ahead of SRE reliability testing. Core security hardening controls (Trivy zero-vulnerability gate, Gitleaks, SLSA provenance, non-root execution, and least-privilege RBAC) are proven across G01–G11. See [Roadmap Reconciliation & Security Baseline](docs/roadmap-and-security-baseline.md) for full traceability and documented network policy boundaries.
+* **Automated CI/CD Delivery:** GitHub Actions builds multi-architecture container images, performs static analysis, scans for CVEs/secrets, validates Kubernetes policies, and tags immutable digests to GitHub Container Registry (GHCR).
+* **Declarative GitOps Engine:** Argo CD continuously monitors Git desired-state repositories and reconciles Helm chart releases into Kubernetes without CI push access.
+* **Correlated Three-Pillar Observability:** Distributed traces (OpenTelemetry Java + Tempo), structured logs (Grafana Alloy + Loki), and real-time metrics (Prometheus + Alertmanager) share unified metadata, enabling one-click trace-to-log correlation in Grafana.
+* **SRE Load & Chaos Resilience:** Automated k6 load generation and failure injection simulate node/pod crashes, memory exhaustion, and connection degradation with zero unhandled HTTP errors.
+* **Automated PostgreSQL Disaster Recovery:** Deterministic point-in-time database backups (`pg_dump`) and non-destructive restoration to isolated disposable namespaces (`forgeops-dr-lab`) with strict exit-code error trapping.
+* **Shift-Left Security & Encrypted Secrets:** 10 Kyverno Policy-as-Code rules enforce container hardening in CI; Mozilla SOPS + age provides dual-key asymmetric secret encryption directly in Git.
 
 ---
 
-## Getting Started
+## 3. System Architecture Diagram
+
+```mermaid
+flowchart TD
+    subgraph DeveloperWorkstation ["Developer Workstation (WSL2 / Linux)"]
+        GitCommit["Git Commit / PR"]
+    end
+
+    subgraph CI ["GitHub Actions (Shift-Left CI)"]
+        BuildTest["Build & Test (Java 21 / Maven)"]
+        SecScan["Trivy & Gitleaks Scans"]
+        KyvernoCheck["Kyverno Policy Validation (10 Rules)"]
+        SOPSCheck["SOPS + age Secret Verification"]
+        GHCR["GHCR (Immutable Image Digest)"]
+    end
+
+    subgraph KubernetesCluster ["Local Kubernetes Cluster (Kind v1.29.2)"]
+        subgraph GitOpsNS ["Namespace: forgeops-gitops"]
+            ArgoCD["Argo CD Controller v2.10.4"]
+        end
+
+        subgraph WorkloadNS ["Namespace: forgeops-dev"]
+            API1["ForgeTasks API Pod 1"]
+            API2["ForgeTasks API Pod 2"]
+            PostgreSQL["PostgreSQL 16 Pod"]
+            PVC[("HostPath PVC (Retain)")]
+        end
+
+        subgraph ObsNS ["Namespace: forgeops-observability"]
+            Prometheus["Prometheus v2.50.1"]
+            Alertmanager["Alertmanager v0.27.0"]
+            Loki["Grafana Loki v2.9.4"]
+            Alloy["Grafana Alloy v1.0.0"]
+            Tempo["Grafana Tempo v2.4.0"]
+            Grafana["Grafana Dashboard v10.4.1"]
+        end
+    end
+
+    GitCommit --> BuildTest --> SecScan --> KyvernoCheck --> SOPSCheck --> GHCR
+    GHCR -.->|"Pull Digest"| ArgoCD
+    ArgoCD -->|"Reconcile Release"| API1 & API2
+    API1 & API2 <-->|"TCP :5432"| PostgreSQL
+    PostgreSQL --- PVC
+
+    %% Observability Streams
+    API1 & API2 -.->|"OpenTelemetry gRPC :4317"| Tempo
+    API1 & API2 -.->|"JSON stdout"| Alloy --> Loki
+    API1 & API2 -.->|"/actuator/prometheus :8080"| Prometheus
+    Prometheus -->|"Alerts"| Alertmanager
+    Tempo & Loki & Prometheus --> Grafana
+```
+
+---
+
+## 4. Technology Stack Grouped by Responsibility
+
+To ensure clean system design and prevent resource collisions, ForgeOps enforces a strict **single-owner-per-resource** governance model:
+
+| Domain | Technology | Version | Exact Lifecycle Responsibility |
+|:---|:---|:---|:---|
+| **Application Runtime** | Java / Spring Boot | `21 LTS / 4.1.2` | Multi-tenant REST API, Flyway schema migrations, RFC 9457 errors. |
+| **Relational Database** | PostgreSQL | `16-alpine` | Relational persistence, transactional ACID integrity, foreign-key cascade. |
+| **Cluster Orchestration**| Kubernetes (Kind) | `v1.29.2` | Container lifecycle, pod scheduling, service discovery, local networking. |
+| **Continuous Delivery** | Argo CD | `v2.10.4` | Declarative GitOps reconciler for Helm chart manifests. |
+| **Package Management** | Helm | `v3.14.2` | Templating environment values (`forgeops-dev`, `staging`). |
+| **Infrastructure-as-Code**| HashiCorp Terraform| `1.7.5` | Manages local container fixtures and Argo CD bootstrap resources. |
+| **Config Management** | Ansible Core | `2.16.x` | Idempotent baseline configuration and hardening of Linux hosts. |
+| **Metrics & Alerting** | Prometheus & Alertmanager | `v2.50.1 / v0.27.0` | Pull-based scrape loop, SLO recording rules, multi-stage alert routing. |
+| **Log Aggregation** | Grafana Loki & Alloy | `v2.9.4 / v1.0.0` | Node-level daemon log shipping, JSON parsing, label indexing. |
+| **Distributed Tracing** | OpenTelemetry & Tempo | `v2.1.0 / v2.4.0` | W3C context propagation, gRPC span export, trace-to-logs link. |
+| **Policy-as-Code** | Kyverno CLI | `v1.19.2` | Client-side static validation of Kubernetes Pod security contexts. |
+| **Secret Encryption** | Mozilla SOPS + age | `v3.13.3 / v1.2.1` | Asymmetric dual-key escrow encryption for Kubernetes secrets in Git. |
+| **Reliability Testing** | Grafana k6 | `v0.49.0` | Arrival-rate load generation and progressive stress scenarios. |
+
+---
+
+## 5. CI/CD and GitOps Delivery Flow
+
+ForgeOps inverts the traditional imperative CI push model into a secure, pull-based GitOps architecture:
+
+```
+[Developer Push] 
+       │
+       ▼
+[GitHub Actions CI] ─── (Static Check, Unit/Integration Tests, Kyverno, SOPS)
+       │
+       ▼ (Publish Container Image with Git SHA)
+[GitHub Container Registry (GHCR)]
+       ▲
+       │ (Polls Git Manifest Repository for Desired State)
+[Argo CD GitOps Engine]
+       │
+       ▼ (Declarative Reconciliation)
+[Kubernetes Workload Rollout (RollingUpdate)]
+```
+
+* **Immutable Tagging:** Container images are tagged with exact Git commit SHAs and verified immutable digests.
+* **Separation of Concerns:** GitHub Actions CI never has cluster credentials or SSH access. Delivery is initiated entirely by Argo CD pulling desired state from Git.
+* **Auto-Sync Guard:** In the rehearsal environment (`G08`), automated synchronization is intentionally disabled to mandate operator review prior to applying state changes.
+
+---
+
+## 6. Kubernetes Security & Supply-Chain Controls
+
+* **Non-Root & Hardened Pods:** Application pods run strictly under UID `10001` (`appuser`), with `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, and all Linux capabilities dropped (`drop: ["ALL"]`).
+* **Policy-as-Code (Kyverno):** 10 security policies audit 100% of Helm-rendered Pod templates in CI against CIS benchmarks.
+* **Supply-Chain Integrity:** Downloaded binaries in CI (Kyverno, SOPS, age) are verified against authentic SHA-256 release checksums, failing closed on binary tampering. Release digests are verified to prevent executing OCI attestation manifests.
+* **Encrypted Secrets (SOPS + age):** Secrets are committed to Git in encrypted format using a dual-recipient scheme (`Primary Operational Key` + `Recovery Escrow Key`). The regex `^(data|stringData)$` leaves metadata readable for linters while securing sensitive payloads.
+
+---
+
+## 7. Metrics, Logs, and Traces Integration
+
+ForgeOps achieves unified three-pillar observability across the microservice and infrastructure:
+
+1. **Distributed Tracing:** The OpenTelemetry Java instrumentation agent intercepts HTTP requests, generates a W3C trace context, and attaches `trace_id` and `span_id` to the logging context (MDC).
+2. **Structured Logging:** Grafana Alloy scrapes container stdout, formats JSON records with `trace_id`, and ships them to Loki.
+3. **Trace-to-Logs Correlation:** Inside Grafana (`http://localhost:3000`), viewing a trace in Tempo displays a direct button to query Loki for that exact `trace_id`, pinpointing logs without manual querying.
+4. **Alerting Pipeline:** Prometheus monitors HTTP latency, error rates, and connection pool saturation, routing firing states through Alertmanager.
+
+---
+
+## 8. SRE Reliability and Disaster Recovery Results
+
+| Operational Domain | Verified Metric | Engineering Context | Evidence Reference |
+|:---|:---|:---|:---|
+| **k6 Load Generation** | **2,275 requests** | 0.00% HTTP failure rate across 5 progressive load scenarios. | [G12 Acceptance](docs/evidence/G12/G12-acceptance-report.md) |
+| **Throughput & Latency**| **p50: 2.1 ms / p95: 6.8 ms**| Under rate-governed arrival ceiling (20 req/s, max 25 VUs). | [G12 Evidence](docs/evidence/G12/G12-acceptance-report.md) |
+| **Pod Recovery Self-Healing**| **52.86 seconds** | Time to detect terminated pod and restore 2-replica readiness. | [G12 Acceptance](docs/evidence/G12/G12-acceptance-report.md) |
+| **PostgreSQL Backup** | **273 ms** | `pg_dump` compressed custom archive with SHA-256 checksum. | [G13 Acceptance](docs/evidence/G13/G13-acceptance-report.md) |
+| **PostgreSQL Restore** | **252 ms** | `pg_restore` duration using strict `--exit-on-error` trapping. | [G13 Acceptance](docs/evidence/G13/G13-acceptance-report.md) |
+| **End-to-End Service RTO**| **89.29 seconds** | Total recovery time (target pod spinup, schema restore, API auth).| [G13 Acceptance](docs/evidence/G13/G13-acceptance-report.md) |
+| **Drill Backup Age** | **12.00 seconds** | Time between snapshot creation and restoration during DR drill. | [G13 Acceptance](docs/evidence/G13/G13-acceptance-report.md) |
+| **Data Preservation** | **100% (Zero loss)** | All 5 baseline PVCs preserved throughout all tests and drills. | [Traceability Matrix](docs/audit/REQUIREMENTS_TRACEABILITY_MATRIX.md) |
+
+---
+
+## 9. Getting Started with Docker Compose (Inner Loop)
+
+For rapid local development of the application and PostgreSQL without Kubernetes:
 
 ### Prerequisites
-
-- **OS:** Linux or Windows 11 with WSL2 (Ubuntu 24.04 LTS recommended)
-- **Java:** OpenJDK 21 LTS (`java` and `javac`)
-- **Docker:** Docker Desktop or Docker Engine $\ge 24.x$
-- **Make:** GNU Make
-
-Check your local environment using the automated preflight target:
+- Docker Engine & Docker Compose (`v27.x+`)
+- Java 21 LTS & Maven 3.9+ (optional if using wrapper)
 
 ```bash
+# 1. Clone repository
+git clone https://github.com/TM-threemavithana/ForgeOps.git
+cd ForgeOps
+
+# 2. Start PostgreSQL and application via Docker Compose
+docker compose -f deployments/docker-compose/docker-compose.yml up -d
+
+# 3. Verify health probes
+curl -s http://localhost:18080/actuator/health/readiness | jq .
+
+# 4. Tear down environment
+docker compose -f deployments/docker-compose/docker-compose.yml down
+```
+
+---
+
+## 10. Kubernetes and Advanced Environment Overview
+
+For full platform validation (Kubernetes, Argo CD, Observability, DR):
+
+```bash
+# Verify environment readiness
 make doctor
+
+# Inspect running cluster pods
+kubectl get pods -A
+
+# Forward Grafana to inspect metrics, logs, and traces
+kubectl port-forward svc/kube-prometheus-stack-grafana -n forgeops-observability 3000:80
+# Visit http://localhost:3000 (admin / prom-operator)
+
+# Forward Argo CD UI
+kubectl port-forward svc/argo-cd-argocd-server -n forgeops-gitops 8080:443
+# Visit https://localhost:8080
 ```
 
 ---
 
-## CI/CD Pipeline (Gate G03)
+## 11. Evidence-Backed Results with Direct Links
 
-G03 implements a secure, layered CI/CD system with an explicit trust boundary between automated CI and controlled CD.
+Every capability claimed in ForgeOps is substantiated by actual execution logs:
 
-### CI — Automatic (Push & Pull Request)
-
-Every push to `master` and every pull request automatically triggers:
-
-| Job | What it does |
-|---|---|
-| **Build & Test** | `./mvnw clean verify` — 43 tests, JaCoCo ≥80% coverage gate |
-| **Docker Build Validate** | Multi-stage build (no push), non-root UID 10001 check, label inspection |
-| **Trivy Scan** | Zero CRITICAL unfixed CVEs gate; SARIF uploaded to GitHub Code Scanning |
-| **Gitleaks** | Full repository history secret leak detection |
-| **CI Gate** | Aggregated required status check — blocks merge if any job fails |
-
-The CI workflow **never** pushes to GHCR. All jobs run with `contents: read` minimum permissions.
-
-### CD — Controlled Publish to GHCR
-
-Image publishing requires **manual** `workflow_dispatch` with explicit confirmation:
-
-```
-Actions → Publish to GHCR → Run workflow
-  git_sha:    <full commit SHA>
-  semver_tag: 1.0.0        (optional)
-  confirm:    PUBLISH      (must type this exactly)
-```
-
-The publish workflow re-runs Trivy before any push. Published images include SLSA Level 2 provenance attestation and SBOM.
-
-```bash
-# Pull by immutable SHA256 digest (never use floating :latest in production):
-docker pull ghcr.io/TM-threemavithana/forgetasks-api@sha256:<digest>
-```
-
-### Local CI Replication
-
-```bash
-# Full local CI (Maven verify + Docker build + optional Trivy/Gitleaks)
-make ci-local
-
-# Standalone Trivy scan (requires trivy installed)
-make trivy-scan
-
-# Lint workflow YAML files (requires actionlint installed)
-make actionlint
-```
-
-### Branch Protection Setup
-
-Configure in GitHub → Settings → Branches → `master`:
-- [x] Require status checks: **CI Gate**
-- [x] Require branches to be up to date before merging
+* **[Requirements Traceability Matrix](docs/audit/REQUIREMENTS_TRACEABILITY_MATRIX.md):** Complete audit of requirements G00 through G15.
+* **[Final Security & Operational Review](docs/audit/FINAL_SECURITY_AND_OPERATIONAL_REVIEW.md):** Deep audit of CI trust boundaries, RBAC, and container sandboxing.
+* **[Reproducibility Audit](docs/audit/REPRODUCIBILITY_AUDIT.md):** Clean machine walkthrough guide and hardware profiles.
+* **[Gate G12 SRE Evidence](docs/evidence/G12/G12-acceptance-report.md):** k6 load outputs, chaos test records, and recovery measurements.
+* **[Gate G13 DR Evidence](docs/evidence/G13/G13-acceptance-report.md):** PostgreSQL backup manifests, restore logs, and synthetic user verification.
+* **[Gate G14 Security Evidence](docs/evidence/G14/G14-acceptance-report.md):** Kyverno policy test passes and SOPS dual-key decryption proof.
 
 ---
 
-## Building and Testing
+## 12. Security Limitations and Known Trade-Offs
 
-
-The project uses a project-local Maven Wrapper (`mvnw`) requiring no pre-installed Maven.
-
-### 1. Run Unit & Integration Tests
-
-All integration tests utilize **Testcontainers** to spin up an isolated, disposable PostgreSQL 16 container:
-
-```bash
-make test-api
-# Or directly:
-cd apps/forgetasks-api && ./mvnw clean verify
-```
-
-### 2. Code Coverage
-
-JaCoCo enforces a strict **$\ge 80\%$** code coverage requirement on instructions and branches:
-
-- **Verified Instruction Coverage:** **94.09%**
-- **Verified Branch Coverage:** **91.23%**
-
-HTML reports are generated at `apps/forgetasks-api/target/site/jacoco/index.html`.
-
-### 3. Package the Application
-
-```bash
-make build-api
-# Or directly:
-cd apps/forgetasks-api && ./mvnw clean package -DskipTests
-```
-
-## Docker Compose Stack (Phase G02)
-
-The primary local development and verification environment runs ForgeTasks API and PostgreSQL 16 via Docker Compose in an isolated namespace (`forgeops-g02`).
-
-### 1. Initialize Local Secrets
-Generate an untracked local database credential (permissions 0600) into `secrets/db_password.txt`:
-
-```bash
-make setup-secrets
-# Or directly:
-./scripts/setup_secrets.sh
-```
-
-### 2. Build the Multi-Stage Container Image
-Build the hardened, non-root `forgetasks-api:1.0.0` image:
-
-```bash
-make compose-build
-# Or directly:
-docker compose build
-```
-
-### 3. Start the Local Compose Stack
-Start PostgreSQL and ForgeTasks API in background mode:
-
-```bash
-make compose-up
-# Or directly:
-docker compose up -d
-```
-
-The stack initializes the dedicated network (`forgeops-g02-net`), waits for PostgreSQL to become healthy via `pg_isready`, and starts ForgeTasks API bound strictly to loopback (`127.0.0.1:18080:8080`).
-
-### 4. Inspect Status and Logs
-```bash
-make compose-ps
-make compose-logs
-```
-
-### 5. Run Automated Live Verification
-```bash
-# 15-point live API contract, concurrency, and security verification
-./scripts/verify_g02_stack.sh
-
-# Persistence, container recreation, API restart & DB recovery drill
-./scripts/verify_g02_reliability.sh
-```
-
-### 6. Vulnerability Scanning (Trivy)
-Scan the runtime image using official Trivy without installing untrusted host binaries:
-
-```bash
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  aquasec/trivy:latest image --pkg-types os --severity CRITICAL,HIGH,MEDIUM,LOW forgetasks-api:1.0.0
-```
-
-### 7. Gracefully Stop the Stack (Preserve Data)
-```bash
-make compose-down
-# Or directly:
-docker compose down
-```
-*Note: Persistent data is preserved in the named Docker volume `forgeops-g02-postgres-data`. Never use `-v` unless a complete destructive reset is intended.*
+In accordance with our honesty invariant, the following limitations are documented:
+1. **Single-Node Infrastructure:** Runs on Kind in Docker; cannot model physical multi-datacenter network partitions.
+2. **Kindnet CNI:** Default CNI handles routing but does not enforce kernel-level `NetworkPolicy` packet drops. Manifests exist as architectural specifications.
+3. **Client-Side Kyverno:** Policies run via CLI in CI. While 100% of merged manifests are compliant, in-cluster mutating webhooks are omitted to avoid local cluster deadlocks.
+4. **Offline Secret Custody:** Age private keys are managed offline by operators rather than an external cloud HSM/Vault.
+*See [KNOWN_LIMITATIONS.md](docs/portfolio/KNOWN_LIMITATIONS.md) for full architectural trade-off details.*
 
 ---
 
-## Standalone Local Execution (Phase G01 Legacy)
+## 13. Detailed Documentation and Runbooks
 
-Run an isolated PostgreSQL 16 database instance:
-
-```bash
-docker run -d --name forgetasks-local-db \
-  -e POSTGRES_DB=forgetasks \
-  -e POSTGRES_USER=forge \
-  -e POSTGRES_PASSWORD=forgesecret \
-  -p 5434:5432 \
-  postgres:16-alpine
-```
-
-### 2. Start ForgeTasks API
-
-Launch the packaged Spring Boot application:
-
-```bash
-SPRING_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5434/forgetasks \
-SPRING_DATASOURCE_USERNAME=forge \
-SPRING_DATASOURCE_PASSWORD=forgesecret \
-PORT=8080 \
-java -jar apps/forgetasks-api/target/forgetasks-api-1.0.0-SNAPSHOT.jar
-```
-
-Flyway will automatically execute database migrations (`V1__init_schema.sql`), establishing tables and indexes.
-
-### 3. Verify Endpoints
-
-Run the automated verification suite:
-
-```bash
-./scripts/verify_runtime.sh
-```
-
-Or execute manual `curl` requests:
-
-#### Check Health Probes
-```bash
-# Liveness (process health)
-curl -i http://localhost:8080/actuator/health/liveness
-
-# Readiness (PostgreSQL connectivity)
-curl -i http://localhost:8080/actuator/health/readiness
-```
-
-#### Register Account
-```bash
-curl -i -X POST http://localhost:8080/api/v1/accounts \
-  -H "Content-Type: application/json" \
-  -d '{"username":"dev_lead","password":"Password123!","email":"lead@example.com"}'
-```
-
-#### Create a Project
-```bash
-curl -i -X POST http://localhost:8080/api/v1/projects \
-  -u dev_lead:Password123! \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Kubernetes Migration","description":"Production platform upgrade"}'
-```
-*Note the returned `ETag` header (e.g. `ETag: "0"`).*
-
-#### Mutate Project with Conditional Request
-```bash
-curl -i -X PATCH http://localhost:8080/api/v1/projects/<PROJECT_ID> \
-  -u dev_lead:Password123! \
-  -H "If-Match: \"0\"" \
-  -H "Content-Type: application/json" \
-  -d '{"description":"Production platform upgrade - Wave 1"}'
-```
+* **[Incident Response Master Runbook](docs/runbooks/INCIDENT_RESPONSE_MASTER_RUNBOOK.md)**
+* **[PostgreSQL Disaster Recovery Runbook](docs/runbooks/POSTGRESQL_DISASTER_RECOVERY_RUNBOOK.md)**
+* **[SOPS + age Secret Management Runbook](docs/runbooks/SOPS_AGE_SECRET_MANAGEMENT_RUNBOOK.md)**
+* **[API CrashLoopBackOff Runbook](docs/runbooks/RUNBOOK_API_CRASH_LOOP.md)**
+* **[High Latency & Saturation Runbook](docs/runbooks/RUNBOOK_HIGH_LATENCY_AND_SATURATION.md)**
+* **[Image Rollout Failure Runbook](docs/runbooks/RUNBOOK_IMAGE_ROLLOUT_FAILURE.md)**
 
 ---
 
-## Repository Structure
+## 14. Demo and Portfolio Links
 
-```text
-ForgeOps/
-├── .github/                      # CI/CD workflows and repository governance
-├── apps/
-│   └── forgetasks-api/           # ForgeTasks Spring Boot 4.1.2 application
-│       ├── pom.xml               # Maven POM with pinned coordinates
-│       ├── mvnw                  # Linux/WSL Maven Wrapper
-│       └── src/
-│           ├── main/
-│           │   ├── java/         # Clean modular domain/service/api code
-│           │   └── resources/    # Flyway migrations and YAML configs
-│           └── test/             # Unit and PostgreSQL Testcontainers tests
-├── docs/
-│   ├── adr/                      # Architectural Decision Records (ADR 0001–0013)
-│   ├── evidence/
-│   │   ├── G00-preflight.md      # G00 environment verification
-│   │   └── G01/                  # G01 acceptance evidence and curl logs
-│   ├── requirements/             # SRS and Requirements Traceability Matrix
-│   ├── compatibility-matrix.md   # Technology version compatibility matrix
-│   └── FORGEOPS_MASTER_IMPLEMENTATION_PLAN.md # Master plan G00–G15
-├── scripts/                      # Operational automation scripts
-├── Makefile                      # Standardized project tasks
-└── AGENTS.md                     # Agent operating rules and safety constraints
-```
+* **[Executive Summary & Project Overview](docs/portfolio/PROJECT_OVERVIEW.md)**
+* **[Architecture Walkthrough & Design Decisions](docs/portfolio/ARCHITECTURE_WALKTHROUGH.md)**
+* **[3-5 Minute Technical Demo Script](docs/portfolio/DEMO_SCRIPT.md)**
+* **[Tailored Resume Bullet Points (SRE / Platform / DevOps)](docs/portfolio/RESUME_BULLETS.md)**
+* **[22 Technical Interview Questions & Answers](docs/portfolio/INTERVIEW_QA.md)**
+* **[Engineering Lessons Learned & RCA Postmortems](docs/portfolio/ENGINEERING_LESSONS.md)**
+* **[Architecture Diagrams (Mermaid Visuals)](docs/architecture/ARCHITECTURE_DIAGRAMS.md)**
