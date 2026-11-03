@@ -165,7 +165,7 @@ jobs:
   # Job 3: Container Security Scan (Trivy)
   # Scans the built image for OS and library vulnerabilities.
   # SARIF results are uploaded to GitHub Code Scanning.
-  # Gate: zero CRITICAL unfixed CVEs causes build failure.
+  # Gate: zero HIGH or CRITICAL unfixed CVEs causes build failure.
   # ---------------------------------------------------------------------------
   trivy-scan:
     name: Trivy Security Scan
@@ -224,7 +224,7 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy-image-scan
 
-      - name: Enforce zero CRITICAL vulnerabilities (gate)
+      - name: Enforce zero HIGH and CRITICAL vulnerabilities (gate)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: ${{ env.IMAGE_NAME }}:trivy-${{ github.sha }}
