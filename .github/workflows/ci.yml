@@ -64,7 +64,7 @@ jobs:
           echo "JAVA_HOME: $JAVA_HOME"
 
       - name: Cache Maven local repository
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
@@ -115,7 +115,7 @@ jobs:
           cache: maven
 
       - name: Cache Maven local repository
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
@@ -187,7 +187,7 @@ jobs:
           cache: maven
 
       - name: Cache Maven local repository
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
