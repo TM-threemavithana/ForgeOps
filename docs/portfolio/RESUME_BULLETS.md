@@ -1,6 +1,6 @@
-# ForgeOps: Resume & Portfolio Bullet Points
+# ForgeOps: Engineering Achievements & Verified Metrics
 
-The bullet points below are tailored for specific technical roles. They use quantifiable, evidence-backed achievements derived directly from ForgeOps verification data. Select and adapt the bullets that best match your target job profile.
+The metrics and achievements below are categorized by engineering domain (DevOps, Platform Engineering, SRE, and DevSecOps), using quantifiable, evidence-backed findings derived directly from ForgeOps automated verification data.
 
 ---
 

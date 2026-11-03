@@ -276,12 +276,12 @@ In accordance with our honesty invariant, the following limitations are document
 
 ---
 
-## 14. Demo and Portfolio Links
+## 14. Architecture, Verification & Operational Reference
 
 * **[Executive Summary & Project Overview](docs/portfolio/PROJECT_OVERVIEW.md)**
 * **[Architecture Walkthrough & Design Decisions](docs/portfolio/ARCHITECTURE_WALKTHROUGH.md)**
-* **[3-5 Minute Technical Demo Script](docs/portfolio/DEMO_SCRIPT.md)**
-* **[Tailored Resume Bullet Points (SRE / Platform / DevOps)](docs/portfolio/RESUME_BULLETS.md)**
-* **[22 Technical Interview Questions & Answers](docs/portfolio/INTERVIEW_QA.md)**
-* **[Engineering Lessons Learned & RCA Postmortems](docs/portfolio/ENGINEERING_LESSONS.md)**
 * **[Architecture Diagrams (Mermaid Visuals)](docs/architecture/ARCHITECTURE_DIAGRAMS.md)**
+* **[Technical Demonstration & Verification Walkthrough](docs/portfolio/DEMO_SCRIPT.md)**
+* **[Engineering Achievements & Verified Metrics](docs/portfolio/RESUME_BULLETS.md)**
+* **[Platform Architecture & Operational Deep Dive (22 Scenarios)](docs/portfolio/INTERVIEW_QA.md)**
+* **[Engineering Lessons Learned & RCA Postmortems](docs/portfolio/ENGINEERING_LESSONS.md)**
