@@ -1,8 +1,8 @@
-# ForgeOps: 3-5 Minute Technical Demonstration Script
+# ForgeOps: Technical Demonstration & Verification Walkthrough
 
 ## 1. Overview & Objective
 
-This demo script provides a structured, professional 3 to 5-minute technical walkthrough of the ForgeOps platform. It is designed for live portfolio presentations, video recordings, or interactive recruiter technical screenings.
+This demonstration walkthrough provides a structured, professional 3 to 5-minute technical verification of the ForgeOps platform architecture.
 
 **Key Theme:** "From Git Commit to Distributed Observability, Chaos Resilience, and Zero-Downtime Disaster Recovery without Paid Cloud Services."
 
