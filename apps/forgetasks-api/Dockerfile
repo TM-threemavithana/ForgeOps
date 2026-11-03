@@ -36,7 +36,7 @@ LABEL org.opencontainers.image.title="ForgeTasks API" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 # Security: Apply upstream security patches and create unprivileged non-root user
-RUN apk upgrade --no-cache brotli-libs && \
+RUN apk upgrade --no-cache brotli-libs libexpat && \
     addgroup -g 10001 -S appgroup && \
     adduser -u 10001 -S appuser -G appgroup
 
