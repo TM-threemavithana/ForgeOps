@@ -129,7 +129,7 @@ jobs:
           echo "semver_tag=$CLEAN_SEMVER" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository master
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: master
           fetch-depth: 0
@@ -243,7 +243,7 @@ jobs:
 
     steps:
       - name: Checkout verified commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate-release.outputs.validated_sha }}
           fetch-depth: 0
