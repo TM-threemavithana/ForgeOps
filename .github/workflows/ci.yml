@@ -2,7 +2,7 @@
 # Gate G03 & G09: GitHub Actions CI/CD, Supply Chain Security and GHCR Publishing
 #
 # Trust boundary:
-#   push/PR to master triggers full CI (build, test, Docker validation, Trivy, Gitleaks, Semgrep, Dependency scan)
+#   push/PR to master triggers full CI (build, test, Docker validation, Trivy, Gitleaks, Semgrep, Dependency scan, Checkov, Hadolint)
 #   This workflow NEVER pushes to GHCR.
 #   Image publishing is exclusively controlled by publish.yml (workflow_dispatch only).
 
@@ -278,10 +278,23 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python test dependencies
-        run: pip install --quiet pyyaml semgrep==1.185.0
+        run: pip install --quiet pyyaml semgrep==1.185.0 checkov==3.4.5
 
-      - name: Verify Semgrep version
-        run: semgrep --version
+      - name: Install Pinned Hadolint (v2.12.0) with Authentic Checksum Verification
+        run: |
+          HADOLINT_VERSION="v2.12.0"
+          HADOLINT_SHA256="56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
+          curl -sSL "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
+          echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
+          sudo install -m 0755 hadolint /usr/local/bin/hadolint
+          rm -f hadolint
+          hadolint --version
+
+      - name: Verify tool versions
+        run: |
+          semgrep --version
+          checkov --version
+          hadolint --version
 
       - name: Run Gate G09 DevSecOps Security Validation Suite
         run: python3 scripts/test_g09_security.py
@@ -345,7 +358,95 @@ jobs:
           severity: CRITICAL,HIGH
 
   # ---------------------------------------------------------------------------
-  # Job 7: SRE Reliability & Disaster Recovery Hardening Validation (Gate G12 & G13)
+  # Job 7: Infrastructure as Code (IaC) Security Scan (Checkov) - Gate G09.2
+  # Scans Terraform modules for security misconfigurations and demonstrates
+  # synthetic rejection on deliberately vulnerable infrastructure fixtures.
+  # ---------------------------------------------------------------------------
+  iac-checkov-scan:
+    name: Checkov IaC Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.11"
+
+      - name: Install Pinned Checkov (v3.4.5)
+        run: pip install --quiet checkov==3.4.5
+
+      - name: Run Checkov Scan on Production Terraform Modules
+        run: |
+          checkov -d infrastructure/terraform --framework terraform --output cli --output sarif --output-file-path . --soft-fail || true
+
+      - name: Upload Checkov SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
+        if: always()
+        with:
+          sarif_file: results_sarif.sarif
+          category: checkov-iac-scan
+        continue-on-error: true
+
+      - name: Enforce Checkov Zero Blocking Failures on Terraform
+        run: |
+          checkov -d infrastructure/terraform --framework terraform --quiet --compact
+
+      - name: Demonstrate Insecure Terraform Fixture Rejection
+        run: |
+          if checkov -f security/iac/checkov/fixtures/fail-s3-public.tf --framework terraform --quiet; then
+            echo "[FAIL] Insecure Terraform resource was unexpectedly accepted!"
+            exit 1
+          else
+            echo "[PASS] Insecure Terraform resource correctly rejected by Checkov."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job 8: Dockerfile Static Analysis & Best Practices (Hadolint) - Gate G09.2
+  # Enforces container build security best practices and rejects unsafe directives.
+  # ---------------------------------------------------------------------------
+  dockerfile-hadolint:
+    name: Hadolint Dockerfile Linter
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Pinned Hadolint (v2.12.0) with Authentic Checksum Verification
+        run: |
+          HADOLINT_VERSION="v2.12.0"
+          HADOLINT_SHA256="56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
+          curl -sSL "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
+          echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
+          sudo install -m 0755 hadolint /usr/local/bin/hadolint
+          rm -f hadolint
+          hadolint --version
+
+      - name: Lint Production Application Dockerfile
+        run: hadolint apps/forgetasks-api/Dockerfile
+
+      - name: Demonstrate Insecure Dockerfile Directives Rejection
+        run: |
+          if hadolint security/container/hadolint/fixtures/fail-insecure.Dockerfile; then
+            echo "[FAIL] Insecure Dockerfile was unexpectedly accepted!"
+            exit 1
+          else
+            echo "[PASS] Insecure Dockerfile correctly rejected by Hadolint."
+          fi
+
+      - name: Demonstrate Compliant Dockerfile Acceptance
+        run: hadolint security/container/hadolint/fixtures/pass-compliant.Dockerfile
+
+  # ---------------------------------------------------------------------------
+  # Job 9: SRE Reliability & Disaster Recovery Hardening Validation (Gate G12 & G13)
   # Validates k6 test suites, resilience experiment scripts, DR workflows, safety guards, manifests
   # ---------------------------------------------------------------------------
   sre-hardening-validate:
@@ -390,7 +491,7 @@ jobs:
         run: python3 scripts/test_g13_dr_hardening.py
 
   # ---------------------------------------------------------------------------
-  # Job 8: Kyverno Policy-as-Code & Security Validation (Gate G14)
+  # Job 10: Kyverno Policy-as-Code & Security Validation (Gate G14)
   # Pre-deployment static Kubernetes manifest validation & security assertions
   # ---------------------------------------------------------------------------
   security-policy-validate:
@@ -493,7 +594,7 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
-  # Job 9: CI Gate Summary (required status check for branch protection rules)
+  # Job 11: CI Gate Summary (required status check for branch protection rules)
   # ---------------------------------------------------------------------------
   ci-gate:
     name: CI Gate
@@ -505,6 +606,8 @@ jobs:
       - gitleaks-scan
       - sast-semgrep
       - dependency-scan
+      - iac-checkov-scan
+      - dockerfile-hadolint
       - sre-hardening-validate
       - security-policy-validate
     if: always()
@@ -519,6 +622,8 @@ jobs:
           echo "gitleaks-scan:            ${{ needs.gitleaks-scan.result }}"
           echo "sast-semgrep:             ${{ needs.sast-semgrep.result }}"
           echo "dependency-scan:          ${{ needs.dependency-scan.result }}"
+          echo "iac-checkov-scan:         ${{ needs.iac-checkov-scan.result }}"
+          echo "dockerfile-hadolint:      ${{ needs.dockerfile-hadolint.result }}"
           echo "sre-hardening-validate:   ${{ needs.sre-hardening-validate.result }}"
           echo "security-policy-validate: ${{ needs.security-policy-validate.result }}"
           echo '===================================='
@@ -529,6 +634,8 @@ jobs:
           [ "${{ needs.gitleaks-scan.result }}" != "success" ] && FAILED=1
           [ "${{ needs.sast-semgrep.result }}" != "success" ] && FAILED=1
           [ "${{ needs.dependency-scan.result }}" != "success" ] && FAILED=1
+          [ "${{ needs.iac-checkov-scan.result }}" != "success" ] && FAILED=1
+          [ "${{ needs.dockerfile-hadolint.result }}" != "success" ] && FAILED=1
           [ "${{ needs.sre-hardening-validate.result }}" != "success" ] && FAILED=1
           [ "${{ needs.security-policy-validate.result }}" != "success" ] && FAILED=1
           if [ "$FAILED" = "1" ]; then
