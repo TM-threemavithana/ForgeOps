@@ -97,7 +97,27 @@ All action references were authoritatively resolved directly from GitHub remote 
 ===================================================================
 ```
 
-### 4.2 Regression Validation Suites (G12, G13, G14)
+### 4.2 GitHub Actions Remote CI Validation (PR #58)
+
+The feature branch was pushed and validated in GitHub Actions on Pull Request [#58](https://github.com/TM-threemavithana/ForgeOps/pull/58) (Workflow Run ID: [`44076468268`](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268)). 
+
+All jobs completed with **PASS** status:
+
+| Job Name | Remote Status | Duration | Evidence URL |
+| :--- | :---: | :---: | :--- |
+| **Build and Test (Java 21)** | **PASS** | 1m 14s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134015655194) |
+| **Docker Build Validation** | **PASS** | 2m 47s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134016319462) |
+| **Secret Leak Detection (Gitleaks)** | **PASS** | 10s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134016319505) |
+| **Semgrep SAST Security Scan** | **PASS** | 59s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134015655103) |
+| **Maven Dependency Scan (Trivy)** | **PASS** | 42s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134015655260) |
+| **Trivy Security Scan (Container)** | **PASS** | 1m 34s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134017772471) |
+| **SRE & DR Hardening Validation** | **PASS** | 27s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134015654879) |
+| **Security Policy & Secrets Validation** | **PASS** | 29s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134015655233) |
+| **CI Gate (Aggregator Gate)** | **PASS** | 4s | [Job Log](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44076468268/job/134018601306) |
+
+*Note: Maven integration tests with PostgreSQL Testcontainers, which require an active Docker engine, executed completely and passed in the remote GitHub Actions runner (`Build and Test (Java 21)`).*
+
+### 4.3 Regression Validation Suites (G12, G13, G14)
 - **Gate G12 SRE Reliability**: 5/5 test suites passed.
 - **Gate G13 Disaster Recovery**: 10/10 test suites passed.
 - **Gate G14 Kyverno Policy-as-Code**: 7/7 test suites passed (10 Pod policies, positive and negative manifest rejection verified).
