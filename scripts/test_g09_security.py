@@ -17,6 +17,7 @@ import yaml
 import json
 import shutil
 import subprocess
+import tempfile
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CI_WORKFLOW = os.path.join(REPO_ROOT, ".github", "workflows", "ci.yml")
@@ -31,6 +32,14 @@ DEP_FIXTURE = os.path.join(REPO_ROOT, "security", "dependencies", "fixtures", "f
 IAC_FIXTURE = os.path.join(REPO_ROOT, "security", "iac", "checkov", "fixtures", "fail-s3-public.tf")
 HADOLINT_FAIL_FIXTURE = os.path.join(REPO_ROOT, "security", "container", "hadolint", "fixtures", "fail-insecure.Dockerfile")
 HADOLINT_PASS_FIXTURE = os.path.join(REPO_ROOT, "security", "container", "hadolint", "fixtures", "pass-compliant.Dockerfile")
+
+HOOKS_DIR = os.path.join(REPO_ROOT, ".githooks")
+PRE_COMMIT_HOOK = os.path.join(HOOKS_DIR, "pre-commit")
+ZAP_RULES_FILE = os.path.join(REPO_ROOT, "security", "dast", "zap", "zap-rules.conf")
+ZAP_PASS_FIXTURE = os.path.join(REPO_ROOT, "security", "dast", "zap", "fixtures", "report-pass.json")
+ZAP_FAIL_FIXTURE = os.path.join(REPO_ROOT, "security", "dast", "zap", "fixtures", "report-fail.json")
+APP_SECURITY_CONFIG = os.path.join(REPO_ROOT, "apps", "forgetasks-api", "src", "main", "java", "com", "forgeops", "forgetasks", "security", "SecurityConfig.java")
+APP_SECURITY_TEST = os.path.join(REPO_ROOT, "apps", "forgetasks-api", "src", "test", "java", "com", "forgeops", "forgetasks", "ApplicationSecurityIntegrationTest.java")
 
 TERRAFORM_DIR = os.path.join(REPO_ROOT, "infrastructure", "terraform")
 APP_POM = os.path.join(REPO_ROOT, "apps", "forgetasks-api", "pom.xml")
@@ -48,6 +57,12 @@ def resolve_bin(name, candidate_paths=None):
             if os.path.isfile(exp) and os.access(exp, os.X_OK):
                 return exp
     return None
+
+GITLEAKS_BIN = resolve_bin("gitleaks", [
+    "~/.local/bin/gitleaks",
+    "/usr/local/bin/gitleaks",
+    "/usr/bin/gitleaks"
+])
 
 SEMGREP_BIN = resolve_bin("semgrep", [
     "~/.local/bin/semgrep",
@@ -337,6 +352,140 @@ def test_dependabot_configuration():
 
     print(f"  [PASS] Dependabot configuration verified for ecosystems: {sorted(list(ecosystems))}.")
 
+def test_precommit_hook_and_secret_rejection():
+    print("--> Test 13: Verifying Gitleaks pre-commit hook installation and synthetic secret rejection...")
+    assert os.path.isfile(PRE_COMMIT_HOOK), f"Missing pre-commit hook at {PRE_COMMIT_HOOK}"
+    assert os.access(PRE_COMMIT_HOOK, os.R_OK), f"Pre-commit hook is not readable: {PRE_COMMIT_HOOK}"
+
+    assert os.path.isfile(os.path.join(REPO_ROOT, "scripts", "setup-pre-commit.sh")), "Missing setup-pre-commit.sh"
+    assert os.path.isfile(os.path.join(REPO_ROOT, "scripts", "setup-pre-commit.ps1")), "Missing setup-pre-commit.ps1"
+
+    if not GITLEAKS_BIN:
+        print("  [SKIP] Gitleaks binary not found on local PATH. Pre-commit test skipped.")
+        return
+
+    # Create isolated temporary git repository
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        env = os.environ.copy()
+        env["GIT_AUTHOR_NAME"] = "ForgeOps Test"
+        env["GIT_AUTHOR_EMAIL"] = "test@forgeops.local"
+        env["GIT_COMMITTER_NAME"] = "ForgeOps Test"
+        env["GIT_COMMITTER_EMAIL"] = "test@forgeops.local"
+
+        run_cmd(["git", "-C", tmp_dir, "init", "-b", "main"])
+        run_cmd(["git", "-C", tmp_dir, "config", "core.hooksPath", HOOKS_DIR])
+
+        # Step 1: Normal clean commit must succeed
+        safe_file = os.path.join(tmp_dir, "safe.txt")
+        with open(safe_file, "w") as f:
+            f.write("public class SafeCode { String name = \"valid\"; }\n")
+        run_cmd(["git", "-C", tmp_dir, "add", "safe.txt"])
+        res_safe = subprocess.run(["git", "-C", tmp_dir, "commit", "-m", "add safe file"],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        assert res_safe.returncode == 0, f"Safe commit should succeed, got:\n{res_safe.stderr}"
+
+        # Step 2: Staged synthetic secret must be blocked by pre-commit hook
+        secret_file = os.path.join(tmp_dir, "secret.txt")
+        with open(secret_file, "w") as f:
+            # Dynamically construct synthetic token at runtime so test script itself does not trigger scanners
+            dummy_token = "ghp_" + "ABCDEFGHIJKLMN" + "1234567890" + "abcdefghijk"
+            f.write(f"github_api_key={dummy_token}\n")
+        run_cmd(["git", "-C", tmp_dir, "add", "secret.txt"])
+
+        res_secret = subprocess.run(["git", "-C", tmp_dir, "commit", "-m", "attempt leak"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        assert res_secret.returncode != 0, "Pre-commit hook failed to block synthetic secret commit!"
+        assert "Gitleaks detected" in (res_secret.stdout + res_secret.stderr) or "leaks found" in (res_secret.stdout + res_secret.stderr), \
+            "Expected Gitleaks rejection message in hook output"
+
+        # Step 3: Unstage and clean commit must succeed again
+        run_cmd(["git", "-C", tmp_dir, "rm", "-f", "secret.txt"])
+        with open(safe_file, "a") as f:
+            f.write("// additional comment\n")
+        run_cmd(["git", "-C", tmp_dir, "add", "safe.txt"])
+        res_safe2 = subprocess.run(["git", "-C", tmp_dir, "commit", "-m", "second safe commit"],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        assert res_safe2.returncode == 0, f"Second safe commit should succeed, got:\n{res_safe2.stderr}"
+
+    print("  [PASS] Pre-commit hook verified: clean commits permitted, staged synthetic secrets blocked.")
+
+def test_zap_rules_configuration():
+    print("--> Test 14: Validating OWASP ZAP baseline rules configuration and risk actions...")
+    assert os.path.isfile(ZAP_RULES_FILE), f"Missing ZAP rules file at {ZAP_RULES_FILE}"
+
+    with open(ZAP_RULES_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    rules = {}
+    for line in lines:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        parts = s.split("\t")
+        assert len(parts) >= 2, f"Invalid rule line in {ZAP_RULES_FILE}: '{s}'"
+        rule_id = parts[0].strip()
+        action = parts[1].strip()
+        assert action in ["FAIL", "WARN", "IGNORE", "OUTOFSCOPE"], f"Invalid action '{action}' for rule {rule_id}"
+        rules[rule_id] = action
+
+    # Critical security header rules must be configured
+    assert rules.get("10021") == "FAIL", "Rule 10021 (X-Content-Type-Options) must be FAIL"
+    assert rules.get("10038") == "FAIL", "Rule 10038 (CSP) must be FAIL"
+    assert rules.get("10020") == "IGNORE", "Rule 10020 (Anti-CSRF for stateless API) must be IGNORE"
+    assert rules.get("10202") == "FAIL", "Rule 10202 (Anti-clickjacking/FrameOptions) must be FAIL"
+
+    print(f"  [PASS] ZAP rules configuration validated ({len(rules)} active rule mappings).")
+
+def test_zap_report_evaluation_and_negative_rejection():
+    print("--> Test 15: Verifying OWASP ZAP DAST report evaluation and synthetic rejection...")
+    assert os.path.isfile(ZAP_PASS_FIXTURE), f"Missing {ZAP_PASS_FIXTURE}"
+    assert os.path.isfile(ZAP_FAIL_FIXTURE), f"Missing {ZAP_FAIL_FIXTURE}"
+
+    def evaluate_zap_report(report_path):
+        with open(report_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        highs = 0
+        mediums = 0
+        for site in data.get("site", []):
+            for alert in site.get("alerts", []):
+                risk = alert.get("riskdesc", "")
+                if "High" in risk:
+                    highs += 1
+                elif "Medium" in risk:
+                    mediums += 1
+        return highs, mediums
+
+    pass_high, pass_med = evaluate_zap_report(ZAP_PASS_FIXTURE)
+    assert pass_high == 0 and pass_med == 0, f"Compliant report should have 0 High/Medium alerts, got: {pass_high}/{pass_med}"
+
+    fail_high, fail_med = evaluate_zap_report(ZAP_FAIL_FIXTURE)
+    assert fail_high > 0 or fail_med > 0, f"Synthetic negative fixture must trigger High/Medium alerts, got: {fail_high}/{fail_med}"
+
+    print("  [PASS] Compliant ZAP report passes DAST gate (0 High/Medium); insecure fixture triggers gate rejection.")
+
+def test_appsec_configuration_and_headers():
+    print("--> Test 16: Auditing application security controls, HTTP headers & CORS configuration...")
+    assert os.path.isfile(APP_SECURITY_CONFIG), f"Missing {APP_SECURITY_CONFIG}"
+    with open(APP_SECURITY_CONFIG, "r", encoding="utf-8") as f:
+        config_content = f.read()
+
+    assert "contentSecurityPolicy" in config_content, "SecurityConfig must configure Content-Security-Policy"
+    assert "frameOptions" in config_content, "SecurityConfig must configure FrameOptions (deny)"
+    assert "referrerPolicy" in config_content, "SecurityConfig must configure Referrer-Policy"
+    assert "permissionsPolicy" in config_content, "SecurityConfig must configure Permissions-Policy"
+    assert "corsConfigurationSource" in config_content, "SecurityConfig must configure CorsConfigurationSource bean"
+
+    assert os.path.isfile(APP_SECURITY_TEST), f"Missing {APP_SECURITY_TEST}"
+    with open(APP_SECURITY_TEST, "r", encoding="utf-8") as f:
+        test_content = f.read()
+
+    assert "shouldEnforceSecurityHeaders" in test_content, "ApplicationSecurityIntegrationTest must test security headers"
+    assert "shouldEnforceControlledCorsForAllowedOrigin" in test_content, "ApplicationSecurityIntegrationTest must test CORS"
+    assert "shouldEnforceObjectLevelAccessControl_BOLA_IDOR_Isolation" in test_content, "ApplicationSecurityIntegrationTest must test BOLA/IDOR isolation"
+    assert "shouldRejectInvalidInputsWithProblemDetail" in test_content, "ApplicationSecurityIntegrationTest must test input validation"
+
+    print("  [PASS] Application security configuration, security headers, CORS, and BOLA/IDOR tests verified.")
+
 def main():
     print("===================================================================")
     print(" ForgeOps Gate G09 DevSecOps Security & Action Pinning Test Suite")
@@ -353,6 +502,10 @@ def main():
     test_hadolint_negative_rejection()
     test_base_image_digest_pinning()
     test_dependabot_configuration()
+    test_precommit_hook_and_secret_rejection()
+    test_zap_rules_configuration()
+    test_zap_report_evaluation_and_negative_rejection()
+    test_appsec_configuration_and_headers()
     print("===================================================================")
     print(" [PASS] All Gate G09 security engineering checks completed successfully!")
     print("===================================================================")
