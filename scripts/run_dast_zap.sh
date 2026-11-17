@@ -73,6 +73,7 @@ docker run -d --name "${APP_CONTAINER}" \
     -e SPRING_DATASOURCE_PASSWORD=forge_test_secret \
     -e PORT=8080 \
     -e MANAGEMENT_PORT=8080 \
+    -e OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318/v1/traces \
     "forgetasks-api:dast-test"
 
 # Wait for application health probe
