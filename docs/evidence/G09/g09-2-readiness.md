@@ -105,6 +105,27 @@ Gate G09.2 introduces automated static security analysis for declarative infrast
 - **Gate G14 Kyverno Policy-as-Code**: 7/7 test suites passed.
 - **Gate G14 SOPS + age Encrypted Secrets**: 6/6 test suites passed.
 
+### 4.3 Remote GitHub Actions CI Pipeline Verification (PR #59)
+- **Workflow Run**: [44085654395](https://github.com/TM-threemavithana/ForgeOps/actions/runs/44085654395)
+- **Pull Request**: [#59 (feat(security): implement Gate G09.2 IaC & Container Security)](https://github.com/TM-threemavithana/ForgeOps/pull/59)
+- **Head Commit**: `9e978a1`
+- **Trigger**: `pull_request` (target: `feature/g09-secure-ci-foundation`)
+- **Status**: **100% Passed (11/11 jobs)**
+
+| Job | Status | Duration | Evidence / Description |
+| :--- | :---: | :---: | :--- |
+| `iac-checkov-scan` | PASS | 56s | Pinned Checkov v3.4.5 scanned Terraform modules (0 blocking failures), uploaded SARIF to GitHub Code Scanning, and validated synthetic negative fixture rejection. |
+| `dockerfile-hadolint` | PASS | 8s | Pinned Hadolint v2.12.0 with authentic SHA-256 verification scanned production Dockerfile (0 warnings/errors) and validated synthetic negative rejection. |
+| `sast-semgrep` | PASS | 1m10s | Pinned Semgrep v1.185.0 scanned Java codebase with 5 custom security rules (0 blocking findings) and uploaded SARIF. |
+| `dependency-scan` | PASS | 37s | Pinned Trivy filesystem scanner audited Maven dependencies (0 CRITICAL/HIGH) and uploaded SARIF. |
+| `gitleaks-scan` | PASS | 10s | Gitleaks scanned PR commits with authentic false-positive checksum suppression (0 secret leaks). |
+| `build-and-test` | PASS | 53s | Java 21 compilation, unit/integration tests, and JaCoCo coverage enforcement. |
+| `docker-build-validate` | PASS | 1m6s | Multi-stage Docker build, non-root UID 10001 verification, and label security checks. |
+| `trivy-scan` | PASS | 1m12s | Container image vulnerability scan (0 CRITICAL/HIGH). |
+| `sre-hardening-validate` | PASS | 25s | Gate G12 & G13 regression suites executed and passed cleanly. |
+| `security-policy-validate` | PASS | 33s | Gate G14 Kyverno policies and SOPS + age secrets validation executed and passed cleanly. |
+| `ci-gate` | PASS | 4s | Aggregate gate evaluated all 10 dependency jobs and enforced green approval status. |
+
 ---
 
 ## 5. Base Image Update Procedure
