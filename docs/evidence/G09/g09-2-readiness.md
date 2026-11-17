@@ -17,7 +17,7 @@ Gate G09.2 introduces automated static security analysis for declarative infrast
    - Scanned production Terraform root modules ([`infrastructure/terraform/cluster-bootstrap`](file:///c:/Project/ForgeOps/infrastructure/terraform/cluster-bootstrap) and [`infrastructure/terraform/local-docker-lab`](file:///c:/Project/ForgeOps/infrastructure/terraform/local-docker-lab)) with **0 blocking failures**.
    - Created synthetic negative fixture [`security/iac/checkov/fixtures/fail-s3-public.tf`](file:///c:/Project/ForgeOps/security/iac/checkov/fixtures/fail-s3-public.tf) proving that insecure infrastructure configurations (public S3 bucket, unencrypted storage, missing public access blocks) trigger non-zero exit codes.
 2. **Containerfile Static Analysis (Hadolint)**:
-   - Integrated pinned Hadolint (`v2.12.0`) in [`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml) under job `dockerfile-hadolint` with authentic SHA-256 verification (`56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010`).
+   - Integrated pinned Hadolint (`v2.12.0`) in [`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml) under job `dockerfile-hadolint` with authentic SHA-256 verification (`sha256:56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010`).
    - Scanned production [`apps/forgetasks-api/Dockerfile`](file:///c:/Project/ForgeOps/apps/forgetasks-api/Dockerfile) with **0 warnings or errors**.
    - Created synthetic negative fixture [`security/container/hadolint/fixtures/fail-insecure.Dockerfile`](file:///c:/Project/ForgeOps/security/container/hadolint/fixtures/fail-insecure.Dockerfile) proving detection of floating latest tags (DL3007), missing apk cache flags (DL3019), and root execution (DL3002).
 3. **Container Base Image Cryptographic Digest Pinning**:
@@ -53,7 +53,7 @@ Gate G09.2 introduces automated static security analysis for declarative infrast
 | Tool / Scanner | Version | Verification / Artifact Source |
 | :--- | :--- | :--- |
 | **Checkov** | `3.4.5` | Pinned PyPI release `checkov==3.4.5` in Python 3.11/3.12 venv. |
-| **Hadolint** | `v2.12.0` | Pinned GitHub Release binary verified against authentic SHA-256: `56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010`. |
+| **Hadolint** | `v2.12.0` | Pinned GitHub Release binary verified against authentic SHA-256 digest (`sha256:56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010`). |
 | **Semgrep OSS** | `1.185.0` | Pinned PyPI release `semgrep==1.185.0` with 5 custom CWE/OWASP rules. |
 | **Trivy** | `v0.36.0` (action) | Pinned immutable commit `ed142fd0673e97e23eac54620cfb913e5ce36c25`. |
 
