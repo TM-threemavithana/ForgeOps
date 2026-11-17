@@ -708,13 +708,17 @@ jobs:
           mediums = 0
           for site in data.get('site', []):
               for alert in site.get('alerts', []):
-                  risk = alert.get('riskdesc', '')
-                  if 'High' in risk:
+                  risk = alert.get('riskdesc', '').split('(')[0].strip()
+                  risk_code = str(alert.get('riskcode', ''))
+                  name = alert.get('name')
+                  if risk == 'High' or risk_code == '3':
                       highs += 1
-                      print(f'  [HIGH] {alert.get(\"name\")}')
-                  elif 'Medium' in risk:
+                      print(f'  [HIGH] {name} ({alert.get(\"riskdesc\")})')
+                  elif risk == 'Medium' or risk_code == '2':
                       mediums += 1
-                      print(f'  [MEDIUM] {alert.get(\"name\")}')
+                      print(f'  [MEDIUM] {name} ({alert.get(\"riskdesc\")})')
+                  else:
+                      print(f'  [INFO/LOW] {name} ({alert.get(\"riskdesc\")})')
           print(f'ZAP Alert Counts: High={highs}, Medium={mediums}')
           if highs > 0 or mediums > 0:
               print('[FAIL] Security gate violation: One or more High/Medium DAST alerts detected.')

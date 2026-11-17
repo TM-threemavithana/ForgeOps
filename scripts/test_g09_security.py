@@ -448,10 +448,11 @@ def test_zap_report_evaluation_and_negative_rejection():
         mediums = 0
         for site in data.get("site", []):
             for alert in site.get("alerts", []):
-                risk = alert.get("riskdesc", "")
-                if "High" in risk:
+                risk = alert.get("riskdesc", "").split("(")[0].strip()
+                risk_code = str(alert.get("riskcode", ""))
+                if risk == "High" or risk_code == "3":
                     highs += 1
-                elif "Medium" in risk:
+                elif risk == "Medium" or risk_code == "2":
                     mediums += 1
         return highs, mediums
 

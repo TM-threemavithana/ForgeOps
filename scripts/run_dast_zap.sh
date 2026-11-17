@@ -133,17 +133,21 @@ info_count = 0
 
 for site in site_list:
     for alert in site.get('alerts', []):
-        risk = alert.get('riskdesc', '')
-        if 'High' in risk:
+        risk = alert.get('riskdesc', '').split('(')[0].strip()
+        risk_code = str(alert.get('riskcode', ''))
+        name = alert.get('name')
+        if risk == 'High' or risk_code == '3':
             high_count += 1
-            print(f'  [HIGH] {alert.get(\"name\")}')
-        elif 'Medium' in risk:
+            print(f'  [HIGH] {name} ({alert.get("riskdesc")})')
+        elif risk == 'Medium' or risk_code == '2':
             medium_count += 1
-            print(f'  [MEDIUM] {alert.get(\"name\")}')
-        elif 'Low' in risk:
+            print(f'  [MEDIUM] {name} ({alert.get("riskdesc")})')
+        elif risk == 'Low' or risk_code == '1':
             low_count += 1
-        elif 'Informational' in risk:
+            print(f'  [LOW] {name} ({alert.get("riskdesc")})')
+        else:
             info_count += 1
+            print(f'  [INFO] {name} ({alert.get("riskdesc")})')
 
 print(f'Findings Summary: High={high_count}, Medium={medium_count}, Low={low_count}, Info={info_count}')
 
