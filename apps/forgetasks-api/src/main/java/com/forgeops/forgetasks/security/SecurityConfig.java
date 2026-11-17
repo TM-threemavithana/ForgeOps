@@ -53,18 +53,18 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .headers(headers -> headers
-                        .contentSecurityPolicy(csp -> csp
+                .headers(headers -> {
+                        headers.contentSecurityPolicy(csp -> csp
                                 .policyDirectives("default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'")
-                        )
-                        .referrerPolicy(referrer -> referrer
+                        );
+                        headers.referrerPolicy(referrer -> referrer
                                 .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)
-                        )
-                        .permissionsPolicy(permissions -> permissions
+                        );
+                        headers.permissionsPolicy(permissions -> permissions
                                 .policy("geolocation=(), camera=(), microphone=(), payment=()")
-                        )
-                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
-                )
+                        );
+                        headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::deny);
+                })
                 .authorizeHttpRequests(auth -> auth
                         // Public Account Registration
                         .requestMatchers(HttpMethod.POST, "/api/v1/accounts").permitAll()
