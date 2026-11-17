@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic isolated fixture for Gate G09 dependency scanner failure testing -->
+<!-- DO NOT reference this artifact in application build -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.forgeops.security.test</groupId>
+    <artifactId>synthetic-vulnerable-fixture</artifactId>
+    <version>0.0.1-SYNTHETIC</version>
+
+    <dependencies>
+        <!-- Deliberately vulnerable legacy dependency for synthetic scanner testing (CVE-2015-7501) -->
+        <dependency>
+            <groupId>commons-collections</groupId>
+            <artifactId>commons-collections</artifactId>
+            <version>3.2.1</version>
+        </dependency>
+    </dependencies>
+</project>
