@@ -10,10 +10,11 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, "feature/**"]
   pull_request:
-    branches: [master]
+    branches: [master, "feature/**"]
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
