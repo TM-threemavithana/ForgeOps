@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -173,5 +174,30 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
         assertThat(content).doesNotContain("Exception at");
         assertThat(content).doesNotContain("com.forgeops");
         assertThat(content).doesNotContain("Hibernate");
+    }
+
+    @Test
+    @DisplayName("AppSec: CSRF Protection - State-changing request lacking API Authorization header and CSRF token is rejected with 403 Forbidden")
+    void shouldRejectStateChangingRequestWithoutCsrfTokenWhenLackingApiAuthorization() throws Exception {
+        // Attempt state-changing POST without explicit API Basic Authorization header and without CSRF token
+        mockMvc.perform(post("/api/v1/projects")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ProjectCreateRequest("CSRF Project", "Malicious"))))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
+    }
+
+    @Test
+    @DisplayName("AppSec: CSRF Protection - State-changing request with valid CSRF token passes CSRF validation")
+    void shouldAcceptStateChangingRequestWithValidCsrfToken() throws Exception {
+        // Request with valid CSRF token passes CsrfFilter and proceeds to Authentication layer (yielding 401 Unauthorized since no credentials provided)
+        mockMvc.perform(post("/api/v1/projects")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ProjectCreateRequest("Valid CSRF Project", "Legitimate"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Unauthorized"));
     }
 }

@@ -676,7 +676,7 @@ jobs:
             fi
           done
 
-      - name: Run OWASP ZAP Baseline DAST Scan
+      - name: Run OWASP ZAP API DAST Scan with OpenAPI
         run: |
           mkdir -p target/zap-reports
           chmod 777 target/zap-reports
@@ -686,9 +686,12 @@ jobs:
             --network zap-test-net \
             -v ${{ github.workspace }}/target/zap-reports:/zap/wrk/:rw \
             -v ${{ github.workspace }}/security/dast/zap/zap-rules.conf:/zap/rules.conf:ro \
+            -v ${{ github.workspace }}/security/dast/zap/openapi.yaml:/zap/openapi.yaml:ro \
             ghcr.io/zaproxy/zaproxy:2.16.0@sha256:391f66efa53b30de40d4a1c6e28146477263552fc828bc7613c9cd11a2949908 \
-            zap-baseline.py \
-            -t http://zap-test-app:8080 \
+            zap-api-scan.py \
+            -t /zap/openapi.yaml \
+            -f openapi \
+            -O http://zap-test-app:8080 \
             -c /zap/rules.conf \
             -r report.html \
             -J report.json \
@@ -696,17 +699,44 @@ jobs:
             -I
           ZAP_RC=$?
           set -e
-          echo "ZAP Baseline exit code: $ZAP_RC"
+          echo "ZAP API scan exit code: $ZAP_RC"
 
-      - name: Evaluate ZAP DAST Findings (Enforce Zero High/Medium Alerts)
+      - name: Evaluate ZAP DAST Findings (Enforce Zero High/Medium Alerts & Report Integrity)
         run: |
           python3 -c "
-          import json, sys
-          with open('target/zap-reports/report.json', 'r', encoding='utf-8') as f:
-              data = json.load(f)
+          import json, sys, os
+
+          report_path = 'target/zap-reports/report.json'
+          if not os.path.isfile(report_path) or os.path.getsize(report_path) == 0:
+              print(f'[FAIL] DAST scan report missing or empty (0 bytes): {report_path}')
+              sys.exit(1)
+
+          try:
+              with open(report_path, 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(f'[FAIL] DAST scan report contains malformed JSON: {e}')
+              sys.exit(1)
+
+          if not isinstance(data, dict):
+              print('[FAIL] DAST scan report root is not a JSON object.')
+              sys.exit(1)
+
+          sites = data.get('site', [])
+          if not sites or not isinstance(sites, list) or len(sites) == 0:
+              print('[FAIL] DAST scan report is incomplete: zero sites analyzed.')
+              sys.exit(1)
+
+          target_matched = any('zap-test-app' in s.get('@name', '') or '8080' in str(s.get('@port', '')) or 'localhost' in s.get('@name', '') for s in sites)
+          if not target_matched:
+              print(f'[FAIL] Expected target host not found in analyzed sites: {[s.get(\"@name\") for s in sites]}')
+              sys.exit(1)
+
           highs = 0
           mediums = 0
-          for site in data.get('site', []):
+          lows = 0
+          infos = 0
+          for site in sites:
               for alert in site.get('alerts', []):
                   risk = alert.get('riskdesc', '').split('(')[0].strip()
                   risk_code = str(alert.get('riskcode', ''))
@@ -717,13 +747,18 @@ jobs:
                   elif risk == 'Medium' or risk_code == '2':
                       mediums += 1
                       print(f'  [MEDIUM] {name} ({alert.get(\"riskdesc\")})')
+                  elif risk == 'Low' or risk_code == '1':
+                      lows += 1
+                      print(f'  [LOW] {name} ({alert.get(\"riskdesc\")})')
                   else:
+                      infos += 1
                       print(f'  [INFO/LOW] {name} ({alert.get(\"riskdesc\")})')
-          print(f'ZAP Alert Counts: High={highs}, Medium={mediums}')
+
+          print(f'ZAP Findings Summary: High={highs}, Medium={mediums}, Low={lows}, Info={infos}')
           if highs > 0 or mediums > 0:
-              print('[FAIL] Security gate violation: One or more High/Medium DAST alerts detected.')
+              print(f'[FAIL] Security gate violation: {highs} HIGH and {mediums} MEDIUM DAST alerts detected.')
               sys.exit(1)
-          print('[PASS] Zero High/Medium DAST alerts detected. DAST gate passed.')
+          print('[PASS] Zero High/Medium DAST alerts detected and report integrity verified. DAST gate passed.')
           "
 
       - name: Upload ZAP DAST Reports

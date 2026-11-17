@@ -20,14 +20,20 @@ elif [ -x "/usr/bin/gitleaks" ]; then
 fi
 
 if [ -z "$GITLEAKS_BIN" ]; then
-    echo "[WARN] Gitleaks is not installed or not in PATH."
-    echo "       Run 'scripts/setup-pre-commit.sh' (or 'scripts/setup-pre-commit.ps1') to install and configure."
-    # If STRICT_SECRET_CHECK is enabled, fail closed
-    if [ "${STRICT_SECRET_CHECK:-0}" = "1" ]; then
-        echo "[FAIL] STRICT_SECRET_CHECK=1 and gitleaks is missing. Commit aborted."
-        exit 1
-    fi
-    exit 0
+    echo ""
+    echo "======================================================================"
+    echo " [FAIL-CLOSED] Pre-Commit Secret Scanner (Gitleaks) Not Found!        "
+    echo "======================================================================"
+    echo "ForgeOps enforces a fail-closed pre-commit secret scanning policy."
+    echo "Gitleaks binary was not found in PATH or standard installation paths."
+    echo ""
+    echo "To install and configure Gitleaks:"
+    echo "  Linux / WSL2:       ./scripts/setup-pre-commit.sh"
+    echo "  Windows PowerShell: .\\scripts\\setup-pre-commit.ps1"
+    echo ""
+    echo "Emergency override (audited): git commit --no-verify"
+    echo "======================================================================"
+    exit 1
 fi
 
 # Run Gitleaks protect on staged changes

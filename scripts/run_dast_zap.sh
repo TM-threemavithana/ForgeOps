@@ -6,6 +6,7 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 RULES_FILE="${REPO_ROOT}/security/dast/zap/zap-rules.conf"
+OPENAPI_FILE="${REPO_ROOT}/security/dast/zap/openapi.yaml"
 REPORTS_DIR="${REPO_ROOT}/target/zap-reports"
 ZAP_IMAGE="ghcr.io/zaproxy/zaproxy:2.16.0@sha256:391f66efa53b30de40d4a1c6e28146477263552fc828bc7613c9cd11a2949908"
 
@@ -91,16 +92,19 @@ for i in {1..60}; do
     fi
 done
 
-# 4. Execute OWASP ZAP Baseline Scan
-echo "--> Executing OWASP ZAP baseline scan against http://${APP_CONTAINER}:8080..."
+# 4. Execute OWASP ZAP API Scan with OpenAPI Coverage
+echo "--> Executing OWASP ZAP API scan against http://${APP_CONTAINER}:8080 with OpenAPI specification..."
 set +e
 docker run --rm \
     --network "${NETWORK_NAME}" \
     -v "${REPORTS_DIR}:/zap/wrk/:rw" \
     -v "${RULES_FILE}:/zap/rules.conf:ro" \
+    -v "${OPENAPI_FILE}:/zap/openapi.yaml:ro" \
     "${ZAP_IMAGE}" \
-    zap-baseline.py \
-    -t "http://${APP_CONTAINER}:8080" \
+    zap-api-scan.py \
+    -t /zap/openapi.yaml \
+    -f openapi \
+    -O "http://${APP_CONTAINER}:8080" \
     -c /zap/rules.conf \
     -r report.html \
     -J report.json \
@@ -109,23 +113,41 @@ docker run --rm \
 ZAP_EXIT_CODE=$?
 set -e
 
-echo "  ZAP baseline completed with exit code: ${ZAP_EXIT_CODE}"
+echo "  ZAP API scan completed with exit code: ${ZAP_EXIT_CODE}"
 
 # 5. Evaluate Report & Enforce Risk Thresholds
 REPORT_FILE="${REPORTS_DIR}/report.json"
-if [ ! -f "${REPORT_FILE}" ]; then
-    echo "[FAIL] ZAP did not produce expected report.json."
-    exit 1
-fi
 
 echo "--> Analyzing ZAP DAST findings from ${REPORT_FILE}..."
 python3 -c "
-import json, sys
+import json, sys, os
 
-with open('${REPORT_FILE}', 'r', encoding='utf-8') as f:
-    data = json.load(f)
+report_file = '${REPORT_FILE}'
+if not os.path.isfile(report_file) or os.path.getsize(report_file) == 0:
+    print(f'[FAIL] DAST scan report missing or empty (0 bytes): {report_file}')
+    sys.exit(1)
+
+try:
+    with open(report_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+except Exception as e:
+    print(f'[FAIL] DAST scan report contains malformed JSON: {e}')
+    sys.exit(1)
+
+if not isinstance(data, dict):
+    print('[FAIL] DAST scan report root is not a JSON object.')
+    sys.exit(1)
 
 site_list = data.get('site', [])
+if not site_list or not isinstance(site_list, list) or len(site_list) == 0:
+    print('[FAIL] DAST scan report is incomplete: zero sites analyzed.')
+    sys.exit(1)
+
+target_matched = any('zap-test-app' in s.get('@name', '') or '8080' in str(s.get('@port', '')) or '${APP_CONTAINER}' in s.get('@name', '') for s in site_list)
+if not target_matched:
+    print(f'[FAIL] Target host not identified in report sites: {[s.get(\"@name\") for s in site_list]}')
+    sys.exit(1)
+
 high_count = 0
 medium_count = 0
 low_count = 0
@@ -138,16 +160,16 @@ for site in site_list:
         name = alert.get('name')
         if risk == 'High' or risk_code == '3':
             high_count += 1
-            print(f'  [HIGH] {name} ({alert.get("riskdesc")})')
+            print(f'  [HIGH] {name} ({alert.get(\"riskdesc\")})')
         elif risk == 'Medium' or risk_code == '2':
             medium_count += 1
-            print(f'  [MEDIUM] {name} ({alert.get("riskdesc")})')
+            print(f'  [MEDIUM] {name} ({alert.get(\"riskdesc\")})')
         elif risk == 'Low' or risk_code == '1':
             low_count += 1
-            print(f'  [LOW] {name} ({alert.get("riskdesc")})')
+            print(f'  [LOW] {name} ({alert.get(\"riskdesc\")})')
         else:
             info_count += 1
-            print(f'  [INFO] {name} ({alert.get("riskdesc")})')
+            print(f'  [INFO] {name} ({alert.get(\"riskdesc\")})')
 
 print(f'Findings Summary: High={high_count}, Medium={medium_count}, Low={low_count}, Info={info_count}')
 

@@ -18,8 +18,8 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
    - Configured reproducible Git hook setup in `.githooks/pre-commit` managed via `git config core.hooksPath .githooks`.
    - Provided cross-platform automated installer scripts: [`scripts/setup-pre-commit.sh`](file:///c:/Project/ForgeOps/scripts/setup-pre-commit.sh) (WSL2/Linux) and [`scripts/setup-pre-commit.ps1`](file:///c:/Project/ForgeOps/scripts/setup-pre-commit.ps1) (Windows PowerShell).
    - Enforces pre-commit staged scans with pinned Gitleaks `v8.24.3` verified against authentic SHA-256 (`9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c`).
-   - Verified that ordinary commits succeed cleanly and staged synthetic secrets are blocked.
-2. **Application Security Hardening ([`apps/forgetasks-api`](file:///c:/Project/ForgeOps/apps/forgetasks-api))**:
+   - Verified that ordinary commits succeed cleanly, staged synthetic secrets are rejected, and missing scanner fails closed.
+2. **Application Security Hardening & CSRF Defense ([`apps/forgetasks-api`](file:///c:/Project/ForgeOps/apps/forgetasks-api))**:
    - Explicit HTTP Security Headers in [`SecurityConfig.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/main/java/com/forgeops/forgetasks/security/SecurityConfig.java):
      - `Content-Security-Policy`: `default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`
      - `X-Frame-Options`: `DENY`
@@ -30,21 +30,28 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
      - Configured `CorsConfigurationSource` restricting allowed origins to trusted local development patterns (`http://localhost:[*]`, `https://localhost:[*]`, `http://127.0.0.1:[*]`, `https://forgeops.local`).
      - Restricted allowed methods (`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`) and allowed headers (`Authorization`, `Content-Type`, `If-Match`, `X-Correlation-ID`, `Accept`).
      - Exposed headers (`ETag`, `Location`, `X-Correlation-ID`) with credentials enabled.
+   - Intelligent CSRF Protection & Browser Replay Mitigation:
+     - Configured `CookieCsrfTokenRepository.withHttpOnlyFalse()` and `CsrfTokenRequestAttributeHandler`.
+     - Omission of `WWW-Authenticate: Basic` header in `problemAuthenticationEntryPoint()` prevents browsers from prompting or caching HTTP Basic credentials in the user agent vault.
+     - Strict `SessionCreationPolicy.STATELESS` ensures zero ambient session cookies (`JSESSIONID`).
+     - State-changing requests lacking explicit API client `Authorization: Basic` credentials enforce CSRF token validation; public account registration and explicit `Authorization: Basic` requests are accepted.
 3. **Application Security Integration Testing ([`ApplicationSecurityIntegrationTest.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/ApplicationSecurityIntegrationTest.java))**:
    - Verified security headers presence and policy directives.
    - Verified CORS preflight acceptance for allowed origins and rejection for unauthorized origins.
-   - Verified Broken Object-Level Authorization (BOLA/IDOR) tenant isolation: User B receives 404 with RFC 7807 problem details when attempting GET, PUT, or DELETE on User A's projects and tasks.
+   - Verified CSRF rejection (403 Forbidden) on state-changing requests lacking API authorization or CSRF tokens, and verified token acceptance.
+   - Verified Broken Object-Level Authorization (BOLA/IDOR) tenant isolation: User B receives 404 with RFC 7807 problem details when attempting GET, PATCH, or DELETE on User A's projects and tasks.
    - Verified input validation against XSS script tags, malformed usernames, and short passwords.
    - Verified information disclosure prevention on malformed UUID paths (zero stack trace or internal package leakage).
-4. **OWASP ZAP Dynamic Application Security Testing (DAST)**:
-   - Configured custom ZAP baseline rules file [`security/dast/zap/zap-rules.conf`](file:///c:/Project/ForgeOps/security/dast/zap/zap-rules.conf) mapping threat model risks to actions (FAIL on high-risk missing headers/misconfigurations, IGNORE on stateless REST anti-CSRF).
-   - Created reproducible runner script [`scripts/run_dast_zap.sh`](file:///c:/Project/ForgeOps/scripts/run_dast_zap.sh) targeting ephemeral test containers on isolated bridge network `zap-net`.
+4. **OWASP ZAP Dynamic Application Security Testing (DAST) with OpenAPI Coverage**:
+   - Authored complete OpenAPI 3.0.3 specification [`security/dast/zap/openapi.yaml`](file:///c:/Project/ForgeOps/security/dast/zap/openapi.yaml) defining all API paths and methods (`/api/v1/accounts`, `/api/v1/projects`, `/api/v1/tasks`, `/actuator/**`).
+   - Configured custom ZAP baseline/API rules file [`security/dast/zap/zap-rules.conf`](file:///c:/Project/ForgeOps/security/dast/zap/zap-rules.conf) mapping threat model risks to actions (FAIL on high-risk missing headers/misconfigurations, IGNORE on stateless REST anti-CSRF).
+   - Created reproducible runner script [`scripts/run_dast_zap.sh`](file:///c:/Project/ForgeOps/scripts/run_dast_zap.sh) targeting ephemeral test containers on isolated bridge network `zap-net` using `zap-api-scan.py`.
    - Pinned official ZAP container: `ghcr.io/zaproxy/zaproxy:2.16.0@sha256:391f66efa53b30de40d4a1c6e28146477263552fc828bc7613c9cd11a2949908`.
-   - Created synthetic compliant and failure fixtures ([`report-pass.json`](file:///c:/Project/ForgeOps/security/dast/zap/fixtures/report-pass.json) and [`report-fail.json`](file:///c:/Project/ForgeOps/security/dast/zap/fixtures/report-fail.json)) to prove automated risk-based gate enforcement.
+   - Created synthetic compliant, insecure, malformed, empty, and incomplete fixtures to prove automated risk-based gate enforcement.
 5. **CI/CD Integration ([`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml))**:
-   - Added `dast-zap-scan` job executing ephemeral PostgreSQL + ForgeTasks API + ZAP baseline scanner.
-   - Enforces zero HIGH and zero MEDIUM DAST findings.
-   - Uploads HTML and JSON reports as build artifacts.
+   - Added `dast-zap-scan` job executing ephemeral PostgreSQL + ForgeTasks API + ZAP API scanner with OpenAPI coverage.
+   - Enforces report integrity (non-empty, valid JSON, analyzed target hosts) and zero HIGH / MEDIUM DAST findings.
+   - Uploads HTML, Markdown, and JSON reports as build artifacts.
    - Updated `ci-gate` aggregator to require `dast-zap-scan`.
 
 ---
@@ -53,12 +60,13 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
 
 | Threat / Risk Vector | OWASP API Top 10 | Existing State | Hardening Applied in G09.3 | Verification Mechanism |
 | :--- | :--- | :--- | :--- | :--- |
-| **Accidental Secret Commits** | CI/CD Supply Chain | GitHub Actions Gitleaks scanned post-push, but developers could commit secrets locally. | Pre-commit hook in `.githooks/pre-commit` scanning staged changes with Gitleaks v8.24.3. | `test_precommit_hook_and_secret_rejection` in `scripts/test_g09_security.py`. |
+| **Accidental Secret Commits** | CI/CD Supply Chain | GitHub Actions Gitleaks scanned post-push, but developers could commit secrets locally. | Pre-commit hook in `.githooks/pre-commit` scanning staged changes with Gitleaks v8.24.3, failing closed when binary is missing. | `test_precommit_hook_and_secret_rejection` in `scripts/test_g09_security.py`. |
+| **Cross-Site Request Forgery & Browser Credential Replay** | API8: Security Misconfiguration | CSRF was disabled; browser contexts could theoretically replay cached credentials or ambient state. | Omitted `WWW-Authenticate: Basic` to prevent user-agent caching; added `CookieCsrfTokenRepository` enforcing CSRF for non-API requests while preserving API basic auth. | `shouldRejectStateChangingRequestWithoutCsrfTokenWhenLackingApiAuthorization` and `shouldAcceptStateChangingRequestWithValidCsrfToken` in `ApplicationSecurityIntegrationTest.java`. |
 | **Missing Security Headers** | API8: Security Misconfiguration | Relied on default Spring Security headers without explicit CSP, Referrer, or Permissions policy. | Added explicit CSP, Frame-Options DENY, Referrer-Policy, and Permissions-Policy. | `shouldEnforceSecurityHeaders` in `ApplicationSecurityIntegrationTest.java` & ZAP rule 10038/10021. |
 | **Uncontrolled CORS** | API8: Security Misconfiguration | No explicit CORS filter; default behavior varied across reverse proxies. | Configured `CorsConfigurationSource` bean with origin patterns restricted to trusted dev/local origins. | `shouldEnforceControlledCorsForAllowedOrigin` and `shouldRejectCorsForDisallowedOrigin`. |
-| **Broken Object-Level Authorization (BOLA/IDOR)** | API1: Broken Object Level Auth | Enforced in domain logic via `findByIdAndOwner`, but lacked dedicated integration test coverage. | Created multi-tenant security integration tests verifying cross-tenant GET/PUT/DELETE isolation. | `shouldEnforceObjectLevelAccessControl_BOLA_IDOR_Isolation` in `ApplicationSecurityIntegrationTest.java`. |
+| **Broken Object-Level Authorization (BOLA/IDOR)** | API1: Broken Object Level Auth | Enforced in domain logic via `findByIdAndOwner`, but lacked dedicated integration test coverage. | Created multi-tenant security integration tests verifying cross-tenant GET/PATCH/DELETE isolation. | `shouldEnforceObjectLevelAccessControl_BOLA_IDOR_Isolation` in `ApplicationSecurityIntegrationTest.java`. |
 | **Information Disclosure** | API8: Security Misconfiguration | Handled known exceptions, but malformed UUIDs or unhandled errors could expose framework traces. | Validated GlobalExceptionHandler RFC 7807 problem details with zero stack trace leakage. | `shouldPreventInformationDisclosureOnMalformedInputs`. |
-| **Dynamic Runtime Vulnerabilities** | All OWASP Top 10 | Static analysis (Semgrep, Trivy, Checkov) only; no dynamic scanning of running endpoints. | Added OWASP ZAP baseline DAST scanning in CI with pinned container and strict risk thresholds. | `dast-zap-scan` job in CI & `scripts/run_dast_zap.sh`. |
+| **Dynamic Runtime Vulnerabilities & Incomplete DAST** | All OWASP Top 10 | Web crawlers only hit root HTML; static analysis alone left dynamic runtime risks uninspected. | Authored OpenAPI 3.0.3 specification (`openapi.yaml`) covering all routes; integrated `zap-api-scan.py` with fail-closed report integrity validation. | `dast-zap-scan` job in CI, `test_zap_report_evaluation_and_negative_rejection`, and `scripts/run_dast_zap.sh`. |
 
 ---
 
@@ -66,17 +74,21 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
 
 | File Path | Status | Purpose |
 | :--- | :---: | :--- |
-| [`.githooks/pre-commit`](file:///c:/Project/ForgeOps/.githooks/pre-commit) | Added | Pre-commit Git hook executing Gitleaks staged secret scanning. |
+| [`.githooks/pre-commit`](file:///c:/Project/ForgeOps/.githooks/pre-commit) | Added | Pre-commit Git hook executing Gitleaks staged secret scanning with fail-closed behavior. |
 | [`scripts/setup-pre-commit.sh`](file:///c:/Project/ForgeOps/scripts/setup-pre-commit.sh) | Added | POSIX/WSL2 installer configuring `core.hooksPath` and installing pinned Gitleaks binary. |
 | [`scripts/setup-pre-commit.ps1`](file:///c:/Project/ForgeOps/scripts/setup-pre-commit.ps1) | Added | Windows PowerShell setup script configuring Git pre-commit hooks. |
-| [`apps/forgetasks-api/src/main/java/com/forgeops/forgetasks/security/SecurityConfig.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/main/java/com/forgeops/forgetasks/security/SecurityConfig.java) | Modified | Added explicit security headers (CSP, FrameOptions, Referrer, Permissions) and CORS bean. |
-| [`apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/ApplicationSecurityIntegrationTest.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/ApplicationSecurityIntegrationTest.java) | Added | Security integration tests: headers, CORS, BOLA/IDOR, input validation, info disclosure. |
-| [`security/dast/zap/zap-rules.conf`](file:///c:/Project/ForgeOps/security/dast/zap/zap-rules.conf) | Added | OWASP ZAP baseline rules configuration and risk action mappings. |
+| [`apps/forgetasks-api/src/main/java/com/forgeops/forgetasks/security/SecurityConfig.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/main/java/com/forgeops/forgetasks/security/SecurityConfig.java) | Modified | Added explicit security headers (CSP, FrameOptions, Referrer, Permissions), CORS bean, and CSRF token repository with intelligent API Basic auth exclusion. |
+| [`apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/ApplicationSecurityIntegrationTest.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/ApplicationSecurityIntegrationTest.java) | Added | Security integration tests: headers, CORS, CSRF rejection/acceptance, BOLA/IDOR, input validation, info disclosure. |
+| [`security/dast/zap/openapi.yaml`](file:///c:/Project/ForgeOps/security/dast/zap/openapi.yaml) | Added | Complete OpenAPI 3.0.3 specification covering all ForgeTasks API endpoints for dynamic security scanning. |
+| [`security/dast/zap/zap-rules.conf`](file:///c:/Project/ForgeOps/security/dast/zap/zap-rules.conf) | Added | OWASP ZAP baseline/API rules configuration and risk action mappings. |
 | [`security/dast/zap/fixtures/report-pass.json`](file:///c:/Project/ForgeOps/security/dast/zap/fixtures/report-pass.json) | Added | Synthetic compliant DAST report fixture for positive gate evaluation. |
 | [`security/dast/zap/fixtures/report-fail.json`](file:///c:/Project/ForgeOps/security/dast/zap/fixtures/report-fail.json) | Added | Synthetic insecure DAST report fixture (High CSP alert) for negative gate evaluation. |
-| [`scripts/run_dast_zap.sh`](file:///c:/Project/ForgeOps/scripts/run_dast_zap.sh) | Added | Ephemeral local/CI runner script for OWASP ZAP container baseline scan. |
-| [`scripts/test_g09_security.py`](file:///c:/Project/ForgeOps/scripts/test_g09_security.py) | Modified | Extended security test suite from 12 to 16 automated checks covering G09.3. |
-| [`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml) | Modified | Added `dast-zap-scan` job, pinned actions/containers, and updated `ci-gate`. |
+| [`security/dast/zap/fixtures/report-malformed.json`](file:///c:/Project/ForgeOps/security/dast/zap/fixtures/report-malformed.json) | Added | Synthetic malformed JSON DAST fixture to verify fail-closed parser handling. |
+| [`security/dast/zap/fixtures/report-empty.json`](file:///c:/Project/ForgeOps/security/dast/zap/fixtures/report-empty.json) | Added | Synthetic empty (0 bytes) DAST fixture to verify fail-closed empty file handling. |
+| [`security/dast/zap/fixtures/report-incomplete.json`](file:///c:/Project/ForgeOps/security/dast/zap/fixtures/report-incomplete.json) | Added | Synthetic incomplete (`site: []`) DAST fixture to verify fail-closed completeness check. |
+| [`scripts/run_dast_zap.sh`](file:///c:/Project/ForgeOps/scripts/run_dast_zap.sh) | Added | Ephemeral local/CI runner script for OWASP ZAP API container scan with OpenAPI specification. |
+| [`scripts/test_g09_security.py`](file:///c:/Project/ForgeOps/scripts/test_g09_security.py) | Modified | Extended security test suite to 16 automated checks covering CSRF, Gitleaks fail-closed, and ZAP OpenAPI report integrity. |
+| [`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml) | Modified | Added `dast-zap-scan` job with OpenAPI mapping, report integrity verification, pinned actions/containers, and updated `ci-gate`. |
 | [`apps/forgetasks-api/src/main/resources/application.yml`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/main/resources/application.yml) | Modified | Configured OTLP tracing endpoint default to prevent container startup failure in standalone/ephemeral test environments. |
 | [`docs/evidence/G09/g09-3-readiness.md`](file:///c:/Project/ForgeOps/docs/evidence/G09/g09-3-readiness.md) | Added | This readiness, threat model, audit, and verification report. |
 

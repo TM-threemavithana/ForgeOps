@@ -1,0 +1,506 @@
+openapi: 3.0.3
+info:
+  title: ForgeTasks REST API
+  description: ForgeTasks multi-tenant task and project management REST API
+  version: 1.0.0
+servers:
+  - url: http://zap-test-app:8080
+    description: Ephemeral DAST test container
+  - url: http://localhost:8080
+    description: Local development environment
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Authentication per-request
+
+  schemas:
+    AccountRegistrationRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: testuser123
+        password:
+          type: string
+          format: password
+          example: SecurePass123!
+
+    AccountResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ProjectCreateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: Production Deployment Plan
+        description:
+          type: string
+          example: Detailed steps for zero-downtime release
+
+    ProjectUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Updated Plan
+        description:
+          type: string
+          example: Updated notes
+        archived:
+          type: boolean
+          example: false
+
+    ProjectResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        archived:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TaskCreateRequest:
+      type: object
+      required:
+        - projectId
+        - title
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Configure Ingress TLS
+        description:
+          type: string
+          example: Install cert-manager and configure Let's Encrypt issuer
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+          example: HIGH
+
+    TaskUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Completed Ingress TLS
+        description:
+          type: string
+          example: Verified certificate issuance
+        status:
+          type: string
+          enum: [TODO, IN_PROGRESS, DONE]
+          example: DONE
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+          example: HIGH
+
+    TaskResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        timestamp:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+
+paths:
+  /api/v1/accounts:
+    post:
+      summary: Register a new account
+      operationId: registerAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountRegistrationRequest'
+      responses:
+        '201':
+          description: Account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          description: Validation failure
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: Username already exists
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/projects:
+    get:
+      summary: List user projects
+      operationId: listProjects
+      security:
+        - basicAuth: []
+      parameters:
+        - name: includeArchived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Page of projects
+        '401':
+          description: Unauthorized
+    post:
+      summary: Create a new project
+      operationId: createProject
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreateRequest'
+      responses:
+        '201':
+          description: Project created
+          headers:
+            ETag:
+              schema:
+                type: string
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+
+  /api/v1/projects/{id}:
+    get:
+      summary: Get project by ID
+      operationId: getProject
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project details
+          headers:
+            ETag:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+        '404':
+          description: Project not found
+    patch:
+      summary: Update project
+      operationId: updateProject
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdateRequest'
+      responses:
+        '200':
+          description: Updated project
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+        '412':
+          description: Precondition failed (optimistic locking conflict)
+        '428':
+          description: Precondition required (missing If-Match)
+    delete:
+      summary: Delete project
+      operationId: deleteProject
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Project deleted
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+
+  /api/v1/tasks:
+    get:
+      summary: List user tasks
+      operationId: listTasks
+      security:
+        - basicAuth: []
+      parameters:
+        - name: projectId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [TODO, IN_PROGRESS, DONE]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Page of tasks
+        '401':
+          description: Unauthorized
+    post:
+      summary: Create task
+      operationId: createTask
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: Task created
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+
+  /api/v1/tasks/{id}:
+    get:
+      summary: Get task by ID
+      operationId: getTask
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task details
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    patch:
+      summary: Update task
+      operationId: updateTask
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+      responses:
+        '200':
+          description: Task updated
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+        '412':
+          description: Precondition failed
+        '428':
+          description: Precondition required
+    delete:
+      summary: Delete task
+      operationId: deleteTask
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Task deleted
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+
+  /actuator/health:
+    get:
+      summary: Application liveness and readiness health probe
+      operationId: getHealth
+      responses:
+        '200':
+          description: Health status UP
+        '503':
+          description: Service Unavailable
+
+  /actuator/info:
+    get:
+      summary: Application info endpoint
+      operationId: getInfo
+      responses:
+        '200':
+          description: Application info
+
+  /actuator/prometheus:
+    get:
+      summary: Prometheus scrape metrics
+      operationId: getPrometheusMetrics
+      responses:
+        '200':
+          description: Prometheus metrics

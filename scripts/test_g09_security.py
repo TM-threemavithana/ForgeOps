@@ -36,8 +36,12 @@ HADOLINT_PASS_FIXTURE = os.path.join(REPO_ROOT, "security", "container", "hadoli
 HOOKS_DIR = os.path.join(REPO_ROOT, ".githooks")
 PRE_COMMIT_HOOK = os.path.join(HOOKS_DIR, "pre-commit")
 ZAP_RULES_FILE = os.path.join(REPO_ROOT, "security", "dast", "zap", "zap-rules.conf")
+ZAP_OPENAPI_FILE = os.path.join(REPO_ROOT, "security", "dast", "zap", "openapi.yaml")
 ZAP_PASS_FIXTURE = os.path.join(REPO_ROOT, "security", "dast", "zap", "fixtures", "report-pass.json")
 ZAP_FAIL_FIXTURE = os.path.join(REPO_ROOT, "security", "dast", "zap", "fixtures", "report-fail.json")
+ZAP_MALFORMED_FIXTURE = os.path.join(REPO_ROOT, "security", "dast", "zap", "fixtures", "report-malformed.json")
+ZAP_EMPTY_FIXTURE = os.path.join(REPO_ROOT, "security", "dast", "zap", "fixtures", "report-empty.json")
+ZAP_INCOMPLETE_FIXTURE = os.path.join(REPO_ROOT, "security", "dast", "zap", "fixtures", "report-incomplete.json")
 APP_SECURITY_CONFIG = os.path.join(REPO_ROOT, "apps", "forgetasks-api", "src", "main", "java", "com", "forgeops", "forgetasks", "security", "SecurityConfig.java")
 APP_SECURITY_TEST = os.path.join(REPO_ROOT, "apps", "forgetasks-api", "src", "test", "java", "com", "forgeops", "forgetasks", "ApplicationSecurityIntegrationTest.java")
 
@@ -407,7 +411,20 @@ def test_precommit_hook_and_secret_rejection():
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         assert res_safe2.returncode == 0, f"Second safe commit should succeed, got:\n{res_safe2.stderr}"
 
-    print("  [PASS] Pre-commit hook verified: clean commits permitted, staged synthetic secrets blocked.")
+        # Step 4: Verify explicit fail-closed behavior when Gitleaks binary is unavailable
+        env_no_gitleaks = env.copy()
+        env_no_gitleaks["PATH"] = "/usr/bin:/bin"
+        env_no_gitleaks["HOME"] = tmp_dir
+        with open(safe_file, "a") as f:
+            f.write("// trigger commit without scanner\n")
+        run_cmd(["git", "-C", tmp_dir, "add", "safe.txt"])
+        res_fail_closed = subprocess.run(["git", "-C", tmp_dir, "commit", "-m", "fail closed test"],
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env_no_gitleaks)
+        assert res_fail_closed.returncode != 0, "Pre-commit hook must fail closed when Gitleaks binary is missing!"
+        assert "FAIL-CLOSED" in (res_fail_closed.stdout + res_fail_closed.stderr), \
+            f"Expected explicit FAIL-CLOSED warning, got:\n{res_fail_closed.stdout}\n{res_fail_closed.stderr}"
+
+    print("  [PASS] Pre-commit hook verified: clean commits permitted, staged synthetic secrets blocked, missing scanner fails closed.")
 
 def test_zap_rules_configuration():
     print("--> Test 14: Validating OWASP ZAP baseline rules configuration and risk actions...")
@@ -437,16 +454,39 @@ def test_zap_rules_configuration():
     print(f"  [PASS] ZAP rules configuration validated ({len(rules)} active rule mappings).")
 
 def test_zap_report_evaluation_and_negative_rejection():
-    print("--> Test 15: Verifying OWASP ZAP DAST report evaluation and synthetic rejection...")
+    print("--> Test 15: Verifying OWASP ZAP DAST report evaluation, OpenAPI coverage, and malformed/empty/incomplete rejection...")
     assert os.path.isfile(ZAP_PASS_FIXTURE), f"Missing {ZAP_PASS_FIXTURE}"
     assert os.path.isfile(ZAP_FAIL_FIXTURE), f"Missing {ZAP_FAIL_FIXTURE}"
+    assert os.path.isfile(ZAP_MALFORMED_FIXTURE), f"Missing {ZAP_MALFORMED_FIXTURE}"
+    assert os.path.isfile(ZAP_EMPTY_FIXTURE), f"Missing {ZAP_EMPTY_FIXTURE}"
+    assert os.path.isfile(ZAP_INCOMPLETE_FIXTURE), f"Missing {ZAP_INCOMPLETE_FIXTURE}"
+    assert os.path.isfile(ZAP_OPENAPI_FILE), f"Missing OpenAPI definition at {ZAP_OPENAPI_FILE}"
 
-    def evaluate_zap_report(report_path):
-        with open(report_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    # Verify OpenAPI covers essential API surface
+    with open(ZAP_OPENAPI_FILE, "r", encoding="utf-8") as f:
+        openapi_content = f.read()
+    for route in ["/api/v1/accounts", "/api/v1/projects", "/api/v1/projects/{id}", "/api/v1/tasks", "/api/v1/tasks/{id}", "/actuator/health"]:
+        assert route in openapi_content, f"OpenAPI definition missing critical route: {route}"
+
+    def validate_and_evaluate_zap_report(report_path):
+        if not os.path.isfile(report_path):
+            raise ValueError(f"Report file missing: {report_path}")
+        if os.path.getsize(report_path) == 0:
+            raise ValueError(f"Report file empty (0 bytes): {report_path}")
+        try:
+            with open(report_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Report is malformed JSON: {e}")
+        if not isinstance(data, dict):
+            raise ValueError("Report root must be a JSON object")
+        sites = data.get("site", [])
+        if not sites or not isinstance(sites, list) or len(sites) == 0:
+            raise ValueError("Report is incomplete: zero sites analyzed")
+
         highs = 0
         mediums = 0
-        for site in data.get("site", []):
+        for site in sites:
             for alert in site.get("alerts", []):
                 risk = alert.get("riskdesc", "").split("(")[0].strip()
                 risk_code = str(alert.get("riskcode", ""))
@@ -456,13 +496,36 @@ def test_zap_report_evaluation_and_negative_rejection():
                     mediums += 1
         return highs, mediums
 
-    pass_high, pass_med = evaluate_zap_report(ZAP_PASS_FIXTURE)
+    # 1. Compliant report must pass with 0 High and 0 Medium
+    pass_high, pass_med = validate_and_evaluate_zap_report(ZAP_PASS_FIXTURE)
     assert pass_high == 0 and pass_med == 0, f"Compliant report should have 0 High/Medium alerts, got: {pass_high}/{pass_med}"
 
-    fail_high, fail_med = evaluate_zap_report(ZAP_FAIL_FIXTURE)
+    # 2. Insecure fixture must trigger rejection (> 0 High/Medium)
+    fail_high, fail_med = validate_and_evaluate_zap_report(ZAP_FAIL_FIXTURE)
     assert fail_high > 0 or fail_med > 0, f"Synthetic negative fixture must trigger High/Medium alerts, got: {fail_high}/{fail_med}"
 
-    print("  [PASS] Compliant ZAP report passes DAST gate (0 High/Medium); insecure fixture triggers gate rejection.")
+    # 3. Malformed JSON fixture must be rejected
+    try:
+        validate_and_evaluate_zap_report(ZAP_MALFORMED_FIXTURE)
+        assert False, "Malformed JSON fixture must trigger evaluation failure!"
+    except ValueError:
+        pass
+
+    # 4. Empty report (0 bytes) fixture must be rejected
+    try:
+        validate_and_evaluate_zap_report(ZAP_EMPTY_FIXTURE)
+        assert False, "Empty report fixture must trigger evaluation failure!"
+    except ValueError:
+        pass
+
+    # 5. Incomplete report fixture (site: []) must be rejected
+    try:
+        validate_and_evaluate_zap_report(ZAP_INCOMPLETE_FIXTURE)
+        assert False, "Incomplete report fixture must trigger evaluation failure!"
+    except ValueError:
+        pass
+
+    print("  [PASS] ZAP report evaluation verified: compliant accepted, insecure/malformed/empty/incomplete rejected.")
 
 def test_appsec_configuration_and_headers():
     print("--> Test 16: Auditing application security controls, HTTP headers & CORS configuration...")
@@ -475,6 +538,7 @@ def test_appsec_configuration_and_headers():
     assert "referrerPolicy" in config_content, "SecurityConfig must configure Referrer-Policy"
     assert "permissionsPolicy" in config_content, "SecurityConfig must configure Permissions-Policy"
     assert "corsConfigurationSource" in config_content, "SecurityConfig must configure CorsConfigurationSource bean"
+    assert "csrfTokenRepository" in config_content, "SecurityConfig must configure CSRF protection"
 
     assert os.path.isfile(APP_SECURITY_TEST), f"Missing {APP_SECURITY_TEST}"
     with open(APP_SECURITY_TEST, "r", encoding="utf-8") as f:
@@ -484,6 +548,8 @@ def test_appsec_configuration_and_headers():
     assert "shouldEnforceControlledCorsForAllowedOrigin" in test_content, "ApplicationSecurityIntegrationTest must test CORS"
     assert "shouldEnforceObjectLevelAccessControl_BOLA_IDOR_Isolation" in test_content, "ApplicationSecurityIntegrationTest must test BOLA/IDOR isolation"
     assert "shouldRejectInvalidInputsWithProblemDetail" in test_content, "ApplicationSecurityIntegrationTest must test input validation"
+    assert "shouldRejectStateChangingRequestWithoutCsrfTokenWhenLackingApiAuthorization" in test_content, "ApplicationSecurityIntegrationTest must test CSRF rejection"
+    assert "shouldAcceptStateChangingRequestWithValidCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test CSRF token acceptance"
 
     print("  [PASS] Application security configuration, security headers, CORS, and BOLA/IDOR tests verified.")
 
