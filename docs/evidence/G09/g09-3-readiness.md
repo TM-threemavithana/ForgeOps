@@ -17,8 +17,8 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
 1. **Developer-Side Secret Prevention (Pre-Commit Gitleaks Hook)**:
    - Configured reproducible Git hook setup in `.githooks/pre-commit` managed via `git config core.hooksPath .githooks`.
    - Provided cross-platform automated installer scripts: [`scripts/setup-pre-commit.sh`](file:///c:/Project/ForgeOps/scripts/setup-pre-commit.sh) (WSL2/Linux) and [`scripts/setup-pre-commit.ps1`](file:///c:/Project/ForgeOps/scripts/setup-pre-commit.ps1) (Windows PowerShell).
-   - Enforces pre-commit staged scans with pinned Gitleaks `v8.24.3` verified against authentic SHA-256 (`9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c`).
-   - Verified that ordinary commits succeed cleanly, staged synthetic secrets are rejected, and missing scanner fails closed.
+   - Utilizes Gitleaks v8.24.3 supported staged scanning command interface (`gitleaks git --staged --verbose --redact` with fallback to `protect --staged`).
+   - Verified that ordinary commits succeed cleanly, staged synthetic secrets are rejected, and missing scanner executables fail closed with exit status `1`.
 2. **Application Security Hardening & CSRF Defense ([`apps/forgetasks-api`](file:///c:/Project/ForgeOps/apps/forgetasks-api))**:
    - Explicit HTTP Security Headers in [`SecurityConfig.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/main/java/com/forgeops/forgetasks/security/SecurityConfig.java):
      - `Content-Security-Policy`: `default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`
@@ -30,26 +30,31 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
      - Configured `CorsConfigurationSource` restricting allowed origins to trusted local development patterns (`http://localhost:[*]`, `https://localhost:[*]`, `http://127.0.0.1:[*]`, `https://forgeops.local`).
      - Restricted allowed methods (`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`) and allowed headers (`Authorization`, `Content-Type`, `If-Match`, `X-Correlation-ID`, `Accept`).
      - Exposed headers (`ETag`, `Location`, `X-Correlation-ID`) with credentials enabled.
-   - Intelligent CSRF Protection & Browser Replay Mitigation:
+   - Intelligent CSRF Protection & Browser-Credential Replay Mitigation:
      - Configured `CookieCsrfTokenRepository.withHttpOnlyFalse()` and `CsrfTokenRequestAttributeHandler`.
      - Omission of `WWW-Authenticate: Basic` header in `problemAuthenticationEntryPoint()` prevents browsers from prompting or caching HTTP Basic credentials in the user agent vault.
      - Strict `SessionCreationPolicy.STATELESS` ensures zero ambient session cookies (`JSESSIONID`).
-     - State-changing requests lacking explicit API client `Authorization: Basic` credentials enforce CSRF token validation; public account registration and explicit `Authorization: Basic` requests are accepted.
+     - **Defensible Browser Replay Defense**: Does not assume `Authorization: Basic` proves a non-browser client. If a request contains browser context indicators (`Cookie`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, `Origin`, or `Referer`), CSRF protection is strictly enforced even if Basic Auth credentials are attached. Only non-browser programmatic API clients sending explicit `Authorization: Basic` without browser ambient context may proceed without CSRF tokens.
 3. **Application Security Integration Testing ([`ApplicationSecurityIntegrationTest.java`](file:///c:/Project/ForgeOps/apps/forgetasks-api/src/test/java/com/forgeops/forgetasks/ApplicationSecurityIntegrationTest.java))**:
    - Verified security headers presence and policy directives.
    - Verified CORS preflight acceptance for allowed origins and rejection for unauthorized origins.
    - Verified CSRF rejection (403 Forbidden) on state-changing requests lacking API authorization or CSRF tokens, and verified token acceptance.
+   - Added regression test `shouldRejectBrowserStyleAuthenticatedRequestLackingCsrfToken`: confirms that browser-style authenticated requests replaying Basic Auth credentials without CSRF tokens are rejected with 403 Forbidden.
+   - Added companion test `shouldAcceptBrowserStyleAuthenticatedRequestWithValidCsrfToken`: confirms legitimate browser clients providing both credentials and CSRF tokens succeed.
    - Verified Broken Object-Level Authorization (BOLA/IDOR) tenant isolation: User B receives 404 with RFC 7807 problem details when attempting GET, PATCH, or DELETE on User A's projects and tasks.
    - Verified input validation against XSS script tags, malformed usernames, and short passwords.
    - Verified information disclosure prevention on malformed UUID paths (zero stack trace or internal package leakage).
-4. **OWASP ZAP Dynamic Application Security Testing (DAST) with OpenAPI Coverage**:
+4. **OWASP ZAP Dynamic Application Security Testing (DAST) in Safe Baseline Mode**:
    - Authored complete OpenAPI 3.0.3 specification [`security/dast/zap/openapi.yaml`](file:///c:/Project/ForgeOps/security/dast/zap/openapi.yaml) defining all API paths and methods (`/api/v1/accounts`, `/api/v1/projects`, `/api/v1/tasks`, `/actuator/**`).
    - Configured custom ZAP baseline/API rules file [`security/dast/zap/zap-rules.conf`](file:///c:/Project/ForgeOps/security/dast/zap/zap-rules.conf) mapping threat model risks to actions (FAIL on high-risk missing headers/misconfigurations, IGNORE on stateless REST anti-CSRF).
-   - Created reproducible runner script [`scripts/run_dast_zap.sh`](file:///c:/Project/ForgeOps/scripts/run_dast_zap.sh) targeting ephemeral test containers on isolated bridge network `zap-net` using `zap-api-scan.py`.
+   - Created reproducible runner script [`scripts/run_dast_zap.sh`](file:///c:/Project/ForgeOps/scripts/run_dast_zap.sh) targeting strictly ephemeral test containers on isolated bridge network `zap-net` using `zap-api-scan.py` with Safe Mode (`-S`) enabled.
+   - Safe Mode (`-S`) enforces passive-only baseline inspection, avoiding destructive payload injection.
+   - Infrastructure Isolation: Scans run only against disposable containers (`zap-test-app` and `zap-test-db`), never touching production or kind cluster workloads.
+   - Endpoint Coverage Truth: OpenAPI 3.0.3 provides route exploration for all paths. Public endpoints (`/api/v1/accounts`, `/actuator/**`) are exercised unauthenticated; protected routes (`/api/v1/projects/**`, `/api/v1/tasks/**`) are inspected in their unauthenticated boundary condition (verifying RFC 7807 Problem Details and security headers on 401). We do not claim 100% authenticated state-machine coverage by automated ZAP crawl (which is verified via integration tests).
    - Pinned official ZAP container: `ghcr.io/zaproxy/zaproxy:2.16.0@sha256:391f66efa53b30de40d4a1c6e28146477263552fc828bc7613c9cd11a2949908`.
    - Created synthetic compliant, insecure, malformed, empty, and incomplete fixtures to prove automated risk-based gate enforcement.
 5. **CI/CD Integration ([`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml))**:
-   - Added `dast-zap-scan` job executing ephemeral PostgreSQL + ForgeTasks API + ZAP API scanner with OpenAPI coverage.
+   - Added `dast-zap-scan` job executing ephemeral PostgreSQL + ForgeTasks API + ZAP API scanner in safe mode (`-S`) with OpenAPI route discovery.
    - Enforces report integrity (non-empty, valid JSON, analyzed target hosts) and zero HIGH / MEDIUM DAST findings.
    - Uploads HTML, Markdown, and JSON reports as build artifacts.
    - Updated `ci-gate` aggregator to require `dast-zap-scan`.
@@ -61,12 +66,12 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
 | Threat / Risk Vector | OWASP API Top 10 | Existing State | Hardening Applied in G09.3 | Verification Mechanism |
 | :--- | :--- | :--- | :--- | :--- |
 | **Accidental Secret Commits** | CI/CD Supply Chain | GitHub Actions Gitleaks scanned post-push, but developers could commit secrets locally. | Pre-commit hook in `.githooks/pre-commit` scanning staged changes with Gitleaks v8.24.3, failing closed when binary is missing. | `test_precommit_hook_and_secret_rejection` in `scripts/test_g09_security.py`. |
-| **Cross-Site Request Forgery & Browser Credential Replay** | API8: Security Misconfiguration | CSRF was disabled; browser contexts could theoretically replay cached credentials or ambient state. | Omitted `WWW-Authenticate: Basic` to prevent user-agent caching; added `CookieCsrfTokenRepository` enforcing CSRF for non-API requests while preserving API basic auth. | `shouldRejectStateChangingRequestWithoutCsrfTokenWhenLackingApiAuthorization` and `shouldAcceptStateChangingRequestWithValidCsrfToken` in `ApplicationSecurityIntegrationTest.java`. |
+| **Cross-Site Request Forgery & Browser Credential Replay** | API8: Security Misconfiguration | CSRF was disabled; browser contexts could theoretically replay cached credentials or ambient state. | Omitted `WWW-Authenticate: Basic` to prevent user-agent caching; added `CookieCsrfTokenRepository` with `isBrowserStyleRequest` enforcing CSRF for browser contexts (Cookies, Fetch Metadata, Origin, Referer) regardless of Basic Auth, while preserving programmatic API clients. | `shouldRejectStateChangingRequestWithoutCsrfTokenWhenLackingApiAuthorization`, `shouldRejectBrowserStyleAuthenticatedRequestLackingCsrfToken`, and `shouldAcceptBrowserStyleAuthenticatedRequestWithValidCsrfToken` in `ApplicationSecurityIntegrationTest.java`. |
 | **Missing Security Headers** | API8: Security Misconfiguration | Relied on default Spring Security headers without explicit CSP, Referrer, or Permissions policy. | Added explicit CSP, Frame-Options DENY, Referrer-Policy, and Permissions-Policy. | `shouldEnforceSecurityHeaders` in `ApplicationSecurityIntegrationTest.java` & ZAP rule 10038/10021. |
 | **Uncontrolled CORS** | API8: Security Misconfiguration | No explicit CORS filter; default behavior varied across reverse proxies. | Configured `CorsConfigurationSource` bean with origin patterns restricted to trusted dev/local origins. | `shouldEnforceControlledCorsForAllowedOrigin` and `shouldRejectCorsForDisallowedOrigin`. |
 | **Broken Object-Level Authorization (BOLA/IDOR)** | API1: Broken Object Level Auth | Enforced in domain logic via `findByIdAndOwner`, but lacked dedicated integration test coverage. | Created multi-tenant security integration tests verifying cross-tenant GET/PATCH/DELETE isolation. | `shouldEnforceObjectLevelAccessControl_BOLA_IDOR_Isolation` in `ApplicationSecurityIntegrationTest.java`. |
 | **Information Disclosure** | API8: Security Misconfiguration | Handled known exceptions, but malformed UUIDs or unhandled errors could expose framework traces. | Validated GlobalExceptionHandler RFC 7807 problem details with zero stack trace leakage. | `shouldPreventInformationDisclosureOnMalformedInputs`. |
-| **Dynamic Runtime Vulnerabilities & Incomplete DAST** | All OWASP Top 10 | Web crawlers only hit root HTML; static analysis alone left dynamic runtime risks uninspected. | Authored OpenAPI 3.0.3 specification (`openapi.yaml`) covering all routes; integrated `zap-api-scan.py` with fail-closed report integrity validation. | `dast-zap-scan` job in CI, `test_zap_report_evaluation_and_negative_rejection`, and `scripts/run_dast_zap.sh`. |
+| **Dynamic Runtime Vulnerabilities & Incomplete DAST** | All OWASP Top 10 | Web crawlers only hit root HTML; static analysis alone left dynamic runtime risks uninspected. | Authored OpenAPI 3.0.3 specification (`openapi.yaml`) covering all routes; integrated `zap-api-scan.py` in Safe/Passive Mode (`-S`) against ephemeral containers, with fail-closed report integrity validation. | `dast-zap-scan` job in CI, `test_zap_report_evaluation_and_negative_rejection`, and `scripts/run_dast_zap.sh`. |
 
 ---
 
@@ -193,7 +198,7 @@ All 12 CI jobs executed and passed 100% on Pull Request [#60](https://github.com
   ```
 
 ### Usage
-Once installed, `git commit` automatically invokes `.githooks/pre-commit`, running `gitleaks protect --staged --verbose --redact`.
+Once installed, `git commit` automatically invokes `.githooks/pre-commit`, running `gitleaks git --staged --verbose --redact` (with fallback to `protect --staged`).
 - If staged files contain credentials (API keys, private keys, tokens), the commit is blocked with an actionable remediation guide.
 - If no secrets are staged, the commit proceeds without delay.
 
@@ -207,6 +212,10 @@ Once installed, `git commit` automatically invokes `.githooks/pre-commit`, runni
 
 1. **Local Testcontainers Execution**: Integration tests running against PostgreSQL Testcontainers require an active Docker engine. In environments where Docker Desktop is stopped, unit and static security tests execute cleanly, while full integration tests run natively in CI (`ubuntu-latest`).
 2. **Local DAST Execution**: [`scripts/run_dast_zap.sh`](file:///c:/Project/ForgeOps/scripts/run_dast_zap.sh) safely checks for Docker availability. If Docker is offline, it issues an informative warning without throwing errors or altering persistent state.
+3. **OWASP ZAP DAST Scanning Behavior & Scope**:
+   - **Passive-Only Safe Mode (`-S`)**: The scan executes in safe mode (`-S`), disabling active payload injection while passively analyzing HTTP security headers, cookie flags, and information disclosures.
+   - **Infrastructure Isolation**: All DAST tests execute strictly against isolated ephemeral containers (`zap-test-app` with disposable PostgreSQL on bridge network `zap-net` / `zap-test-net`), completely decoupled from kind cluster nodes and production environments.
+   - **Coverage Truth**: OpenAPI 3.0.3 discovery exercises all route schemas. Public endpoints (`/api/v1/accounts`, `/actuator/**`) are inspected in active runtime paths, while protected endpoints (`/api/v1/projects/**`, `/api/v1/tasks/**`) are inspected at their unauthenticated perimeter (validating RFC 7807 Problem Details and security headers on 401). We do not claim 100% authenticated state-machine coverage by automated ZAP crawl; business logic and tenant isolation are verified by the 10 automated test cases in `ApplicationSecurityIntegrationTest.java`.
 
 ---
 

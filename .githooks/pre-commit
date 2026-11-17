@@ -36,9 +36,15 @@ if [ -z "$GITLEAKS_BIN" ]; then
     exit 1
 fi
 
-# Run Gitleaks protect on staged changes
+# Run Gitleaks on staged changes using supported command interface
 echo "==> [pre-commit] Scanning staged changes for secrets with Gitleaks..."
-if ! "$GITLEAKS_BIN" protect --staged --verbose --redact; then
+if "$GITLEAKS_BIN" git --help 2>&1 | grep -q -- '--staged'; then
+    GITLEAKS_CMD=("$GITLEAKS_BIN" git --staged --verbose --redact)
+else
+    GITLEAKS_CMD=("$GITLEAKS_BIN" protect --staged --verbose --redact)
+fi
+
+if ! "${GITLEAKS_CMD[@]}"; then
     echo ""
     echo "======================================================================"
     echo " [REJECTED] Gitleaks detected potential secret(s) in staged changes!  "

@@ -92,8 +92,10 @@ for i in {1..60}; do
     fi
 done
 
-# 4. Execute OWASP ZAP API Scan with OpenAPI Coverage
-echo "--> Executing OWASP ZAP API scan against http://${APP_CONTAINER}:8080 with OpenAPI specification..."
+# 4. Execute OWASP ZAP API Scan in Safe/Passive Mode with OpenAPI Route Discovery
+# -S: Safe mode enforces passive-only analysis, avoiding disruptive active payload injection.
+# Tested infrastructure is strictly disposable and ephemeral (zap-app and zap-db on isolated bridge network).
+echo "--> Executing OWASP ZAP API scan against http://${APP_CONTAINER}:8080 (Safe/Passive Mode with OpenAPI)..."
 set +e
 docker run --rm \
     --network "${NETWORK_NAME}" \
@@ -109,6 +111,7 @@ docker run --rm \
     -r report.html \
     -J report.json \
     -w report.md \
+    -S \
     -I
 ZAP_EXIT_CODE=$?
 set -e

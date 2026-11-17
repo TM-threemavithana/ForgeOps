@@ -200,4 +200,51 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Unauthorized"));
     }
+
+    @Test
+    @DisplayName("AppSec: CSRF Protection - Browser-style authenticated request with cached Basic credentials but lacking CSRF token is rejected with 403 Forbidden")
+    void shouldRejectBrowserStyleAuthenticatedRequestLackingCsrfToken() throws Exception {
+        // 1. Register valid user to obtain valid credentials
+        String user = "csrf_user_" + UUID.randomUUID().toString().substring(0, 8);
+        String pass = "Password123!";
+        mockMvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AccountRegistrationRequest(user, pass))))
+                .andExpect(status().isCreated());
+        String auth = basicAuthHeader(user, pass);
+
+        // 2. Simulate browser-credential replay / cross-site request (carrying Authorization: Basic AND browser headers)
+        mockMvc.perform(post("/api/v1/projects")
+                        .header(HttpHeaders.AUTHORIZATION, auth)
+                        .header("Sec-Fetch-Mode", "navigate")
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ProjectCreateRequest("Replayed Project", "Malicious"))))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
+    }
+
+    @Test
+    @DisplayName("AppSec: CSRF Protection - Browser-style authenticated request with valid CSRF token succeeds")
+    void shouldAcceptBrowserStyleAuthenticatedRequestWithValidCsrfToken() throws Exception {
+        String user = "csrf_legit_" + UUID.randomUUID().toString().substring(0, 8);
+        String pass = "Password123!";
+        mockMvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AccountRegistrationRequest(user, pass))))
+                .andExpect(status().isCreated());
+        String auth = basicAuthHeader(user, pass);
+
+        // Legitimate browser client providing both valid credentials and valid CSRF token
+        mockMvc.perform(post("/api/v1/projects")
+                        .with(csrf())
+                        .header(HttpHeaders.AUTHORIZATION, auth)
+                        .header("Sec-Fetch-Mode", "cors")
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ProjectCreateRequest("Legit Browser Project", "Legit"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Legit Browser Project"));
+    }
 }

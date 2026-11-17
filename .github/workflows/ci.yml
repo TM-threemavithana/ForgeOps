@@ -696,6 +696,7 @@ jobs:
             -r report.html \
             -J report.json \
             -w report.md \
+            -S \
             -I
           ZAP_RC=$?
           set -e

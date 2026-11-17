@@ -2,6 +2,7 @@ package com.forgeops.forgetasks.security;
 
 import tools.jackson.databind.ObjectMapper;
 import com.forgeops.forgetasks.common.correlation.RequestCorrelationFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
@@ -66,6 +67,13 @@ public class SecurityConfig {
                                 if (uri != null && uri.startsWith("/actuator")) {
                                     return true;
                                 }
+                                // Defend against browser credential replay:
+                                // Do not assume 'Authorization: Basic' proves a non-browser client.
+                                // If the request contains browser context indicators (Cookies, Fetch Metadata, Origin, or Referer),
+                                // CSRF protection is strictly enforced even if Basic Auth credentials are attached.
+                                if (isBrowserStyleRequest(request)) {
+                                    return false;
+                                }
                                 String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
                                 return auth != null && auth.startsWith("Basic ");
                         })
@@ -101,6 +109,22 @@ public class SecurityConfig {
                 );
 
         return http.build();
+    }
+
+    private boolean isBrowserStyleRequest(HttpServletRequest request) {
+        // 1. Presence of browser cookies indicates ambient cookie / credential storage
+        if (request.getHeader(HttpHeaders.COOKIE) != null) {
+            return true;
+        }
+        // 2. Presence of W3C Fetch Metadata headers (sent by all modern browsers)
+        if (request.getHeader("Sec-Fetch-Mode") != null || request.getHeader("Sec-Fetch-Site") != null) {
+            return true;
+        }
+        // 3. Presence of Origin or Referer header indicates browser origin tracking
+        if (request.getHeader(HttpHeaders.ORIGIN) != null || request.getHeader(HttpHeaders.REFERER) != null) {
+            return true;
+        }
+        return false;
     }
 
     @Bean

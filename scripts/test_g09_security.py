@@ -525,7 +525,18 @@ def test_zap_report_evaluation_and_negative_rejection():
     except ValueError:
         pass
 
-    print("  [PASS] ZAP report evaluation verified: compliant accepted, insecure/malformed/empty/incomplete rejected.")
+    # 6. Verify that ZAP runner script and CI workflow specify safe mode (-S) for passive baseline scanning
+    zap_script = os.path.join(REPO_ROOT, "scripts", "run_dast_zap.sh")
+    with open(zap_script, "r", encoding="utf-8") as f:
+        script_content = f.read()
+    assert "-S" in script_content, "run_dast_zap.sh must specify -S safe mode for passive baseline scan"
+
+    ci_workflow = os.path.join(REPO_ROOT, ".github", "workflows", "ci.yml")
+    with open(ci_workflow, "r", encoding="utf-8") as f:
+        ci_content = f.read()
+    assert "-S" in ci_content, ".github/workflows/ci.yml must specify -S safe mode for passive baseline scan"
+
+    print("  [PASS] ZAP report evaluation verified: compliant accepted, insecure/malformed/empty/incomplete rejected, safe mode (-S) enforced.")
 
 def test_appsec_configuration_and_headers():
     print("--> Test 16: Auditing application security controls, HTTP headers & CORS configuration...")
@@ -539,6 +550,7 @@ def test_appsec_configuration_and_headers():
     assert "permissionsPolicy" in config_content, "SecurityConfig must configure Permissions-Policy"
     assert "corsConfigurationSource" in config_content, "SecurityConfig must configure CorsConfigurationSource bean"
     assert "csrfTokenRepository" in config_content, "SecurityConfig must configure CSRF protection"
+    assert "isBrowserStyleRequest" in config_content, "SecurityConfig must mitigate browser credential replay with isBrowserStyleRequest"
 
     assert os.path.isfile(APP_SECURITY_TEST), f"Missing {APP_SECURITY_TEST}"
     with open(APP_SECURITY_TEST, "r", encoding="utf-8") as f:
@@ -550,6 +562,8 @@ def test_appsec_configuration_and_headers():
     assert "shouldRejectInvalidInputsWithProblemDetail" in test_content, "ApplicationSecurityIntegrationTest must test input validation"
     assert "shouldRejectStateChangingRequestWithoutCsrfTokenWhenLackingApiAuthorization" in test_content, "ApplicationSecurityIntegrationTest must test CSRF rejection"
     assert "shouldAcceptStateChangingRequestWithValidCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test CSRF token acceptance"
+    assert "shouldRejectBrowserStyleAuthenticatedRequestLackingCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test browser-authenticated CSRF rejection"
+    assert "shouldAcceptBrowserStyleAuthenticatedRequestWithValidCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test browser-authenticated CSRF acceptance"
 
     print("  [PASS] Application security configuration, security headers, CORS, and BOLA/IDOR tests verified.")
 
