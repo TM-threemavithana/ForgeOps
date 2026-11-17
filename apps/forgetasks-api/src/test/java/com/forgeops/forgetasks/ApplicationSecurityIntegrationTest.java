@@ -99,8 +99,8 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.title").value("Resource Not Found"))
                 .andExpect(jsonPath("$.correlationId").exists());
 
-        // 5. Attack 2: User B attempts to modify Project A (IDOR PUT) -> Expect 404 Not Found
-        mockMvc.perform(put("/api/v1/projects/" + projectAId)
+        // 5. Attack 2: User B attempts to modify Project A (IDOR PATCH) -> Expect 404 Not Found
+        mockMvc.perform(patch("/api/v1/projects/" + projectAId)
                         .header(HttpHeaders.AUTHORIZATION, authB)
                         .header(HttpHeaders.IF_MATCH, etagA)
                         .contentType(MediaType.APPLICATION_JSON)
