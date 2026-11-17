@@ -148,19 +148,19 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
 - **Gate G14 Kyverno Policy-as-Code**: 7/7 test suites passed.
 - **Gate G14 SOPS + age Encrypted Secrets**: 6/6 test suites passed.
 
-### 4.3 Remote CI Verification (GitHub Actions Run 44111503229 on PR #60)
-All 12 CI jobs executed and passed 100% on Pull Request [#60](https://github.com/TM-threemavithana/ForgeOps/pull/60):
-- **Build and Test (Java 21)**: `pass` (1m16s) — Surefire unit/integration tests and JaCoCo line/branch coverage gates.
-- **Docker Build Validation**: `pass` (31s) — Multi-stage build and non-root execution verification.
-- **Secret Leak Detection (Gitleaks)**: `pass` (10s) — Clean scan across full Git history.
-- **Trivy Security Scan**: `pass` (1m22s) — Zero HIGH/CRITICAL vulnerabilities in container filesystem.
-- **Maven Dependency Scan (Trivy)**: `pass` (32s) — Zero vulnerable library dependencies.
-- **Semgrep SAST Security Scan**: `pass` (1m1s) — Zero security violations across application source.
-- **Checkov IaC Security Scan**: `pass` (42s) — Zero blocking findings on Terraform modules.
+### 4.3 Remote CI Verification (GitHub Actions Run 44120062575 on PR #60)
+All 12 CI jobs executed and passed 100% on Pull Request [#60](https://github.com/TM-threemavithana/ForgeOps/pull/60) (Commit: [`97ac5a7`](https://github.com/TM-threemavithana/ForgeOps/commit/97ac5a7)):
+- **Build and Test (Java 21)**: `pass` (43s) — Surefire unit/integration tests and JaCoCo line/branch coverage gates.
+- **Docker Build Validation**: `pass` (1m38s) — Multi-stage build and non-root execution verification.
+- **Secret Leak Detection (Gitleaks)**: `pass` (17s) — Clean scan across full Git history.
+- **Trivy Security Scan**: `pass` (2m2s) — Zero HIGH/CRITICAL vulnerabilities in container filesystem.
+- **Maven Dependency Scan (Trivy)**: `pass` (36s) — Zero vulnerable library dependencies.
+- **Semgrep SAST Security Scan**: `pass` (1m3s) — Zero security violations across application source.
+- **Checkov IaC Security Scan**: `pass` (54s) — Zero blocking findings on Terraform modules.
 - **Hadolint Dockerfile Linter**: `pass` (6s) — Strict container best-practice compliance.
-- **SRE & DR Hardening Validation**: `pass` (23s) — G12 and G13 automation suites.
-- **Security Policy & Secrets Validation**: `pass` (45s) — Kyverno CLI and SOPS/age decryption test suites.
-- **OWASP ZAP Baseline DAST Scan**: `pass` (2m27s) — Ephemeral PostgreSQL + API + ZAP container passive scan with 0 HIGH/MEDIUM alerts.
+- **SRE & DR Hardening Validation**: `pass` (27s) — G12 and G13 automation suites.
+- **Security Policy & Secrets Validation**: `pass` (35s) — Kyverno CLI and SOPS/age decryption test suites.
+- **OWASP ZAP Baseline DAST Scan**: `pass` (4m1s) — Ephemeral PostgreSQL + API + ZAP container scan with full OpenAPI 3.0.3 coverage, fail-closed report integrity validation, and 0 HIGH/MEDIUM alerts.
 - **CI Gate**: `pass` (3s) — Aggregated status gate permitting pull request merge.
 
 ---
