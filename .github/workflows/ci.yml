@@ -65,7 +65,7 @@ jobs:
           echo "JAVA_HOME: $JAVA_HOME"
 
       - name: Cache Maven local repository
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
@@ -116,7 +116,7 @@ jobs:
           cache: maven
 
       - name: Cache Maven local repository
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
@@ -188,7 +188,7 @@ jobs:
           cache: maven
 
       - name: Cache Maven local repository
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('apps/forgetasks-api/pom.xml') }}
@@ -637,7 +637,7 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
 
       - name: Cache Maven local repository
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
