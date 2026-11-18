@@ -39,14 +39,11 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
     }
 
     private void restoreCookieCsrfTokenRepository() {
-        System.out.println("DEBUG: RESTORING CSRF TOKEN REPO. filterChainProxy = " + filterChainProxy);
         if (filterChainProxy != null) {
             for (SecurityFilterChain chain : filterChainProxy.getFilterChains()) {
                 for (Filter filter : chain.getFilters()) {
                     if (filter instanceof CsrfFilter) {
-                        System.out.println("DEBUG: FOUND CSRF FILTER! Current repo = " + ReflectionTestUtils.getField(filter, "tokenRepository"));
                         ReflectionTestUtils.setField(filter, "tokenRepository", csrfTokenRepository);
-                        System.out.println("DEBUG: Set CSRF repo to " + csrfTokenRepository);
                     }
                 }
             }

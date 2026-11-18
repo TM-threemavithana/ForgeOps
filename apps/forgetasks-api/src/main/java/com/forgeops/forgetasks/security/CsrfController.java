@@ -1,6 +1,5 @@
 package com.forgeops.forgetasks.security;
 
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -13,8 +12,8 @@ import java.util.Map;
 
 /**
  * Controller providing anti-CSRF token metadata for legitimate API clients and SPAs.
- * Invoking this endpoint forces evaluation and generation of the CSRF token
- * and ensures the XSRF-TOKEN cookie is explicitly written to the response for clients to read and echo back.
+ * Invoking this endpoint evaluates or resolves the active CSRF token
+ * and ensures the XSRF-TOKEN cookie and JSON metadata match exactly.
  */
 @RestController
 @RequestMapping("/api/v1/csrf")
@@ -28,16 +27,17 @@ public class CsrfController {
 
     @GetMapping
     public Map<String, String> getCsrfToken(HttpServletRequest request, HttpServletResponse response) {
-        CsrfToken csrfToken = csrfTokenRepository.loadToken(request);
+        CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+        if (csrfToken == null) {
+            csrfToken = (CsrfToken) request.getAttribute("_csrf");
+        }
+        if (csrfToken == null) {
+            csrfToken = csrfTokenRepository.loadToken(request);
+        }
         if (csrfToken == null) {
             csrfToken = csrfTokenRepository.generateToken(request);
+            csrfTokenRepository.saveToken(csrfToken, request, response);
         }
-        csrfTokenRepository.saveToken(csrfToken, request, response);
-
-        Cookie cookie = new Cookie("XSRF-TOKEN", csrfToken.getToken());
-        cookie.setPath("/");
-        cookie.setHttpOnly(false);
-        response.addCookie(cookie);
 
         return Map.of(
                 "token", csrfToken.getToken(),

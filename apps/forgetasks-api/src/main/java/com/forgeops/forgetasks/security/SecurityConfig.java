@@ -59,7 +59,9 @@ public class SecurityConfig {
 
     @Bean
     public CookieCsrfTokenRepository csrfTokenRepository() {
-        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookiePath("/");
+        return repository;
     }
 
     @Bean
@@ -195,11 +197,6 @@ public class SecurityConfig {
         return (request, response, accessDeniedException) -> {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-
-            System.err.println("SECURITY ACCESS DENIED EXCEPTION: " + accessDeniedException);
-            if (accessDeniedException != null) {
-                accessDeniedException.printStackTrace();
-            }
 
             String detail = (accessDeniedException != null && accessDeniedException.getMessage() != null)
                     ? accessDeniedException.getClass().getSimpleName() + ": " + accessDeniedException.getMessage()

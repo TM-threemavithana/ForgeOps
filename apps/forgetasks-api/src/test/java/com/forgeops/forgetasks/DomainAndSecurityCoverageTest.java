@@ -106,7 +106,6 @@ class DomainAndSecurityCoverageTest {
         response.addCookie(c);
 
         Cookie returned = response.getCookie("XSRF-TOKEN");
-        System.out.println("RETURNED COOKIE: name=" + returned.getName() + " value=" + returned.getValue() + " path=" + returned.getPath());
 
         org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder =
                 org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/projects")
@@ -114,13 +113,11 @@ class DomainAndSecurityCoverageTest {
                         .header("X-XSRF-TOKEN", "test-token-123");
 
         MockHttpServletRequest request = builder.buildRequest(new org.springframework.mock.web.MockServletContext());
-        System.out.println("REQUEST COOKIES: " + java.util.Arrays.toString(request.getCookies()));
-        System.out.println("REQUEST HEADER X-XSRF-TOKEN: " + request.getHeader("X-XSRF-TOKEN"));
 
         CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
         CsrfToken token = repo.loadToken(request);
-        System.out.println("LOADED TOKEN FROM REQUEST: " + (token != null ? token.getToken() : "null"));
         assertThat(token).isNotNull();
+        assertThat(token.getToken()).isEqualTo("test-token-123");
     }
 
     @Test
