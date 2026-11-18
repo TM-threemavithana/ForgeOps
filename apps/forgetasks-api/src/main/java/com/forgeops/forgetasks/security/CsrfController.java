@@ -1,5 +1,6 @@
 package com.forgeops.forgetasks.security;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,15 +10,19 @@ import java.util.Map;
 
 /**
  * Controller providing anti-CSRF token metadata for legitimate API clients and SPAs.
- * Invoking this endpoint also forces evaluation of deferred CSRF tokens, causing
- * CookieCsrfTokenRepository to write the XSRF-TOKEN cookie.
+ * Invoking this endpoint forces evaluation of deferred CSRF tokens, causing
+ * CookieCsrfTokenRepository to write the XSRF-TOKEN cookie to the response.
  */
 @RestController
 @RequestMapping("/api/v1/csrf")
 public class CsrfController {
 
     @GetMapping
-    public Map<String, String> getCsrfToken(CsrfToken csrfToken) {
+    public Map<String, String> getCsrfToken(HttpServletRequest request) {
+        CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+        if (csrfToken == null) {
+            csrfToken = (CsrfToken) request.getAttribute("_csrf");
+        }
         if (csrfToken == null) {
             return Map.of();
         }
