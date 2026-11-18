@@ -1,0 +1,26 @@
+$ kubectl get deployment -n kyverno --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
+kyverno-admission-controller   1/1     1            1           3m30s
+
+$ kubectl get pods -n kyverno -o wide --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+NAME                                          READY   STATUS    RESTARTS   AGE     IP           NODE                                  NOMINATED NODE   READINESS GATES
+kyverno-admission-controller-dcd9957d-d7zt7   1/1     Running   0          3m30s   10.244.0.6   forgeops-g09-security-control-plane   <none>           <none>
+
+$ kubectl get validatingwebhookconfigurations --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+NAME                                            WEBHOOKS   AGE
+kyverno-cel-exception-validating-webhook-cfg    1          18s
+kyverno-exception-validating-webhook-cfg        1          18s
+kyverno-global-context-validating-webhook-cfg   1          18s
+kyverno-policy-validating-webhook-cfg           1          18s
+kyverno-resource-validating-webhook-cfg         1          18s
+
+$ kubectl get endpoints -n kyverno --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+NAME                  ENDPOINTS         AGE
+kyverno-svc           10.244.0.6:9443   3m35s
+kyverno-svc-metrics   10.244.0.6:8000   3m35s
+
+Admission Webhook Status: READY and reachable by Kubernetes API server.
+Admission Controller Version: v1.19.2
+Helm Chart Version: 3.9.2
+Replica Count: 1 (resource-optimized for local lab)
+Port: 9443 (HTTPS)

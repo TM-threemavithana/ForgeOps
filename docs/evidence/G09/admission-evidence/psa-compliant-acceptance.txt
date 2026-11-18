@@ -1,0 +1,19 @@
+$ kubectl apply -f tests/fixtures/security/admission/psa/pass-restricted-workload.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+pod/test-psa-pass-restricted created
+
+$ kubectl get pod test-psa-pass-restricted -n forgeops-g09-psa -o wide --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+NAME                       READY   STATUS      RESTARTS   AGE   IP           NODE                                  NOMINATED NODE   READINESS GATES
+test-psa-pass-restricted   0/1     Completed   0          16s   10.244.0.5   forgeops-g09-security-control-plane   <none>           <none>
+
+$ kubectl logs test-psa-pass-restricted -n forgeops-g09-psa --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+PSA Restricted workload compliant
+
+$ kubectl get pod test-psa-pass-restricted -n forgeops-g09-psa -o jsonpath='{.spec.securityContext}' --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+{"fsGroup":10001,"runAsGroup":10001,"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}}
+
+Exit Code: 0
+Workload Created: True
+Workload Status: Completed (Exit code 0)
+Workload Output: PSA Restricted workload compliant
+Policy Layer: Kubernetes Built-in Pod Security Admission (PSA Restricted)
+Verification: Admitted, healthy non-root execution with seccomp RuntimeDefault, allowPrivilegeEscalation=false, capabilities.drop=[ALL].

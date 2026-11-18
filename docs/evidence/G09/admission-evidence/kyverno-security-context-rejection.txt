@@ -1,0 +1,13 @@
+$ kubectl apply -f tests/fixtures/security/admission/kyverno/fail-security-context.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+Error from server: error when creating "tests/fixtures/security/admission/kyverno/fail-security-context.yaml": admission webhook "validate.kyverno.svc-fail" denied the request: 
+
+resource Pod/forgeops-g09-kyverno/test-kyverno-fail-security-context was blocked due to the following policies 
+
+require-restricted-security-context:
+  check-security-context: 'validation error: Workloads must run as non-root with capabilities dropped to ALL and seccomp RuntimeDefault. rule check-security-context failed at path /spec/securityContext/runAsNonRoot/'
+
+Exit Code: 1
+Workload Created: False
+Policy Responsible: require-restricted-security-context (Rule: check-security-context)
+Admission Controller: Kyverno Admission Webhook (validate.kyverno.svc-fail)
+Enforcement Mode: Enforce (Blocking admission)

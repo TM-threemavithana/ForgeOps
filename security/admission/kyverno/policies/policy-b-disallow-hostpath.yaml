@@ -1,0 +1,26 @@
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: disallow-hostpath
+  namespace: forgeops-g09-kyverno
+  annotations:
+    policies.kyverno.io/title: Disallow HostPath Volume Mounts
+    policies.kyverno.io/category: Pod Security Standards (Baseline)
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/description: HostPath volume mounts expose the host node filesystem and are strictly prohibited.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-hostpath-volumes
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "HostPath volume mounts are disallowed for security isolation."
+        pattern:
+          spec:
+            =(volumes):
+              - X(hostPath): "*"

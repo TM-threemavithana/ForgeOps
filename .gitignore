@@ -79,6 +79,12 @@ trivy-results.json
 gitleaks-report.json
 tests/load/results/
 
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
 # --- OS & IDE Metadata ---
 .DS_Store
 Thumbs.db

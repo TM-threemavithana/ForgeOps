@@ -1,0 +1,19 @@
+$ kubectl apply -f tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+pod/test-kyverno-pass-compliant created
+
+$ kubectl get pod test-kyverno-pass-compliant -n forgeops-g09-kyverno -o wide --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+NAME                          READY   STATUS      RESTARTS   AGE   IP           NODE                                  NOMINATED NODE   READINESS GATES
+test-kyverno-pass-compliant   0/1     Completed   0          29s   10.244.0.8   forgeops-g09-security-control-plane   <none>           <none>
+
+$ kubectl logs test-kyverno-pass-compliant -n forgeops-g09-kyverno --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+Kyverno compliant workload admitted and running
+
+$ kubectl get pod test-kyverno-pass-compliant -n forgeops-g09-kyverno -o jsonpath='{.spec.securityContext}' --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+{"fsGroup":10001,"runAsGroup":10001,"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}}
+
+Exit Code: 0
+Workload Created: True
+Workload Status: Completed (Exit code 0)
+Workload Output: Kyverno compliant workload admitted and running
+Policy Layer: Kyverno Admission Webhook (validate.kyverno.svc-fail)
+Verification: Admitted via webhook, executed as non-root UID 10001 with seccomp RuntimeDefault, allowPrivilegeEscalation=false, capabilities.drop=[ALL], immutable image digest verified.

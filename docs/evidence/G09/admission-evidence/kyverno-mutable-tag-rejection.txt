@@ -1,0 +1,13 @@
+$ kubectl apply -f tests/fixtures/security/admission/kyverno/fail-mutable-tag.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+Error from server: error when creating "tests/fixtures/security/admission/kyverno/fail-mutable-tag.yaml": admission webhook "validate.kyverno.svc-fail" denied the request: 
+
+resource Pod/forgeops-g09-kyverno/test-kyverno-fail-mutable-tag was blocked due to the following policies 
+
+require-image-digest:
+  check-image-digest: 'validation error: Image must be referenced by immutable sha256 digest (e.g., repo/image@sha256:...). Mutable tags are prohibited. rule check-image-digest failed at path /spec/containers/0/image/'
+
+Exit Code: 1
+Workload Created: False
+Policy Responsible: require-image-digest (Rule: check-image-digest)
+Admission Controller: Kyverno Admission Webhook (validate.kyverno.svc-fail)
+Enforcement Mode: Enforce (Blocking admission)

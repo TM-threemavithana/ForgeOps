@@ -1,0 +1,5 @@
+$ kubectl apply -f tests/fixtures/security/admission/psa/fail-host-namespaces.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+Error from server (Forbidden): error when creating "tests/fixtures/security/admission/psa/fail-host-namespaces.yaml": pods "test-psa-fail-host-namespaces" is forbidden: violates PodSecurity "restricted:latest": host namespaces (hostNetwork=true, hostPID=true, hostIPC=true), unrestricted capabilities (container "test-container" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "test-container" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "test-container" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+Exit Code: 1
+Workload Created: False
+Policy Layer: Kubernetes Built-in Pod Security Admission (PSA Restricted)

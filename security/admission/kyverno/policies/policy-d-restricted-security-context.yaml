@@ -1,0 +1,35 @@
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: require-restricted-security-context
+  namespace: forgeops-g09-kyverno
+  annotations:
+    policies.kyverno.io/title: Require Restricted Security Context
+    policies.kyverno.io/category: Pod Security Standards (Restricted)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: Workloads must run as non-root, drop ALL Linux capabilities, and enable RuntimeDefault seccomp.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-security-context
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Workloads must run as non-root with capabilities dropped to ALL and seccomp RuntimeDefault."
+        pattern:
+          spec:
+            =(securityContext):
+              runAsNonRoot: true
+              =(seccompProfile):
+                type: "RuntimeDefault"
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+                  runAsNonRoot: true
+                  capabilities:
+                    drop:
+                      - ALL

@@ -1,0 +1,36 @@
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: disallow-privileged-workloads
+  namespace: forgeops-g09-kyverno
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers and Privilege Escalation
+    policies.kyverno.io/category: Pod Security Standards
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: Privileged mode and privilege escalation must be disabled.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-privileged-and-escalation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Privileged containers and allowPrivilegeEscalation=true are strictly prohibited."
+        pattern:
+          spec:
+            =(ephemeralContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+                  allowPrivilegeEscalation: "false"
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+                  allowPrivilegeEscalation: "false"
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+                  allowPrivilegeEscalation: "false"

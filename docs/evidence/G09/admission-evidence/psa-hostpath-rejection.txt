@@ -1,0 +1,5 @@
+$ kubectl apply -f tests/fixtures/security/admission/psa/fail-hostpath.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+Error from server (Forbidden): error when creating "tests/fixtures/security/admission/psa/fail-hostpath.yaml": pods "test-psa-fail-hostpath" is forbidden: violates PodSecurity "restricted:latest": unrestricted capabilities (container "test-container" must set securityContext.capabilities.drop=["ALL"]), restricted volume types (volume "host-root" uses restricted volume type "hostPath"), runAsNonRoot != true (pod or container "test-container" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "test-container" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+Exit Code: 1
+Workload Created: False
+Policy Layer: Kubernetes Built-in Pod Security Admission (PSA Restricted)
