@@ -10,12 +10,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.security.test.web.support.WebTestUtils;
+import org.springframework.security.web.FilterChainProxy;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.web.context.WebApplicationContext;
 
+import jakarta.servlet.Filter;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,13 +31,22 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
     private CookieCsrfTokenRepository csrfTokenRepository;
 
     @Autowired
-    private WebApplicationContext webApplicationContext;
+    private FilterChainProxy filterChainProxy;
 
     @BeforeEach
     void resetCsrfTokenRepository() {
-        if (webApplicationContext != null && webApplicationContext.getServletContext() != null) {
-            MockHttpServletRequest request = new MockHttpServletRequest(webApplicationContext.getServletContext());
-            WebTestUtils.setCsrfTokenRepository(request, csrfTokenRepository);
+        restoreCookieCsrfTokenRepository();
+    }
+
+    private void restoreCookieCsrfTokenRepository() {
+        if (filterChainProxy != null) {
+            for (SecurityFilterChain chain : filterChainProxy.getFilterChains()) {
+                for (Filter filter : chain.getFilters()) {
+                    if (filter instanceof CsrfFilter) {
+                        ReflectionTestUtils.setField(filter, "tokenRepository", csrfTokenRepository);
+                    }
+                }
+            }
         }
     }
 
@@ -313,10 +324,7 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                 .andReturn();
 
         // Restore CookieCsrfTokenRepository on the test filter in case previous tests with .with(csrf()) replaced it
-        WebTestUtils.setCsrfTokenRepository(
-                csrfResult.getRequest(),
-                csrfTokenRepository
-        );
+        restoreCookieCsrfTokenRepository();
 
         JsonNode csrfNode = objectMapper.readTree(csrfResult.getResponse().getContentAsString());
         String csrfToken = csrfNode.get("token").asText();
