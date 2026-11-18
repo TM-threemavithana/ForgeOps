@@ -7,7 +7,7 @@ metadata:
     policies.kyverno.io/title: Require Restricted Security Context
     policies.kyverno.io/category: Pod Security Standards (Restricted)
     policies.kyverno.io/severity: high
-    policies.kyverno.io/description: Workloads must run as non-root, drop ALL Linux capabilities, disable privilege escalation, and enable RuntimeDefault seccomp.
+    policies.kyverno.io/description: Workloads must run as non-root, drop ALL Linux capabilities, disable privilege escalation, and enable RuntimeDefault seccomp across containers, initContainers, and ephemeralContainers.
 spec:
   validationActions:
     - Deny
@@ -38,17 +38,29 @@ spec:
   validations:
     - expression: >-
         ((has(variables.podSpec.securityContext) && variables.podSpec.securityContext != null && has(variables.podSpec.securityContext.runAsNonRoot) && variables.podSpec.securityContext.runAsNonRoot == true) ||
-         variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot == true))
-      message: "Workloads must enforce runAsNonRoot=true at the pod or container securityContext."
+         (variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot == true) &&
+          (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot == true)) &&
+          (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot == true)))) &&
+        variables.podSpec.containers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.runAsNonRoot) || c.securityContext.runAsNonRoot == true) &&
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.runAsNonRoot) || c.securityContext.runAsNonRoot == true)) &&
+        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.runAsNonRoot) || c.securityContext.runAsNonRoot == true))
+      message: "Workloads must enforce runAsNonRoot=true at the pod level or across all containers, initContainers, and ephemeralContainers, and non-root cannot be disabled."
     - expression: >-
-        ((has(variables.podSpec.securityContext) && variables.podSpec.securityContext != null && has(variables.podSpec.securityContext.seccompProfile) && variables.podSpec.securityContext.seccompProfile != null && variables.podSpec.securityContext.seccompProfile.type == 'RuntimeDefault') ||
-         variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.seccompProfile) && c.securityContext.seccompProfile != null && c.securityContext.seccompProfile.type == 'RuntimeDefault'))
-      message: "Workloads must set seccompProfile.type=RuntimeDefault at the pod or container securityContext."
+        ((has(variables.podSpec.securityContext) && variables.podSpec.securityContext != null && has(variables.podSpec.securityContext.seccompProfile) && variables.podSpec.securityContext.seccompProfile != null && has(variables.podSpec.securityContext.seccompProfile.type) && variables.podSpec.securityContext.seccompProfile.type == 'RuntimeDefault') ||
+         (variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.seccompProfile) && c.securityContext.seccompProfile != null && has(c.securityContext.seccompProfile.type) && c.securityContext.seccompProfile.type == 'RuntimeDefault') &&
+          (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.seccompProfile) && c.securityContext.seccompProfile != null && has(c.securityContext.seccompProfile.type) && c.securityContext.seccompProfile.type == 'RuntimeDefault')) &&
+          (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.seccompProfile) && c.securityContext.seccompProfile != null && has(c.securityContext.seccompProfile.type) && c.securityContext.seccompProfile.type == 'RuntimeDefault')))) &&
+        variables.podSpec.containers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.seccompProfile) || c.securityContext.seccompProfile == null || !has(c.securityContext.seccompProfile.type) || c.securityContext.seccompProfile.type == 'RuntimeDefault') &&
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.seccompProfile) || c.securityContext.seccompProfile == null || !has(c.securityContext.seccompProfile.type) || c.securityContext.seccompProfile.type == 'RuntimeDefault')) &&
+        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.seccompProfile) || c.securityContext.seccompProfile == null || !has(c.securityContext.seccompProfile.type) || c.securityContext.seccompProfile.type == 'RuntimeDefault'))
+      message: "Workloads must set seccompProfile.type=RuntimeDefault at the pod level or across all containers, initContainers, and ephemeralContainers."
     - expression: >-
         variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false) &&
-        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false))
-      message: "Containers must disable privilege escalation (allowPrivilegeEscalation=false)."
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false)) &&
+        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false))
+      message: "Containers, initContainers, and ephemeralContainers must disable privilege escalation (allowPrivilegeEscalation=false)."
     - expression: >-
         variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.capabilities) && c.securityContext.capabilities != null && has(c.securityContext.capabilities.drop) && c.securityContext.capabilities.drop.exists(d, d == 'ALL')) &&
-        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.capabilities) && c.securityContext.capabilities != null && has(c.securityContext.capabilities.drop) && c.securityContext.capabilities.drop.exists(d, d == 'ALL')))
-      message: "Containers must explicitly drop ALL Linux capabilities (capabilities.drop: [ALL])."
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.capabilities) && c.securityContext.capabilities != null && has(c.securityContext.capabilities.drop) && c.securityContext.capabilities.drop.exists(d, d == 'ALL'))) &&
+        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.capabilities) && c.securityContext.capabilities != null && has(c.securityContext.capabilities.drop) && c.securityContext.capabilities.drop.exists(d, d == 'ALL')))
+      message: "Containers, initContainers, and ephemeralContainers must explicitly drop ALL Linux capabilities (capabilities.drop: [ALL])."

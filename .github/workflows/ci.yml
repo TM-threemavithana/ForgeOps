@@ -608,6 +608,10 @@ jobs:
           ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-privileged.yaml --warnings-as-errors
           ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-security-context.yaml --warnings-as-errors
           ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-deployment-insecure.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-initcontainer-nonroot.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-initcontainer-seccomp.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-fake-digest-image.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml --warnings-as-errors
           echo "[PASS] Gate G09.4 CEL policy acceptance and rejections verified with zero deprecation warnings."
 
   # ---------------------------------------------------------------------------

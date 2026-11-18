@@ -3,14 +3,14 @@ Policy: disallow-privileged-workloads
 Fixture: tests/fixtures/security/admission/kyverno/fail-privileged.yaml
 Description: Admission Rejection of Privileged Container
 Namespace: forgeops-g09-kyverno
-Date: 2026-11-18 06:24:55 UTC
+Date: 2026-11-18 06:52:05 UTC
 Exit Code: 1 (Admission Webhook Denied)
 
 --- Command Executed ---
 kubectl create -f tests/fixtures/security/admission/kyverno/fail-privileged.yaml
 
 --- Raw Webhook Response ---
-Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-privileged.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-privileged-workloads failed: Privileged containers are strictly forbidden in ForgeOps.; Policy require-restricted-security-context failed: Workloads must enforce runAsNonRoot=true at the pod or container securityContext.
+Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-privileged.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-privileged-workloads failed: Privileged containers are strictly forbidden in ForgeOps.; Policy require-restricted-security-context failed: Workloads must enforce runAsNonRoot=true at the pod level or across all containers, initContainers, and ephemeralContainers, and non-root cannot be disabled.
 
 
 --- Zero-Pod-Leakage Verification ---

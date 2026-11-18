@@ -1,32 +1,32 @@
 # ForgeOps G09.4 Kyverno Admission Controller & Webhook Readiness
-Date: 2026-11-18 06:24:41 UTC
+Date: 2026-11-18 06:51:49 UTC
 Cluster: forgeops-g09-security
 Context: kind-forgeops-g09-security
 
 === Kyverno Admission Controller Pods (namespace: kyverno) ===
-NAME                                          READY   STATUS    RESTARTS   AGE     IP           NODE                                  NOMINATED NODE   READINESS GATES
-kyverno-admission-controller-dcd9957d-l2px5   1/1     Running   0          8m52s   10.244.0.6   forgeops-g09-security-control-plane   <none>           <none>
+NAME                                          READY   STATUS    RESTARTS   AGE   IP           NODE                                  NOMINATED NODE   READINESS GATES
+kyverno-admission-controller-dcd9957d-l2px5   1/1     Running   0          36m   10.244.0.6   forgeops-g09-security-control-plane   <none>           <none>
 
 
 === ValidatingWebhookConfigurations ===
 NAME                                            WEBHOOKS   AGE
-kyverno-cel-exception-validating-webhook-cfg    1          77m
-kyverno-exception-validating-webhook-cfg        1          77m
-kyverno-global-context-validating-webhook-cfg   1          77m
-kyverno-policy-validating-webhook-cfg           1          77m
-kyverno-resource-validating-webhook-cfg         2          77m
+kyverno-cel-exception-validating-webhook-cfg    1          104m
+kyverno-exception-validating-webhook-cfg        1          104m
+kyverno-global-context-validating-webhook-cfg   1          104m
+kyverno-policy-validating-webhook-cfg           1          104m
+kyverno-resource-validating-webhook-cfg         2          104m
 
 
 === NamespacedValidatingPolicy Resources (namespace: forgeops-g09-kyverno) ===
-NAME                                  AGE    READY
-disallow-hostpath                     119s   true
-disallow-privileged-workloads         119s   true
-require-image-digest                  119s   true
-require-restricted-security-context   119s   true
+NAME                                  AGE   READY
+disallow-hostpath                     29m   true
+disallow-privileged-workloads         29m   true
+require-image-digest                  29m   true
+require-restricted-security-context   29m   true
 
 
 === Kyverno Service Endpoints ===
 NAME                  ENDPOINTS         AGE
-kyverno-svc           10.244.0.6:9443   80m
-kyverno-svc-metrics   10.244.0.6:8000   80m
+kyverno-svc           10.244.0.6:9443   107m
+kyverno-svc-metrics   10.244.0.6:8000   107m
 

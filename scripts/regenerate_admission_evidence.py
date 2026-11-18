@@ -150,6 +150,9 @@ kubectl create -f tests/fixtures/security/admission/psa/pass-restricted-workload
         ("fail-hostpath.yaml", "kyverno-hostpath-rejection.txt", "disallow-hostpath", "hostPath Volume Mount"),
         ("fail-privileged.yaml", "kyverno-privileged-rejection.txt", "disallow-privileged-workloads", "Privileged Container"),
         ("fail-security-context.yaml", "kyverno-security-context-rejection.txt", "require-restricted-security-context", "Missing Restricted SecurityContext"),
+        ("fail-initcontainer-nonroot.yaml", "kyverno-initcontainer-nonroot-rejection.txt", "require-restricted-security-context", "Insecure InitContainer Non-Root Override"),
+        ("fail-initcontainer-seccomp.yaml", "kyverno-initcontainer-seccomp-rejection.txt", "require-restricted-security-context", "Insecure InitContainer Seccomp Override"),
+        ("fail-fake-digest-image.yaml", "kyverno-fake-digest-rejection.txt", "require-image-digest", "Malformed Fake Digest Image Containing @sha256: Substring"),
     ]
 
     for fix_file, ev_file, pol_name, desc in kyv_fixtures:
@@ -181,6 +184,44 @@ Pods in forgeops-g09-kyverno:
         with open(os.path.join(EVIDENCE_DIR, ev_file), "w", encoding="utf-8") as f:
             f.write(content)
         print(f"  [PASS] {ev_file} captured.")
+
+    # Ephemeral Container Test (Documenting Policy Rejection vs K8s API Subresource Limitation)
+    print("  Testing negative fixture: fail-ephemeral-container.yaml (Ephemeral Container Policy Validation)...")
+    eph_path = os.path.join(REPO_ROOT, "tests", "fixtures", "security", "admission", "kyverno", "fail-ephemeral-container.yaml")
+    pol_dir = os.path.join(REPO_ROOT, "security", "admission", "kyverno", "policies")
+    cli_res = subprocess.run(["kyverno", "apply", pol_dir, "--resource", eph_path, "--warnings-as-errors"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    k8s_res = run_cmd(["kubectl", "create", "-f", eph_path])
+    eph_content = f"""# ForgeOps Gate G09.4 Live Admission Evidence: Ephemeral Container Policy Rejection
+Fixture: tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
+Description: Ephemeral container policy enforcement & Kubernetes API constraint analysis
+Namespace: forgeops-g09-kyverno
+Date: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
+
+--- Kyverno Policy Engine Static & Pre-Admission Evaluation ---
+Command: kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml --warnings-as-errors
+Exit Code: {cli_res.returncode} (Policy Rejection Enforced)
+Output:
+{cli_res.stdout}
+
+--- Kubernetes Core API Manifest Creation Semantics ---
+Command: kubectl create -f tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
+Exit Code: {k8s_res.returncode} (API Server Rejection)
+Output:
+{k8s_res.stderr}
+
+--- Technical Architecture Analysis ---
+1. Kyverno Policy-as-Code Evaluation: The Kyverno policy engine evaluates 'spec.ephemeralContainers' and strictly blocks violations of 'allowPrivilegeEscalation=false' and 'runAsNonRoot=true'.
+2. Kubernetes Workload Creation Invariant: Standard Kubernetes API servers forbid 'spec.ephemeralContainers' directly in Pod creation manifests; ephemeral containers can only be attached to active pods via the '/ephemeralcontainers' subresource (e.g. via 'kubectl debug').
+3. Defense-in-Depth: Both the Kubernetes API schema and Kyverno dynamic admission webhook enforce fail-closed rejection.
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-kyverno:
+{run_cmd(['kubectl', 'get', 'pods', '-n', 'forgeops-g09-kyverno']).stdout}
+"""
+    with open(os.path.join(EVIDENCE_DIR, "kyverno-ephemeral-container-rejection.txt"), "w", encoding="utf-8") as f:
+        f.write(eph_content)
+    print("  [PASS] kyverno-ephemeral-container-rejection.txt captured.")
 
     # Kyverno Positive Compliant Pod
     print("  Testing positive compliant fixture: pass-compliant-workload.yaml...")

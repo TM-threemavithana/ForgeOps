@@ -58,7 +58,11 @@ def test_evidence_artifacts():
         ("kyverno-hostpath-rejection.txt", ["denied the request", "disallow-hostpath"], 200),
         ("kyverno-privileged-rejection.txt", ["denied the request", "disallow-privileged-workloads"], 200),
         ("kyverno-security-context-rejection.txt", ["denied the request", "require-restricted-security-context"], 200),
-        ("kyverno-compliant-acceptance.txt", ["Exit Code: 0", "test-kyverno-pass-compliant", "Completed"], 300),
+        ("kyverno-initcontainer-nonroot-rejection.txt", ["denied the request", "require-restricted-security-context"], 200),
+        ("kyverno-initcontainer-seccomp-rejection.txt", ["denied the request", "require-restricted-security-context"], 200),
+        ("kyverno-fake-digest-rejection.txt", ["denied the request", "require-image-digest"], 200),
+        ("kyverno-ephemeral-container-rejection.txt", ["fail-ephemeral-container.yaml", "Kyverno Policy-as-Code Evaluation"], 300),
+        ("kyverno-compliant-acceptance.txt", ["Exit Code: 0", "test-kyverno-pass-compliant"], 300),
         ("kyverno-deployment-rejection.txt", ["denied the request", "fail-deployment-insecure.yaml"], 200),
         ("kyverno-deployment-acceptance.txt", ["Exit Code: 0", "test-kyverno-pass-deployment", "deployment"], 300),
     ]
@@ -114,6 +118,9 @@ def test_kyverno_live(kubeconfig, context):
         ("fail-hostpath.yaml", "disallow-hostpath"),
         ("fail-privileged.yaml", "disallow-privileged-workloads"),
         ("fail-security-context.yaml", "require-restricted-security-context"),
+        ("fail-initcontainer-nonroot.yaml", "require-restricted-security-context"),
+        ("fail-initcontainer-seccomp.yaml", "require-restricted-security-context"),
+        ("fail-fake-digest-image.yaml", "require-image-digest"),
     ]
 
     for filename, expected_policy in tests:

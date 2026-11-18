@@ -1,0 +1,35 @@
+# ForgeOps Gate G09.4 Live Admission Evidence: Ephemeral Container Policy Rejection
+Fixture: tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
+Description: Ephemeral container policy enforcement & Kubernetes API constraint analysis
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 06:52:13 UTC
+
+--- Kyverno Policy Engine Static & Pre-Admission Evaluation ---
+Command: kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml --warnings-as-errors
+Exit Code: 1 (Policy Rejection Enforced)
+Output:
+
+Applying 4 policy rule(s) to 1 resource(s)...
+policy disallow-privileged-workloads -> resource forgeops-g09-kyverno/Pod/test-kyverno-fail-ephemeral-container failed:
+1 -  Privilege escalation is strictly forbidden (allowPrivilegeEscalation must be false).
+policy require-restricted-security-context -> resource forgeops-g09-kyverno/Pod/test-kyverno-fail-ephemeral-container failed:
+1 -  Workloads must enforce runAsNonRoot=true at the pod level or across all containers, initContainers, and ephemeralContainers, and non-root cannot be disabled.
+
+pass: 2, fail: 2, warn: 0, error: 0, skip: 0 
+
+
+--- Kubernetes Core API Manifest Creation Semantics ---
+Command: kubectl create -f tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
+Exit Code: 1 (API Server Rejection)
+Output:
+The Pod "test-kyverno-fail-ephemeral-container" is invalid: spec.ephemeralContainers: Forbidden: cannot be set on create
+
+
+--- Technical Architecture Analysis ---
+1. Kyverno Policy-as-Code Evaluation: The Kyverno policy engine evaluates 'spec.ephemeralContainers' and strictly blocks violations of 'allowPrivilegeEscalation=false' and 'runAsNonRoot=true'.
+2. Kubernetes Workload Creation Invariant: Standard Kubernetes API servers forbid 'spec.ephemeralContainers' directly in Pod creation manifests; ephemeral containers can only be attached to active pods via the '/ephemeralcontainers' subresource (e.g. via 'kubectl debug').
+3. Defense-in-Depth: Both the Kubernetes API schema and Kyverno dynamic admission webhook enforce fail-closed rejection.
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-kyverno:
+

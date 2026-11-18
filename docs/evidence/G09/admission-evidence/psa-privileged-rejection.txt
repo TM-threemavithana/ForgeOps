@@ -2,7 +2,7 @@
 Fixture: tests/fixtures/security/admission/psa/fail-privileged.yaml
 Description: Rejection of Privileged & Privilege Escalation
 Namespace: forgeops-g09-psa
-Date: 2026-11-18 06:24:42 UTC
+Date: 2026-11-18 06:51:50 UTC
 Exit Code: 1 (Admission Rejected)
 
 --- Command Executed ---

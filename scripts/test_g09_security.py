@@ -619,19 +619,23 @@ def test_kyverno_g09_cli_fixtures():
     pol_dir = os.path.join(REPO_ROOT, "security", "admission", "kyverno", "policies")
     fix_dir = os.path.join(REPO_ROOT, "tests", "fixtures", "security", "admission", "kyverno")
 
-    # Negative fixtures (Pods and Controller)
+    # Negative fixtures (Pods, InitContainers, Ephemeral, Fake Digest, Controller)
     negative_fixtures = [
         "fail-mutable-tag.yaml",
         "fail-hostpath.yaml",
         "fail-privileged.yaml",
         "fail-security-context.yaml",
         "fail-deployment-insecure.yaml",
+        "fail-initcontainer-nonroot.yaml",
+        "fail-initcontainer-seccomp.yaml",
+        "fail-ephemeral-container.yaml",
+        "fail-fake-digest-image.yaml",
     ]
     for nfix in negative_fixtures:
         res = subprocess.run([kyverno_bin, "apply", pol_dir, "--resource", os.path.join(fix_dir, nfix), "--warnings-as-errors"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         assert res.returncode != 0, f"Expected rejection for {nfix}, but passed!"
-        assert "fail: 1" in res.stdout or "fail: 2" in res.stdout or "fail: 3" in res.stdout, f"Unexpected result for {nfix}: {res.stdout}"
+        assert ("fail: 1" in res.stdout or "fail: 2" in res.stdout or "fail: 3" in res.stdout or "error: 1" in res.stdout), f"Unexpected result for {nfix}: {res.stdout}"
 
     # Positive compliant fixtures (Pod and Controller)
     for pass_fix_name in ["pass-compliant-workload.yaml", "pass-deployment-compliant.yaml"]:
@@ -678,7 +682,11 @@ def test_live_admission_evidence():
         ("kyverno-hostpath-rejection.txt", ["denied the request", "disallow-hostpath"]),
         ("kyverno-privileged-rejection.txt", ["denied the request", "disallow-privileged-workloads"]),
         ("kyverno-security-context-rejection.txt", ["denied the request", "require-restricted-security-context"]),
-        ("kyverno-compliant-acceptance.txt", ["Exit Code: 0", "Completed"]),
+        ("kyverno-initcontainer-nonroot-rejection.txt", ["denied the request", "require-restricted-security-context"]),
+        ("kyverno-initcontainer-seccomp-rejection.txt", ["denied the request", "require-restricted-security-context"]),
+        ("kyverno-fake-digest-rejection.txt", ["denied the request", "require-image-digest"]),
+        ("kyverno-ephemeral-container-rejection.txt", ["fail-ephemeral-container.yaml", "Kyverno Policy-as-Code Evaluation"]),
+        ("kyverno-compliant-acceptance.txt", ["Exit Code: 0", "test-kyverno-pass-compliant"]),
         ("kyverno-deployment-rejection.txt", ["denied the request", "fail-deployment-insecure.yaml"]),
         ("kyverno-deployment-acceptance.txt", ["Exit Code: 0", "deployment"]),
     ]

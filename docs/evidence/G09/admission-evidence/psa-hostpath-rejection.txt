@@ -2,7 +2,7 @@
 Fixture: tests/fixtures/security/admission/psa/fail-hostpath.yaml
 Description: Rejection of hostPath Volume Mount
 Namespace: forgeops-g09-psa
-Date: 2026-11-18 06:24:44 UTC
+Date: 2026-11-18 06:51:52 UTC
 Exit Code: 1 (Admission Rejected)
 
 --- Command Executed ---

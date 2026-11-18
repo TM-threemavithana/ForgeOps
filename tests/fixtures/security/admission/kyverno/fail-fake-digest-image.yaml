@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-kyverno-fail-fake-digest
+  namespace: forgeops-g09-kyverno
+  labels:
+    app.kubernetes.io/name: test-kyverno-fail-fake-digest
+    forgeops.dev/fixture: negative-fake-digest
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: test-container
+      # Insecure: image contains substring '@sha256:' but is NOT a valid OCI digest
+      image: alpine:tag-with-@sha256:-not-a-digest
+      command: ["sh", "-c", "echo app"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 10001
+        capabilities:
+          drop:
+            - ALL
