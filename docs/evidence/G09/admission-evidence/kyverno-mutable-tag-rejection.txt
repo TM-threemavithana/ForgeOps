@@ -1,0 +1,18 @@
+# ForgeOps Gate G09.4 Live Admission Evidence: Kyverno CEL Webhook Rejection
+Policy: require-image-digest
+Fixture: tests/fixtures/security/admission/kyverno/fail-mutable-tag.yaml
+Description: Admission Rejection of Mutable Image Tag
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 07:28:51 UTC
+Exit Code: 1 (Admission Webhook Denied)
+
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/fail-mutable-tag.yaml
+
+--- Raw Webhook Response ---
+Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-mutable-tag.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest failed: An immutable SHA-256 image digest (sha256:...) is required for all containers, initContainers, and ephemeralContainers.
+
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-kyverno:
+

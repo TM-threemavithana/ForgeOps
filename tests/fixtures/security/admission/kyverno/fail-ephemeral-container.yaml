@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-kyverno-fail-ephemeral-container
+  namespace: forgeops-g09-kyverno
+  labels:
+    app.kubernetes.io/name: test-kyverno-fail-ephemeral-container
+    forgeops.dev/fixture: negative-ephemeral
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: test-container
+      image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+      command: ["sh", "-c", "echo app"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL
+  ephemeralContainers:
+    - name: debug-agent
+      image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+      # Insecure ephemeral container: privilege escalation allowed, root permitted
+      securityContext:
+        allowPrivilegeEscalation: true
+        runAsNonRoot: false

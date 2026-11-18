@@ -1,0 +1,56 @@
+apiVersion: policies.kyverno.io/v1
+kind: NamespacedValidatingPolicy
+metadata:
+  name: disallow-privileged-workloads
+  namespace: forgeops-g09-kyverno
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers and Privilege Escalation
+    policies.kyverno.io/category: Pod Security Standards
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: Privileged mode and privilege escalation must be disabled.
+spec:
+  validationActions:
+    - Deny
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - UPDATE
+        resources:
+          - pods/ephemeralcontainers
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - deployments
+  variables:
+    - name: podSpec
+      expression: "object.kind == 'Pod' ? object.spec : object.spec.template.spec"
+  validations:
+    - expression: >-
+        variables.podSpec.containers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.privileged) || c.securityContext.privileged == false) &&
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.privileged) || c.securityContext.privileged == false)) &&
+        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, !has(c.securityContext) || c.securityContext == null || !has(c.securityContext.privileged) || c.securityContext.privileged == false))
+      message: "Privileged containers are strictly forbidden in ForgeOps."
+    - expression: >-
+        variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false) &&
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false)) &&
+        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false))
+      message: "Privilege escalation is strictly forbidden (allowPrivilegeEscalation must be false)."

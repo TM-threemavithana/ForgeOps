@@ -1,0 +1,18 @@
+# ForgeOps Gate G09.4 Live Admission Evidence: Kyverno CEL Webhook Rejection
+Policy: require-restricted-security-context
+Fixture: tests/fixtures/security/admission/kyverno/fail-initcontainer-seccomp.yaml
+Description: Admission Rejection of Insecure InitContainer Seccomp Override
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 07:28:55 UTC
+Exit Code: 1 (Admission Webhook Denied)
+
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/fail-initcontainer-seccomp.yaml
+
+--- Raw Webhook Response ---
+Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-initcontainer-seccomp.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-restricted-security-context failed: Workloads must set seccompProfile.type=RuntimeDefault at the pod level or across all containers, initContainers, and ephemeralContainers.
+
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-kyverno:
+

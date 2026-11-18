@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-kyverno-fail-deployment
+  namespace: forgeops-g09-kyverno
+  labels:
+    app.kubernetes.io/name: test-kyverno-fail-deployment
+    forgeops.dev/fixture: negative-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-kyverno-fail-deployment
+  template:
+    metadata:
+      labels:
+        app: test-kyverno-fail-deployment
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          # Insecure: mutable image tag and missing restricted securityContext

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-psa-fail-privileged
+  namespace: forgeops-g09-psa
+  labels:
+    app.kubernetes.io/name: test-psa-fail-privileged
+    forgeops.dev/fixture: negative
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-container
+      image: alpine:3.20
+      command: ["sh", "-c", "sleep 10"]
+      securityContext:
+        privileged: true

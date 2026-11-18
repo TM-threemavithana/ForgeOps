@@ -1,0 +1,37 @@
+# ForgeOps Gate G09.4 — Kyverno Helm Values for Local Disposable Lab
+# Resource-efficient single-replica configuration for local kind cluster
+# Compatible with Kyverno Helm Chart 3.9.2 (App Version v1.19.2)
+
+admissionController:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 384Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  initContainer:
+    resources:
+      limits:
+        cpu: 100m
+        memory: 64Mi
+      requests:
+        cpu: 50m
+        memory: 32Mi
+
+# Disable background controller for admission-only testing to save resources
+backgroundController:
+  enabled: false
+
+# Disable cleanup controller to save resources
+cleanupController:
+  enabled: false
+
+# Disable reports controller to save resources
+reportsController:
+  enabled: false
+
+# Webhook configuration
+webhook:
+  port: 9443
