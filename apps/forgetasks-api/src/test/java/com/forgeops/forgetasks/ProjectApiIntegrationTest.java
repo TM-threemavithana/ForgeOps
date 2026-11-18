@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -48,6 +49,7 @@ class ProjectApiIntegrationTest extends AbstractIntegrationTest {
         // 1. User A creates project
         ProjectCreateRequest createReq = new ProjectCreateRequest("Kubernetes Engine", "Production cluster rollout");
         MvcResult createResult = mockMvc.perform(post("/api/v1/projects")
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createReq)))
@@ -78,6 +80,7 @@ class ProjectApiIntegrationTest extends AbstractIntegrationTest {
         // 4. User A updates project WITHOUT If-Match -> 428 Precondition Required
         ProjectUpdateRequest updateReq = new ProjectUpdateRequest("Kubernetes Engine v2", null, null);
         mockMvc.perform(patch("/api/v1/projects/" + projectId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateReq)))
@@ -87,6 +90,7 @@ class ProjectApiIntegrationTest extends AbstractIntegrationTest {
 
         // 5. User A updates project with STALE If-Match ("5") -> 412 Precondition Failed
         mockMvc.perform(patch("/api/v1/projects/" + projectId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .header(HttpHeaders.IF_MATCH, "\"5\"")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -97,6 +101,7 @@ class ProjectApiIntegrationTest extends AbstractIntegrationTest {
 
         // 6. User A updates project with MATCHING If-Match ("0") -> 200 OK with new ETag ("1")
         mockMvc.perform(patch("/api/v1/projects/" + projectId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .header(HttpHeaders.IF_MATCH, "\"0\"")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -108,12 +113,14 @@ class ProjectApiIntegrationTest extends AbstractIntegrationTest {
 
         // 7. User B attempts to delete User A's project -> 404 Not Found
         mockMvc.perform(delete("/api/v1/projects/" + projectId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authB)
                         .header(HttpHeaders.IF_MATCH, "\"1\""))
                 .andExpect(status().isNotFound());
 
         // 8. User A deletes project with matching If-Match ("1") -> 204 No Content
         mockMvc.perform(delete("/api/v1/projects/" + projectId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .header(HttpHeaders.IF_MATCH, "\"1\""))
                 .andExpect(status().isNoContent());

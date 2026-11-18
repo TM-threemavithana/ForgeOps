@@ -21,11 +21,20 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfToken;
+import com.forgeops.forgetasks.security.CsrfController;
+import jakarta.servlet.http.Cookie;
+
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 class DomainAndSecurityCoverageTest {
 
@@ -62,6 +71,53 @@ class DomainAndSecurityCoverageTest {
 
         assertThat(AccountRole.valueOf("ROLE_USER")).isEqualTo(AccountRole.ROLE_USER);
         assertThat(AccountRole.values()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("CSRF: Verify CsrfController and CookieCsrfTokenRepository roundtrip")
+    void shouldTestCsrfControllerRoundtrip() {
+        CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        CsrfController controller = new CsrfController(repo);
+        MockHttpServletRequest getRequest = new MockHttpServletRequest("GET", "/api/v1/csrf");
+        MockHttpServletResponse getResponse = new MockHttpServletResponse();
+        Map<String, String> tokenMap = controller.getCsrfToken(getRequest, getResponse);
+
+        assertThat(tokenMap).containsKey("token");
+        assertThat(tokenMap.get("headerName")).isEqualTo("X-XSRF-TOKEN");
+        Cookie cookie = getResponse.getCookie("XSRF-TOKEN");
+        assertThat(cookie).isNotNull();
+        assertThat(cookie.getValue()).isEqualTo(tokenMap.get("token"));
+
+        MockHttpServletRequest postRequest = new MockHttpServletRequest("POST", "/api/v1/projects");
+        postRequest.setCookies(cookie);
+        postRequest.addHeader("X-XSRF-TOKEN", tokenMap.get("token"));
+
+        CsrfToken loaded = repo.loadToken(postRequest);
+        assertThat(loaded).isNotNull();
+        assertThat(loaded.getToken()).isEqualTo(tokenMap.get("token"));
+    }
+
+    @Test
+    @DisplayName("Inspect MockMvc cookie passing and CookieCsrfTokenRepository loading")
+    void shouldCheckMockMvcCookiePassing() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        Cookie c = new Cookie("XSRF-TOKEN", "test-token-123");
+        c.setPath("/");
+        response.addCookie(c);
+
+        Cookie returned = response.getCookie("XSRF-TOKEN");
+
+        org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder =
+                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/projects")
+                        .cookie(returned)
+                        .header("X-XSRF-TOKEN", "test-token-123");
+
+        MockHttpServletRequest request = builder.buildRequest(new org.springframework.mock.web.MockServletContext());
+
+        CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        CsrfToken token = repo.loadToken(request);
+        assertThat(token).isNotNull();
+        assertThat(token.getToken()).isEqualTo("test-token-123");
     }
 
     @Test

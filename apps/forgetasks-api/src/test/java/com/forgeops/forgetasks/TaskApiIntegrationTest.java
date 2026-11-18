@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -51,6 +52,7 @@ class TaskApiIntegrationTest extends AbstractIntegrationTest {
 
         // 1. User A creates project
         MvcResult projectRes = mockMvc.perform(post("/api/v1/projects")
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("Infra Lab", "Lab description"))))
@@ -65,6 +67,7 @@ class TaskApiIntegrationTest extends AbstractIntegrationTest {
                 "Configure PostgreSQL", "Deploy PG 16 with Flyway", TaskPriority.HIGH, null, null
         );
         MvcResult taskRes = mockMvc.perform(post("/api/v1/projects/" + projectId + "/tasks")
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(taskReq)))
@@ -98,6 +101,7 @@ class TaskApiIntegrationTest extends AbstractIntegrationTest {
                 "Configure PostgreSQL 16", null, TaskStatus.IN_PROGRESS, null, null, null
         );
         mockMvc.perform(patch("/api/v1/tasks/" + taskId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateReq)))
@@ -105,6 +109,7 @@ class TaskApiIntegrationTest extends AbstractIntegrationTest {
 
         // 7. User A updates task with matching If-Match ("0") -> 200 OK with ETag ("1")
         mockMvc.perform(patch("/api/v1/tasks/" + taskId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .header(HttpHeaders.IF_MATCH, "\"0\"")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -116,6 +121,7 @@ class TaskApiIntegrationTest extends AbstractIntegrationTest {
 
         // 8. User A deletes task with matching If-Match ("1") -> 204 No Content
         mockMvc.perform(delete("/api/v1/tasks/" + taskId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .header(HttpHeaders.IF_MATCH, "\"1\""))
                 .andExpect(status().isNoContent());

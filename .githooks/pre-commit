@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# ForgeOps Gate G09.3: Pre-Commit Secret Prevention Hook
+# Scans staged changes using Gitleaks to prevent accidental secret commits.
+
+set -e
+
+# Resolve repository root
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Detect gitleaks binary
+GITLEAKS_BIN=""
+if command -v gitleaks >/dev/null 2>&1; then
+    GITLEAKS_BIN="$(command -v gitleaks)"
+elif [ -x "$HOME/.local/bin/gitleaks" ]; then
+    GITLEAKS_BIN="$HOME/.local/bin/gitleaks"
+elif [ -x "/usr/local/bin/gitleaks" ]; then
+    GITLEAKS_BIN="/usr/local/bin/gitleaks"
+elif [ -x "/usr/bin/gitleaks" ]; then
+    GITLEAKS_BIN="/usr/bin/gitleaks"
+fi
+
+if [ -z "$GITLEAKS_BIN" ]; then
+    echo ""
+    echo "======================================================================"
+    echo " [FAIL-CLOSED] Pre-Commit Secret Scanner (Gitleaks) Not Found!        "
+    echo "======================================================================"
+    echo "ForgeOps enforces a fail-closed pre-commit secret scanning policy."
+    echo "Gitleaks binary was not found in PATH or standard installation paths."
+    echo ""
+    echo "To install and configure Gitleaks:"
+    echo "  Linux / WSL2:       ./scripts/setup-pre-commit.sh"
+    echo "  Windows PowerShell: .\\scripts\\setup-pre-commit.ps1"
+    echo ""
+    echo "Emergency override (audited): git commit --no-verify"
+    echo "======================================================================"
+    exit 1
+fi
+
+# Run Gitleaks on staged changes using supported command interface
+echo "==> [pre-commit] Scanning staged changes for secrets with Gitleaks..."
+if "$GITLEAKS_BIN" git --help 2>&1 | grep -q -- '--staged'; then
+    GITLEAKS_CMD=("$GITLEAKS_BIN" git --staged --verbose --redact)
+else
+    GITLEAKS_CMD=("$GITLEAKS_BIN" protect --staged --verbose --redact)
+fi
+
+if ! "${GITLEAKS_CMD[@]}"; then
+    echo ""
+    echo "======================================================================"
+    echo " [REJECTED] Gitleaks detected potential secret(s) in staged changes!  "
+    echo "======================================================================"
+    echo "Commit has been blocked to prevent committing secrets to Git history."
+    echo "Remediation options:"
+    echo "  1. Review staged diff: git diff --cached"
+    echo "  2. Unstage the offending file: git reset HEAD <file>"
+    echo "  3. Redact the secret, API key, or credential."
+    echo "  4. If this is a confirmed false positive (e.g. synthetic test fixture):"
+    echo "     Add the fingerprint or pattern to .gitleaksignore."
+    echo "======================================================================"
+    exit 1
+fi
+
+echo "[PASS] Pre-commit secret scan clean: no secrets detected."
+exit 0

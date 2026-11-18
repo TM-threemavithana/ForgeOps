@@ -595,7 +595,189 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
-  # Job 11: CI Gate Summary (required status check for branch protection rules)
+  # Job 11: OWASP ZAP Baseline DAST Scan (Gate G09.3)
+  # ---------------------------------------------------------------------------
+  dast-zap-scan:
+    name: OWASP ZAP Baseline DAST Scan
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.6.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Cache Maven local repository
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.9.0
+
+      - name: Create Ephemeral DAST Test Network
+        run: docker network create zap-test-net
+
+      - name: Start Ephemeral PostgreSQL
+        run: |
+          docker run -d --name zap-test-postgres \
+            --network zap-test-net \
+            -e POSTGRES_DB=forgetasks_test \
+            -e POSTGRES_USER=forge_test \
+            -e POSTGRES_PASSWORD=forge_test_secret \
+            postgres:16-alpine
+          
+          # Wait for PostgreSQL
+          for i in {1..30}; do
+            if docker exec zap-test-postgres pg_isready -U forge_test; then
+              echo "[PASS] Ephemeral PostgreSQL is ready."
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Build and Start Ephemeral ForgeTasks API Container
+        run: |
+          docker build -t forgetasks-api:dast apps/forgetasks-api
+          docker run -d --name zap-test-app \
+            --network zap-test-net \
+            -e SPRING_PROFILES_ACTIVE=dev \
+            -e SPRING_DATASOURCE_URL=jdbc:postgresql://zap-test-postgres:5432/forgetasks_test \
+            -e SPRING_DATASOURCE_USERNAME=forge_test \
+            -e SPRING_DATASOURCE_PASSWORD=forge_test_secret \
+            -e PORT=8080 \
+            -e MANAGEMENT_PORT=8080 \
+            -e OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318/v1/traces \
+            forgetasks-api:dast
+
+          # Wait for application health probe
+          for i in {1..60}; do
+            STATUS=$(docker run --rm --network zap-test-net curlimages/curl:8.10.1 -s http://zap-test-app:8080/actuator/health || true)
+            if echo "$STATUS" | grep -q "UP"; then
+              echo "[PASS] Ephemeral ForgeTasks API is UP and healthy."
+              break
+            fi
+            sleep 2
+            if [ "$i" -eq 60 ]; then
+              echo "[FAIL] Application failed to start. Logs:"
+              docker logs zap-test-app
+              exit 1
+            fi
+          done
+
+      - name: Run OWASP ZAP API DAST Scan with OpenAPI
+        run: |
+          mkdir -p target/zap-reports
+          chmod 777 target/zap-reports
+
+          set +e
+          docker run --rm \
+            --network zap-test-net \
+            -v ${{ github.workspace }}/target/zap-reports:/zap/wrk/:rw \
+            -v ${{ github.workspace }}/security/dast/zap/zap-rules.conf:/zap/rules.conf:ro \
+            -v ${{ github.workspace }}/security/dast/zap/openapi.yaml:/zap/openapi.yaml:ro \
+            ghcr.io/zaproxy/zaproxy:2.16.0@sha256:391f66efa53b30de40d4a1c6e28146477263552fc828bc7613c9cd11a2949908 \
+            zap-api-scan.py \
+            -t /zap/openapi.yaml \
+            -f openapi \
+            -O http://zap-test-app:8080 \
+            -c /zap/rules.conf \
+            -r report.html \
+            -J report.json \
+            -w report.md \
+            -S \
+            -I
+          ZAP_RC=$?
+          set -e
+          echo "ZAP API scan exit code: $ZAP_RC"
+
+      - name: Evaluate ZAP DAST Findings (Enforce Zero High/Medium Alerts & Report Integrity)
+        run: |
+          python3 -c "
+          import json, sys, os
+
+          report_path = 'target/zap-reports/report.json'
+          if not os.path.isfile(report_path) or os.path.getsize(report_path) == 0:
+              print(f'[FAIL] DAST scan report missing or empty (0 bytes): {report_path}')
+              sys.exit(1)
+
+          try:
+              with open(report_path, 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(f'[FAIL] DAST scan report contains malformed JSON: {e}')
+              sys.exit(1)
+
+          if not isinstance(data, dict):
+              print('[FAIL] DAST scan report root is not a JSON object.')
+              sys.exit(1)
+
+          sites = data.get('site', [])
+          if not sites or not isinstance(sites, list) or len(sites) == 0:
+              print('[FAIL] DAST scan report is incomplete: zero sites analyzed.')
+              sys.exit(1)
+
+          target_matched = any('zap-test-app' in s.get('@name', '') or '8080' in str(s.get('@port', '')) or 'localhost' in s.get('@name', '') for s in sites)
+          if not target_matched:
+              print(f'[FAIL] Expected target host not found in analyzed sites: {[s.get(\"@name\") for s in sites]}')
+              sys.exit(1)
+
+          highs = 0
+          mediums = 0
+          lows = 0
+          infos = 0
+          for site in sites:
+              for alert in site.get('alerts', []):
+                  risk = alert.get('riskdesc', '').split('(')[0].strip()
+                  risk_code = str(alert.get('riskcode', ''))
+                  name = alert.get('name')
+                  if risk == 'High' or risk_code == '3':
+                      highs += 1
+                      print(f'  [HIGH] {name} ({alert.get(\"riskdesc\")})')
+                  elif risk == 'Medium' or risk_code == '2':
+                      mediums += 1
+                      print(f'  [MEDIUM] {name} ({alert.get(\"riskdesc\")})')
+                  elif risk == 'Low' or risk_code == '1':
+                      lows += 1
+                      print(f'  [LOW] {name} ({alert.get(\"riskdesc\")})')
+                  else:
+                      infos += 1
+                      print(f'  [INFO/LOW] {name} ({alert.get(\"riskdesc\")})')
+
+          print(f'ZAP Findings Summary: High={highs}, Medium={mediums}, Low={lows}, Info={infos}')
+          if highs > 0 or mediums > 0:
+              print(f'[FAIL] Security gate violation: {highs} HIGH and {mediums} MEDIUM DAST alerts detected.')
+              sys.exit(1)
+          print('[PASS] Zero High/Medium DAST alerts detected and report integrity verified. DAST gate passed.')
+          "
+
+      - name: Upload ZAP DAST Reports
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: owasp-zap-dast-reports
+          path: target/zap-reports/
+          retention-days: 14
+
+      - name: Teardown Ephemeral DAST Containers & Network
+        if: always()
+        run: |
+          docker rm -f zap-test-app zap-test-postgres 2>/dev/null || true
+          docker network rm zap-test-net 2>/dev/null || true
+
+  # ---------------------------------------------------------------------------
+  # Job 12: CI Gate Summary (required status check for branch protection rules)
   # ---------------------------------------------------------------------------
   ci-gate:
     name: CI Gate
@@ -611,6 +793,7 @@ jobs:
       - dockerfile-hadolint
       - sre-hardening-validate
       - security-policy-validate
+      - dast-zap-scan
     if: always()
 
     steps:
@@ -627,6 +810,7 @@ jobs:
           echo "dockerfile-hadolint:      ${{ needs.dockerfile-hadolint.result }}"
           echo "sre-hardening-validate:   ${{ needs.sre-hardening-validate.result }}"
           echo "security-policy-validate: ${{ needs.security-policy-validate.result }}"
+          echo "dast-zap-scan:            ${{ needs.dast-zap-scan.result }}"
           echo '===================================='
           FAILED=0
           [ "${{ needs.build-and-test.result }}" != "success" ] && FAILED=1
@@ -639,6 +823,7 @@ jobs:
           [ "${{ needs.dockerfile-hadolint.result }}" != "success" ] && FAILED=1
           [ "${{ needs.sre-hardening-validate.result }}" != "success" ] && FAILED=1
           [ "${{ needs.security-policy-validate.result }}" != "success" ] && FAILED=1
+          [ "${{ needs.dast-zap-scan.result }}" != "success" ] && FAILED=1
           if [ "$FAILED" = "1" ]; then
             echo "[FAIL] One or more required CI jobs failed. Merge is blocked."
             exit 1

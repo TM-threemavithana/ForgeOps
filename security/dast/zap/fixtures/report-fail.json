@@ -1,0 +1,30 @@
+{
+  "@version": "2.16.0",
+  "@generated": "Tue, 17 Nov 2026 18:30:00",
+  "site": [
+    {
+      "@name": "http://forgetasks-api:8080",
+      "@host": "forgetasks-api",
+      "@port": "8080",
+      "@ssl": "false",
+      "alerts": [
+        {
+          "pluginId": "10038",
+          "alert": "Content Security Policy (CSP) Header Not Set",
+          "name": "Content Security Policy (CSP) Header Not Set",
+          "riskcode": "3",
+          "confidence": "2",
+          "riskdesc": "High (Medium)",
+          "desc": "Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks.",
+          "instances": [
+            {
+              "uri": "http://forgetasks-api:8080/api/v1/projects",
+              "method": "GET",
+              "param": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
