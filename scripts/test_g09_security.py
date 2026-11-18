@@ -550,7 +550,13 @@ def test_appsec_configuration_and_headers():
     assert "permissionsPolicy" in config_content, "SecurityConfig must configure Permissions-Policy"
     assert "corsConfigurationSource" in config_content, "SecurityConfig must configure CorsConfigurationSource bean"
     assert "csrfTokenRepository" in config_content, "SecurityConfig must configure CSRF protection"
-    assert "isBrowserStyleRequest" in config_content, "SecurityConfig must mitigate browser credential replay with isBrowserStyleRequest"
+    assert "CsrfCookieFilter" in config_content, "SecurityConfig must configure CsrfCookieFilter for deferred CSRF token evaluation"
+
+    csrf_controller = os.path.join(REPO_ROOT, "apps", "forgetasks-api", "src", "main", "java", "com", "forgeops", "forgetasks", "security", "CsrfController.java")
+    assert os.path.isfile(csrf_controller), f"Missing {csrf_controller}"
+    with open(csrf_controller, "r", encoding="utf-8") as f:
+        controller_content = f.read()
+    assert "/api/v1/csrf" in controller_content, "CsrfController must expose /api/v1/csrf endpoint"
 
     assert os.path.isfile(APP_SECURITY_TEST), f"Missing {APP_SECURITY_TEST}"
     with open(APP_SECURITY_TEST, "r", encoding="utf-8") as f:
@@ -562,6 +568,8 @@ def test_appsec_configuration_and_headers():
     assert "shouldRejectInvalidInputsWithProblemDetail" in test_content, "ApplicationSecurityIntegrationTest must test input validation"
     assert "shouldRejectStateChangingRequestWithoutCsrfTokenWhenLackingApiAuthorization" in test_content, "ApplicationSecurityIntegrationTest must test CSRF rejection"
     assert "shouldAcceptStateChangingRequestWithValidCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test CSRF token acceptance"
+    assert "shouldRejectAuthenticatedBasicRequestLackingBrowserHeadersAndCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test fail-closed Basic auth CSRF rejection"
+    assert "shouldAllowApiClientToObtainAndSubmitCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test client CSRF retrieval and submission"
     assert "shouldRejectBrowserStyleAuthenticatedRequestLackingCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test browser-authenticated CSRF rejection"
     assert "shouldAcceptBrowserStyleAuthenticatedRequestWithValidCsrfToken" in test_content, "ApplicationSecurityIntegrationTest must test browser-authenticated CSRF acceptance"
 

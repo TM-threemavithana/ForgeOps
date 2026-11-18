@@ -72,6 +72,7 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
 
         // 2. User A creates Project A
         MvcResult projectResult = mockMvc.perform(post("/api/v1/projects")
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("User A Confidential Project", "Restricted details"))))
@@ -102,6 +103,7 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
 
         // 5. Attack 2: User B attempts to modify Project A (IDOR PATCH) -> Expect 404 Not Found
         mockMvc.perform(patch("/api/v1/projects/" + projectAId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authB)
                         .header(HttpHeaders.IF_MATCH, etagA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -111,6 +113,7 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
 
         // 6. Attack 3: User B attempts to delete Project A (IDOR DELETE) -> Expect 404 Not Found
         mockMvc.perform(delete("/api/v1/projects/" + projectAId)
+                        .with(csrf())
                         .header(HttpHeaders.AUTHORIZATION, authB)
                         .header(HttpHeaders.IF_MATCH, etagA))
                 .andExpect(status().isNotFound())
@@ -246,5 +249,62 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("Legit Browser Project", "Legit"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Legit Browser Project"));
+    }
+
+    @Test
+    @DisplayName("AppSec: CSRF Protection - Authenticated Basic request lacking browser headers and lacking CSRF token is rejected with 403 Forbidden")
+    void shouldRejectAuthenticatedBasicRequestLackingBrowserHeadersAndCsrfToken() throws Exception {
+        String user = "csrf_failclosed_" + UUID.randomUUID().toString().substring(0, 8);
+        String pass = "Password123!";
+        mockMvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AccountRegistrationRequest(user, pass))))
+                .andExpect(status().isCreated());
+        String auth = basicAuthHeader(user, pass);
+
+        // State-changing request with Authorization: Basic, but without any browser headers (no Origin, no Referer, no Cookie, no Sec-Fetch-*)
+        // In fail-closed CSRF, this must STILL be rejected with 403 Forbidden
+        mockMvc.perform(post("/api/v1/projects")
+                        .header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ProjectCreateRequest("No Header Project", "Attempted bypass"))))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
+    }
+
+    @Test
+    @DisplayName("AppSec: CSRF Protection - Legitimate API client can obtain CSRF token via GET /api/v1/csrf and submit it for state-changing operations")
+    void shouldAllowApiClientToObtainAndSubmitCsrfToken() throws Exception {
+        String user = "csrf_client_" + UUID.randomUUID().toString().substring(0, 8);
+        String pass = "Password123!";
+        mockMvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AccountRegistrationRequest(user, pass))))
+                .andExpect(status().isCreated());
+        String auth = basicAuthHeader(user, pass);
+
+        // Step 1: Client calls GET /api/v1/csrf to obtain the CSRF token metadata and cookie
+        MvcResult csrfResult = mockMvc.perform(get("/api/v1/csrf"))
+                .andExpect(status().isOk())
+                .andExpect(cookie().exists("XSRF-TOKEN"))
+                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.headerName").value("X-XSRF-TOKEN"))
+                .andReturn();
+
+        JsonNode csrfNode = objectMapper.readTree(csrfResult.getResponse().getContentAsString());
+        String csrfToken = csrfNode.get("token").asText();
+        jakarta.servlet.http.Cookie xsrfCookie = csrfResult.getResponse().getCookie("XSRF-TOKEN");
+        assertThat(xsrfCookie).isNotNull();
+
+        // Step 2: Client submits state-changing request carrying Authorization: Basic, cookie, and X-XSRF-TOKEN header
+        mockMvc.perform(post("/api/v1/projects")
+                        .header(HttpHeaders.AUTHORIZATION, auth)
+                        .header("X-XSRF-TOKEN", csrfToken)
+                        .cookie(xsrfCookie)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ProjectCreateRequest("API Client Project", "Created via CSRF flow"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("API Client Project"));
     }
 }

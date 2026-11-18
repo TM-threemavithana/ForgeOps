@@ -177,6 +177,26 @@ components:
           type: string
 
 paths:
+  /api/v1/csrf:
+    get:
+      summary: Obtain anti-CSRF token
+      description: Returns anti-CSRF token metadata and sets the XSRF-TOKEN cookie for state-changing operations.
+      operationId: getCsrfToken
+      responses:
+        '200':
+          description: Anti-CSRF token retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  headerName:
+                    type: string
+                  parameterName:
+                    type: string
+
   /api/v1/accounts:
     post:
       summary: Register a new account

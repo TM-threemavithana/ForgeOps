@@ -2,6 +2,8 @@ package com.forgeops.forgetasks.security;
 
 import tools.jackson.databind.ObjectMapper;
 import com.forgeops.forgetasks.common.correlation.RequestCorrelationFilter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.MDC;
@@ -24,13 +26,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import java.io.IOException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
@@ -61,21 +67,12 @@ public class SecurityConfig {
                         .ignoringRequestMatchers(request -> {
                                 String uri = request.getRequestURI();
                                 String method = request.getMethod();
+                                // 1. Public unauthenticated account registration does not require a prior CSRF token
                                 if ("POST".equalsIgnoreCase(method) && "/api/v1/accounts".equals(uri)) {
                                     return true;
                                 }
-                                if (uri != null && uri.startsWith("/actuator")) {
-                                    return true;
-                                }
-                                // Defend against browser credential replay:
-                                // Do not assume 'Authorization: Basic' proves a non-browser client.
-                                // If the request contains browser context indicators (Cookies, Fetch Metadata, Origin, or Referer),
-                                // CSRF protection is strictly enforced even if Basic Auth credentials are attached.
-                                if (isBrowserStyleRequest(request)) {
-                                    return false;
-                                }
-                                String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
-                                return auth != null && auth.startsWith("Basic ");
+                                // 2. Observability & infrastructure probes
+                                return uri != null && uri.startsWith("/actuator");
                         })
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -94,6 +91,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Public Account Registration
                         .requestMatchers(HttpMethod.POST, "/api/v1/accounts").permitAll()
+                        // Public CSRF Token Endpoint for API Clients and SPAs
+                        .requestMatchers(HttpMethod.GET, "/api/v1/csrf").permitAll()
                         // Observability & Probes
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         // Restricted Management Endpoints
@@ -103,6 +102,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .httpBasic(basic -> basic.authenticationEntryPoint(problemAuthenticationEntryPoint()))
+                .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(problemAuthenticationEntryPoint())
                         .accessDeniedHandler(problemAccessDeniedHandler())
@@ -111,20 +111,20 @@ public class SecurityConfig {
         return http.build();
     }
 
-    private boolean isBrowserStyleRequest(HttpServletRequest request) {
-        // 1. Presence of browser cookies indicates ambient cookie / credential storage
-        if (request.getHeader(HttpHeaders.COOKIE) != null) {
-            return true;
+    /**
+     * Filter that forces lazy/deferred CsrfToken evaluation, ensuring the XSRF-TOKEN
+     * cookie is set on the response for API clients and single-page applications.
+     */
+    static final class CsrfCookieFilter extends OncePerRequestFilter {
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+                throws ServletException, IOException {
+            CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+            if (csrfToken != null) {
+                csrfToken.getToken();
+            }
+            filterChain.doFilter(request, response);
         }
-        // 2. Presence of W3C Fetch Metadata headers (sent by all modern browsers)
-        if (request.getHeader("Sec-Fetch-Mode") != null || request.getHeader("Sec-Fetch-Site") != null) {
-            return true;
-        }
-        // 3. Presence of Origin or Referer header indicates browser origin tracking
-        if (request.getHeader(HttpHeaders.ORIGIN) != null || request.getHeader(HttpHeaders.REFERER) != null) {
-            return true;
-        }
-        return false;
     }
 
     @Bean
