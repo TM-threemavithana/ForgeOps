@@ -2,7 +2,7 @@
 Fixture: tests/fixtures/security/admission/psa/fail-missing-security-context.yaml
 Description: Rejection of Missing Restricted SecurityContext
 Namespace: forgeops-g09-psa
-Date: 2026-11-18 06:51:52 UTC
+Date: 2026-11-18 07:28:42 UTC
 Exit Code: 1 (Admission Rejected)
 
 --- Command Executed ---

@@ -1,0 +1,18 @@
+# ForgeOps Gate G09.4 Live Admission Evidence: Kyverno CEL Webhook Rejection
+Policy: require-image-digest
+Fixture: tests/fixtures/security/admission/kyverno/fail-non-sha256-digest-image.yaml
+Description: Admission Rejection of Non-SHA256 Valid Digest Image
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 07:28:57 UTC
+Exit Code: 1 (Admission Webhook Denied)
+
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/fail-non-sha256-digest-image.yaml
+
+--- Raw Webhook Response ---
+Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-non-sha256-digest-image.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest error: error: could not parse reference: alpine:3.20@sha512:cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-kyverno:
+

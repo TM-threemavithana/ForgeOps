@@ -1,15 +1,15 @@
 # ForgeOps Gate G09.4 Live Admission Evidence: Kyverno Compliant Pod Acceptance
 Fixture: tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml
 Namespace: forgeops-g09-kyverno
-Date: 2026-11-18 06:52:21 UTC
+Date: 2026-11-18 07:29:14 UTC
 Exit Code: 0 (Admission Webhook Accepted & Executed)
 
 --- Command Executed ---
 kubectl create -f tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml
 
 --- Pod Execution Status ---
-NAME                          READY   STATUS    RESTARTS   AGE   IP            NODE                                  NOMINATED NODE   READINESS GATES
-test-kyverno-pass-compliant   1/1     Running   0          7s    10.244.0.23   forgeops-g09-security-control-plane   <none>           <none>
+NAME                          READY   STATUS      RESTARTS   AGE   IP            NODE                                  NOMINATED NODE   READINESS GATES
+test-kyverno-pass-compliant   0/1     Completed   0          6s    10.244.0.37   forgeops-g09-security-control-plane   <none>           <none>
 
 
 --- Pod Logs ---
@@ -22,18 +22,18 @@ Namespace:        forgeops-g09-kyverno
 Priority:         0
 Service Account:  default
 Node:             forgeops-g09-security-control-plane/172.18.0.2
-Start Time:       Wed, 18 Nov 2026 12:22:14 +0530
+Start Time:       Wed, 18 Nov 2026 12:59:08 +0530
 Labels:           app.kubernetes.io/name=test-kyverno-pass-compliant
                   forgeops.dev/fixture=positive
 Annotations:      <none>
 Status:           Running
 SeccompProfile:   RuntimeDefault
-IP:               10.244.0.23
+IP:               10.244.0.37
 IPs:
-  IP:  10.244.0.23
+  IP:  10.244.0.37
 Containers:
   test-container:
-    Container ID:  containerd://c43667f851750155b9adee35f8cfea052d689c600d60b664d28cf9b9fb91e1c5
+    Container ID:  containerd://2d73b56e7ed493e58b3796c3f6794d60784bee8e61cb7108951c80d6b6cea4c8
     Image:         alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     Image ID:      docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     Port:          <none>
@@ -43,12 +43,12 @@ Containers:
       -c
       echo 'Kyverno compliant workload admitted and running' && sleep 5
     State:          Running
-      Started:      Wed, 18 Nov 2026 12:22:16 +0530
+      Started:      Wed, 18 Nov 2026 12:59:08 +0530
     Ready:          True
     Restart Count:  0
     Environment:    <none>
     Mounts:
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-r8f66 (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-xpxlj (ro)
 Conditions:
   Type                        Status
   PodReadyToStartContainers   True 
@@ -57,7 +57,7 @@ Conditions:
   ContainersReady             True 
   PodScheduled                True 
 Volumes:
-  kube-api-access-r8f66:
+  kube-api-access-xpxlj:
     Type:                    Projected (a volume that contains injected data from multiple sources)
     TokenExpirationSeconds:  3607
     ConfigMapName:           kube-root-ca.crt
@@ -71,7 +71,7 @@ Events:
   Type    Reason     Age   From               Message
   ----    ------     ----  ----               -------
   Normal  Scheduled  6s    default-scheduler  Successfully assigned forgeops-g09-kyverno/test-kyverno-pass-compliant to forgeops-g09-security-control-plane
-  Normal  Pulled     5s    kubelet            Container image "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc" already present on machine
-  Normal  Created    5s    kubelet            Created container: test-container
-  Normal  Started    4s    kubelet            Started container test-container
+  Normal  Pulled     6s    kubelet            Container image "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc" already present on machine
+  Normal  Created    6s    kubelet            Created container: test-container
+  Normal  Started    6s    kubelet            Started container test-container
 

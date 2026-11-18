@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-kyverno-fail-non-sha256
+  namespace: forgeops-g09-kyverno
+  labels:
+    app.kubernetes.io/name: test-kyverno-fail-non-sha256
+    forgeops.dev/fixture: negative-non-sha256
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: test-container
+      # Insecure: Valid digest algorithm, but uses SHA-512 rather than required SHA-256
+      image: alpine:3.20@sha512:cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+      command: ["sh", "-c", "echo app"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 10001
+        capabilities:
+          drop:
+            - ALL

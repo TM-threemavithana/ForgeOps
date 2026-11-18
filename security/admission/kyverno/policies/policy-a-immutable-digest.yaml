@@ -24,6 +24,14 @@ spec:
         resources:
           - pods
       - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - UPDATE
+        resources:
+          - pods/ephemeralcontainers
+      - apiGroups:
           - apps
         apiVersions:
           - v1
@@ -37,7 +45,7 @@ spec:
       expression: "object.kind == 'Pod' ? object.spec : object.spec.template.spec"
   validations:
     - expression: >-
-        variables.podSpec.containers.all(c, image(c.image).containsDigest()) &&
-        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, image(c.image).containsDigest())) &&
-        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, image(c.image).containsDigest()))
-      message: "An immutable image digest is required for all containers, initContainers, and ephemeralContainers."
+        variables.podSpec.containers.all(c, image(c.image).containsDigest() && image(c.image).digest().startsWith('sha256:')) &&
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, image(c.image).containsDigest() && image(c.image).digest().startsWith('sha256:'))) &&
+        (!has(variables.podSpec.ephemeralContainers) || variables.podSpec.ephemeralContainers == null || variables.podSpec.ephemeralContainers.all(c, image(c.image).containsDigest() && image(c.image).digest().startsWith('sha256:')))
+      message: "An immutable SHA-256 image digest (sha256:...) is required for all containers, initContainers, and ephemeralContainers."

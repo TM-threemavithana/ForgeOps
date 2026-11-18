@@ -3,7 +3,7 @@ Policy: require-restricted-security-context
 Fixture: tests/fixtures/security/admission/kyverno/fail-security-context.yaml
 Description: Admission Rejection of Missing Restricted SecurityContext
 Namespace: forgeops-g09-kyverno
-Date: 2026-11-18 06:52:06 UTC
+Date: 2026-11-18 07:28:54 UTC
 Exit Code: 1 (Admission Webhook Denied)
 
 --- Command Executed ---

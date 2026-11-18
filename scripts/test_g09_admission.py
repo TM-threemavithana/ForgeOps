@@ -10,6 +10,7 @@ Supports two explicit verification modes:
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -61,7 +62,8 @@ def test_evidence_artifacts():
         ("kyverno-initcontainer-nonroot-rejection.txt", ["denied the request", "require-restricted-security-context"], 200),
         ("kyverno-initcontainer-seccomp-rejection.txt", ["denied the request", "require-restricted-security-context"], 200),
         ("kyverno-fake-digest-rejection.txt", ["denied the request", "require-image-digest"], 200),
-        ("kyverno-ephemeral-container-rejection.txt", ["fail-ephemeral-container.yaml", "Kyverno Policy-as-Code Evaluation"], 300),
+        ("kyverno-non-sha256-digest-rejection.txt", ["denied the request", "require-image-digest"], 200),
+        ("kyverno-ephemeral-container-rejection.txt", ["Section 1: Static Kyverno Policy Engine Evaluation", "Section 2: Kubernetes API Core Creation Restriction", "Section 3: Live Subresource Dynamic Webhook Rejection", "Section 4: Live Compliant Ephemeral-Container Update"], 500),
         ("kyverno-compliant-acceptance.txt", ["Exit Code: 0", "test-kyverno-pass-compliant"], 300),
         ("kyverno-deployment-rejection.txt", ["denied the request", "fail-deployment-insecure.yaml"], 200),
         ("kyverno-deployment-acceptance.txt", ["Exit Code: 0", "test-kyverno-pass-deployment", "deployment"], 300),
@@ -121,6 +123,7 @@ def test_kyverno_live(kubeconfig, context):
         ("fail-initcontainer-nonroot.yaml", "require-restricted-security-context"),
         ("fail-initcontainer-seccomp.yaml", "require-restricted-security-context"),
         ("fail-fake-digest-image.yaml", "require-image-digest"),
+        ("fail-non-sha256-digest-image.yaml", "require-image-digest"),
     ]
 
     for filename, expected_policy in tests:
@@ -143,6 +146,157 @@ def test_kyverno_live(kubeconfig, context):
     run_cmd([KUBECTL_BIN, "delete", "pod", "test-kyverno-pass-compliant", "-n", "forgeops-g09-kyverno",
              "--kubeconfig", kubeconfig, "--context", context, "--grace-period=0", "--force"])
     print("  [PASS] Live Kyverno webhook correctly admitted and executed compliant Pod")
+
+
+def test_ephemeral_containers_live(kubeconfig, context):
+    print("\n--> Executing Live Kyverno Ephemeral-Container Subresource Admission Tests...")
+    base_pod_name = "test-live-ephemeral-base"
+    run_cmd([KUBECTL_BIN, "delete", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+             "--kubeconfig", kubeconfig, "--context", context, "--grace-period=0", "--force"])
+
+    base_yaml = f"""apiVersion: v1
+kind: Pod
+metadata:
+  name: {base_pod_name}
+  namespace: forgeops-g09-kyverno
+  labels:
+    app.kubernetes.io/name: {base_pod_name}
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: base-container
+      image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+      command: ["sh", "-c", "sleep 300"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 10001
+        capabilities:
+          drop:
+            - ALL
+"""
+    res = subprocess.run([KUBECTL_BIN, "apply", "-f", "-", "--kubeconfig", kubeconfig, "--context", context],
+                         input=base_yaml, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert res.returncode == 0, f"Failed to create base pod: {res.stderr}"
+
+    for _ in range(30):
+        get_res = run_cmd([KUBECTL_BIN, "get", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+                           "-o", "jsonpath={.status.phase}", "--kubeconfig", kubeconfig, "--context", context])
+        if get_res.stdout.strip() == "Running":
+            break
+        time.sleep(1)
+
+    # Negative Test A: Insecure Security Context
+    patch_sec = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "insecure-sec",
+                    "image": "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc",
+                    "securityContext": {
+                        "allowPrivilegeEscalation": True,
+                        "runAsNonRoot": False
+                    }
+                }
+            ]
+        }
+    }
+    res_a = run_cmd([KUBECTL_BIN, "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+                     "--subresource=ephemeralcontainers", "--type=strategic", "-p", json.dumps(patch_sec),
+                     "--kubeconfig", kubeconfig, "--context", context])
+    assert res_a.returncode != 0, "Expected webhook rejection for insecure securityContext patch"
+    assert "denied the request" in (res_a.stderr + res_a.stdout)
+    print("  [PASS] Live Kyverno webhook rejected insecure security-context ephemeral container")
+
+    # Negative Test B: Mutable tag
+    patch_tag = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "insecure-tag",
+                    "image": "alpine:3.20",
+                    "securityContext": {
+                        "allowPrivilegeEscalation": False,
+                        "runAsNonRoot": True,
+                        "capabilities": {"drop": ["ALL"]}
+                    }
+                }
+            ]
+        }
+    }
+    res_b = run_cmd([KUBECTL_BIN, "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+                     "--subresource=ephemeralcontainers", "--type=strategic", "-p", json.dumps(patch_tag),
+                     "--kubeconfig", kubeconfig, "--context", context])
+    assert res_b.returncode != 0, "Expected webhook rejection for mutable tag image ephemeral patch"
+    assert "denied the request" in (res_b.stderr + res_b.stdout) and "require-image-digest" in (res_b.stderr + res_b.stdout)
+    print("  [PASS] Live Kyverno webhook rejected mutable tag image ephemeral container")
+
+    # Negative Test C: Non-SHA256 digest
+    patch_sha512 = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "insecure-sha512",
+                    "image": "alpine:3.20@sha512:cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+                    "securityContext": {
+                        "allowPrivilegeEscalation": False,
+                        "runAsNonRoot": True,
+                        "capabilities": {"drop": ["ALL"]}
+                    }
+                }
+            ]
+        }
+    }
+    res_c = run_cmd([KUBECTL_BIN, "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+                     "--subresource=ephemeralcontainers", "--type=strategic", "-p", json.dumps(patch_sha512),
+                     "--kubeconfig", kubeconfig, "--context", context])
+    assert res_c.returncode != 0, "Expected webhook rejection for non-SHA256 image ephemeral patch"
+    assert "denied the request" in (res_c.stderr + res_c.stdout) and "require-image-digest" in (res_c.stderr + res_c.stdout)
+    print("  [PASS] Live Kyverno webhook rejected non-SHA256 image ephemeral container")
+
+    # Confirm original pod intact
+    check_pod = run_cmd([KUBECTL_BIN, "get", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+                         "-o", "jsonpath={.spec.ephemeralContainers}", "--kubeconfig", kubeconfig, "--context", context])
+    assert check_pod.stdout.strip() in ["", "[]", "null"], f"Base pod unexpectedly modified: {check_pod.stdout}"
+
+    # Positive Test: Compliant ephemeral container
+    patch_pos = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "compliant-debug",
+                    "image": "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc",
+                    "command": ["sh", "-c", "echo 'active' && sleep 30"],
+                    "securityContext": {
+                        "allowPrivilegeEscalation": False,
+                        "runAsNonRoot": True,
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                        "capabilities": {"drop": ["ALL"]}
+                    }
+                }
+            ]
+        }
+    }
+    res_pos = run_cmd([KUBECTL_BIN, "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+                       "--subresource=ephemeralcontainers", "--type=strategic", "-p", json.dumps(patch_pos),
+                       "--kubeconfig", kubeconfig, "--context", context])
+    assert res_pos.returncode == 0, f"Expected webhook acceptance for compliant ephemeral container patch: {res_pos.stderr}"
+    time.sleep(3)
+    get_eph = run_cmd([KUBECTL_BIN, "get", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+                       "-o", "jsonpath={.spec.ephemeralContainers[*].name}", "--kubeconfig", kubeconfig, "--context", context])
+    assert "compliant-debug" in get_eph.stdout, f"Ephemeral container not recorded in pod spec: {get_eph.stdout}"
+
+    run_cmd([KUBECTL_BIN, "delete", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+             "--kubeconfig", kubeconfig, "--context", context, "--grace-period=0", "--force"])
+    print("  [PASS] Live Kyverno webhook admitted compliant ephemeral container and updated pod spec")
 
 
 def test_controller_live(kubeconfig, context):
@@ -194,6 +348,7 @@ def main():
         print(f"\n[INFO] Dedicated cluster detected ({DEFAULT_CONTEXT}). Executing full live admission suite...")
         test_psa_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
         test_kyverno_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
+        test_ephemeral_containers_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
         test_controller_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
         print("\n===================================================================")
         print(" [PASS] Live Admission Verification PASSED against isolated cluster!")
@@ -204,6 +359,7 @@ def main():
             print("\n[INFO] Dedicated cluster detected in environment. Running live verification...")
             test_psa_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
             test_kyverno_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
+            test_ephemeral_containers_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
             test_controller_live(DEFAULT_KUBECONFIG, DEFAULT_CONTEXT)
         else:
             print("\n[INFO] LIVE ADMISSION TESTS NOT EXECUTED (evidence-only validation).")

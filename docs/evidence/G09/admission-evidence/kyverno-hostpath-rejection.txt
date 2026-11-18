@@ -3,7 +3,7 @@ Policy: disallow-hostpath
 Fixture: tests/fixtures/security/admission/kyverno/fail-hostpath.yaml
 Description: Admission Rejection of hostPath Volume Mount
 Namespace: forgeops-g09-kyverno
-Date: 2026-11-18 06:52:04 UTC
+Date: 2026-11-18 07:28:52 UTC
 Exit Code: 1 (Admission Webhook Denied)
 
 --- Command Executed ---

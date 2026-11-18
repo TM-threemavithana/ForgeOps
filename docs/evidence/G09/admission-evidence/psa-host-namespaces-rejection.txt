@@ -2,7 +2,7 @@
 Fixture: tests/fixtures/security/admission/psa/fail-host-namespaces.yaml
 Description: Rejection of Host Namespaces (hostNetwork/hostPID/hostIPC)
 Namespace: forgeops-g09-psa
-Date: 2026-11-18 06:51:51 UTC
+Date: 2026-11-18 07:28:41 UTC
 Exit Code: 1 (Admission Rejected)
 
 --- Command Executed ---

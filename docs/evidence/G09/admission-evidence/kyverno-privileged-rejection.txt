@@ -3,7 +3,7 @@ Policy: disallow-privileged-workloads
 Fixture: tests/fixtures/security/admission/kyverno/fail-privileged.yaml
 Description: Admission Rejection of Privileged Container
 Namespace: forgeops-g09-kyverno
-Date: 2026-11-18 06:52:05 UTC
+Date: 2026-11-18 07:28:53 UTC
 Exit Code: 1 (Admission Webhook Denied)
 
 --- Command Executed ---

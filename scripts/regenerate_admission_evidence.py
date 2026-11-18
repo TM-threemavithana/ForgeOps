@@ -5,6 +5,7 @@ Executes live admission tests against the isolated forgeops-g09-security cluster
 Captures authentic API server and Kyverno webhook admission responses.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -17,10 +18,10 @@ os.makedirs(EVIDENCE_DIR, exist_ok=True)
 KUBECONFIG = os.path.expanduser("~/.kube/config-g09-security")
 
 
-def run_cmd(cmd_list, check=False):
+def run_cmd(cmd_list, check=False, input_data=None):
     env = os.environ.copy()
     env["KUBECONFIG"] = KUBECONFIG
-    res = subprocess.run(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    res = subprocess.run(cmd_list, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
     if check and res.returncode != 0:
         raise RuntimeError(f"Command failed ({res.returncode}): {' '.join(cmd_list)}\n{res.stderr}\n{res.stdout}")
     return res
@@ -153,6 +154,7 @@ kubectl create -f tests/fixtures/security/admission/psa/pass-restricted-workload
         ("fail-initcontainer-nonroot.yaml", "kyverno-initcontainer-nonroot-rejection.txt", "require-restricted-security-context", "Insecure InitContainer Non-Root Override"),
         ("fail-initcontainer-seccomp.yaml", "kyverno-initcontainer-seccomp-rejection.txt", "require-restricted-security-context", "Insecure InitContainer Seccomp Override"),
         ("fail-fake-digest-image.yaml", "kyverno-fake-digest-rejection.txt", "require-image-digest", "Malformed Fake Digest Image Containing @sha256: Substring"),
+        ("fail-non-sha256-digest-image.yaml", "kyverno-non-sha256-digest-rejection.txt", "require-image-digest", "Non-SHA256 Valid Digest Image"),
     ]
 
     for fix_file, ev_file, pol_name, desc in kyv_fixtures:
@@ -185,43 +187,263 @@ Pods in forgeops-g09-kyverno:
             f.write(content)
         print(f"  [PASS] {ev_file} captured.")
 
-    # Ephemeral Container Test (Documenting Policy Rejection vs K8s API Subresource Limitation)
-    print("  Testing negative fixture: fail-ephemeral-container.yaml (Ephemeral Container Policy Validation)...")
+    # Ephemeral Container Security Enforcement Tests:
+    # 1. Static Kyverno CLI evaluation
+    # 2. Kubernetes API creation restriction
+    # 3. Live subresource webhook rejections against active running base pod
+    # 4. Live compliant ephemeral container admission & runtime execution
+    print("  Testing ephemeral container admission security (CLI, API creation, and live subresource webhook)...")
     eph_path = os.path.join(REPO_ROOT, "tests", "fixtures", "security", "admission", "kyverno", "fail-ephemeral-container.yaml")
     pol_dir = os.path.join(REPO_ROOT, "security", "admission", "kyverno", "policies")
+
+    # Section 1: Static Kyverno CLI evaluation
     cli_res = subprocess.run(["kyverno", "apply", pol_dir, "--resource", eph_path, "--warnings-as-errors"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    k8s_res = run_cmd(["kubectl", "create", "-f", eph_path])
-    eph_content = f"""# ForgeOps Gate G09.4 Live Admission Evidence: Ephemeral Container Policy Rejection
+    assert cli_res.returncode != 0, f"Expected CLI rejection for {eph_path}"
+
+    # Section 2: Kubernetes API creation restriction
+    k8s_create_res = run_cmd(["kubectl", "create", "-f", eph_path])
+    assert k8s_create_res.returncode != 0, "Expected API server rejection of spec.ephemeralContainers on creation"
+    assert "cannot be set on create" in (k8s_create_res.stderr or k8s_create_res.stdout)
+
+    # Section 3 & 4: Live ephemeral container subresource tests against running base pod
+    base_pod_name = "test-kyverno-ephemeral-base"
+    run_cmd(["kubectl", "delete", "pod", base_pod_name, "-n", "forgeops-g09-kyverno", "--grace-period=0", "--force"])
+
+    base_pod_yaml = f"""apiVersion: v1
+kind: Pod
+metadata:
+  name: {base_pod_name}
+  namespace: forgeops-g09-kyverno
+  labels:
+    app.kubernetes.io/name: {base_pod_name}
+    forgeops.dev/fixture: ephemeral-base
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: base-container
+      image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+      command: ["sh", "-c", "sleep 300"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 10001
+        capabilities:
+          drop:
+            - ALL
+"""
+    run_cmd(["kubectl", "apply", "-f", "-"], check=True, input_data=base_pod_yaml)
+
+    # Wait for base pod to be Running
+    base_running = False
+    for _ in range(30):
+        phase_res = run_cmd(["kubectl", "get", "pod", base_pod_name, "-n", "forgeops-g09-kyverno", "-o", "jsonpath={.status.phase}"])
+        if phase_res.stdout.strip() == "Running":
+            base_running = True
+            break
+        time.sleep(1)
+    assert base_running, "Base pod failed to reach Running state"
+
+    # Negative Test A: Insecure Security Context (allowPrivilegeEscalation=true, runAsNonRoot=false)
+    patch_sec = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "insecure-debug-sec",
+                    "image": "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc",
+                    "securityContext": {
+                        "allowPrivilegeEscalation": True,
+                        "runAsNonRoot": False
+                    }
+                }
+            ]
+        }
+    }
+    res_patch_sec = run_cmd([
+        "kubectl", "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+        "--subresource=ephemeralcontainers", "--type=strategic",
+        "-p", json.dumps(patch_sec)
+    ])
+    assert res_patch_sec.returncode != 0, "Expected Kyverno webhook rejection for insecure ephemeral securityContext"
+    err_sec = res_patch_sec.stderr or res_patch_sec.stdout
+    assert "denied the request" in err_sec and ("require-restricted-security-context" in err_sec or "disallow-privileged-workloads" in err_sec)
+
+    # Negative Test B: Insecure Image Reference (Mutable Tag 'alpine:3.20')
+    patch_tag = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "insecure-debug-tag",
+                    "image": "alpine:3.20",
+                    "securityContext": {
+                        "allowPrivilegeEscalation": False,
+                        "runAsNonRoot": True,
+                        "capabilities": {"drop": ["ALL"]}
+                    }
+                }
+            ]
+        }
+    }
+    res_patch_tag = run_cmd([
+        "kubectl", "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+        "--subresource=ephemeralcontainers", "--type=strategic",
+        "-p", json.dumps(patch_tag)
+    ])
+    assert res_patch_tag.returncode != 0, "Expected Kyverno webhook rejection for mutable tag on ephemeral container"
+    err_tag = res_patch_tag.stderr or res_patch_tag.stdout
+    assert "denied the request" in err_tag and "require-image-digest" in err_tag
+
+    # Negative Test C: Insecure Image Reference (Non-SHA256 Valid Digest 'alpine:3.20@sha512:...')
+    patch_sha512 = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "insecure-debug-sha512",
+                    "image": "alpine:3.20@sha512:cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+                    "securityContext": {
+                        "allowPrivilegeEscalation": False,
+                        "runAsNonRoot": True,
+                        "capabilities": {"drop": ["ALL"]}
+                    }
+                }
+            ]
+        }
+    }
+    res_patch_sha512 = run_cmd([
+        "kubectl", "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+        "--subresource=ephemeralcontainers", "--type=strategic",
+        "-p", json.dumps(patch_sha512)
+    ])
+    assert res_patch_sha512.returncode != 0, "Expected Kyverno webhook rejection for non-SHA256 digest on ephemeral container"
+    err_sha512 = res_patch_sha512.stderr or res_patch_sha512.stdout
+    assert "denied the request" in err_sha512 and "require-image-digest" in err_sha512
+
+    # Integrity Check: Confirming Target Pod remains intact with zero ephemeral containers
+    check_intact = run_cmd(["kubectl", "get", "pod", base_pod_name, "-n", "forgeops-g09-kyverno", "-o", "jsonpath={.spec.ephemeralContainers}"])
+    assert check_intact.stdout.strip() in ["", "[]", "null"], f"Base pod unexpectedly modified: {check_intact.stdout}"
+
+    # Section 4: Live Compliant Ephemeral Container Update
+    patch_pos = {
+        "spec": {
+            "ephemeralContainers": [
+                {
+                    "name": "compliant-debug",
+                    "image": "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc",
+                    "command": ["sh", "-c", "echo 'Compliant ephemeral active' && sleep 30"],
+                    "securityContext": {
+                        "allowPrivilegeEscalation": False,
+                        "runAsNonRoot": True,
+                        "seccompProfile": {
+                            "type": "RuntimeDefault"
+                        },
+                        "capabilities": {
+                            "drop": ["ALL"]
+                        }
+                    }
+                }
+            ]
+        }
+    }
+    res_patch_pos = run_cmd([
+        "kubectl", "patch", "pod", base_pod_name, "-n", "forgeops-g09-kyverno",
+        "--subresource=ephemeralcontainers", "--type=strategic",
+        "-p", json.dumps(patch_pos)
+    ])
+    assert res_patch_pos.returncode == 0, f"Compliant ephemeral container patch was unexpectedly rejected: {res_patch_pos.stderr}"
+
+    time.sleep(3)
+    eph_spec_res = run_cmd(["kubectl", "get", "pod", base_pod_name, "-n", "forgeops-g09-kyverno", "-o", "jsonpath={.spec.ephemeralContainers[*].name}"])
+    assert "compliant-debug" in eph_spec_res.stdout, f"Ephemeral container not found in pod spec: {eph_spec_res.stdout}"
+
+    eph_status_res = run_cmd(["kubectl", "get", "pod", base_pod_name, "-n", "forgeops-g09-kyverno", "-o", "jsonpath={.status.ephemeralContainerStatuses}"])
+
+    eph_content = f"""# ForgeOps Gate G09.4 Live Admission Evidence: Ephemeral Container Security Enforcement
 Fixture: tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
-Description: Ephemeral container policy enforcement & Kubernetes API constraint analysis
 Namespace: forgeops-g09-kyverno
+Target Subresource: pods/ephemeralcontainers
 Date: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
 
---- Kyverno Policy Engine Static & Pre-Admission Evaluation ---
+===================================================================
+=== Section 1: Static Kyverno Policy Engine Evaluation (CLI)    ===
+===================================================================
 Command: kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml --warnings-as-errors
 Exit Code: {cli_res.returncode} (Policy Rejection Enforced)
 Output:
-{cli_res.stdout}
+{cli_res.stdout.strip()}
 
---- Kubernetes Core API Manifest Creation Semantics ---
+===================================================================
+=== Section 2: Kubernetes API Core Creation Restriction         ===
+===================================================================
 Command: kubectl create -f tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
-Exit Code: {k8s_res.returncode} (API Server Rejection)
+Exit Code: {k8s_create_res.returncode} (API Server Schema Rejection)
 Output:
-{k8s_res.stderr}
+{k8s_create_res.stderr.strip()}
+Technical Note: The Kubernetes API server strictly forbids setting 'spec.ephemeralContainers' during initial Pod creation ('Forbidden: cannot be set on create'). Ephemeral containers can only be attached to running pods via the '/ephemeralcontainers' subresource.
 
---- Technical Architecture Analysis ---
-1. Kyverno Policy-as-Code Evaluation: The Kyverno policy engine evaluates 'spec.ephemeralContainers' and strictly blocks violations of 'allowPrivilegeEscalation=false' and 'runAsNonRoot=true'.
-2. Kubernetes Workload Creation Invariant: Standard Kubernetes API servers forbid 'spec.ephemeralContainers' directly in Pod creation manifests; ephemeral containers can only be attached to active pods via the '/ephemeralcontainers' subresource (e.g. via 'kubectl debug').
-3. Defense-in-Depth: Both the Kubernetes API schema and Kyverno dynamic admission webhook enforce fail-closed rejection.
+===================================================================
+=== Section 3: Live Subresource Dynamic Webhook Rejection       ===
+===================================================================
+Target Pod: {base_pod_name} (Status: Running)
+Subresource: pods/ephemeralcontainers
+Webhook Config: kyverno-resource-validating-webhook-cfg (rule: pods/ephemeralcontainers -> UPDATE)
 
---- Zero-Pod-Leakage Verification ---
+--> Negative Test A: Insecure Security Context (allowPrivilegeEscalation=true, runAsNonRoot=false)
+Command: kubectl patch pod {base_pod_name} --subresource=ephemeralcontainers --type=strategic -p '<insecure-sec-context>'
+Exit Code: {res_patch_sec.returncode} (Dynamic Admission Webhook Denied)
+Raw Webhook Response:
+{err_sec.strip()}
+
+--> Negative Test B: Insecure Image Reference (Mutable Tag 'alpine:3.20')
+Command: kubectl patch pod {base_pod_name} --subresource=ephemeralcontainers --type=strategic -p '<mutable-tag-image>'
+Exit Code: {res_patch_tag.returncode} (Dynamic Admission Webhook Denied)
+Raw Webhook Response:
+{err_tag.strip()}
+
+--> Negative Test C: Insecure Image Reference (Non-SHA256 Digest 'alpine:3.20@sha512:...')
+Command: kubectl patch pod {base_pod_name} --subresource=ephemeralcontainers --type=strategic -p '<non-sha256-image>'
+Exit Code: {res_patch_sha512.returncode} (Dynamic Admission Webhook Denied)
+Raw Webhook Response:
+{err_sha512.strip()}
+
+--> Integrity Check: Confirming Target Pod Remains Intact
+Command: kubectl get pod {base_pod_name} -o jsonpath='{{.spec.ephemeralContainers}}'
+Output: '{check_intact.stdout.strip()}' (Zero Insecure Ephemeral Containers Admitted)
+
+===================================================================
+=== Section 4: Live Compliant Ephemeral-Container Update        ===
+===================================================================
+Compliant Spec: Image pinned to SHA-256 digest, runAsNonRoot=true, allowPrivilegeEscalation=false, seccomp RuntimeDefault, drop ALL.
+Command: kubectl patch pod {base_pod_name} --subresource=ephemeralcontainers --type=strategic -p '<compliant-ephemeral-container>'
+Exit Code: {res_patch_pos.returncode} (Dynamic Admission Webhook Accepted & Patched)
+Raw Output:
+{res_patch_pos.stdout.strip()}
+
+--> Admitted Pod Specification Verification:
+spec.ephemeralContainers:
+{eph_spec_res.stdout.strip()}
+
+--> Containerd Runtime Execution Status (Distinguishing Admission from Runtime):
+status.ephemeralContainerStatuses:
+{eph_status_res.stdout.strip()}
+
+--- Zero-Workload-Leakage Verification ---
 Pods in forgeops-g09-kyverno:
 {run_cmd(['kubectl', 'get', 'pods', '-n', 'forgeops-g09-kyverno']).stdout}
 """
     with open(os.path.join(EVIDENCE_DIR, "kyverno-ephemeral-container-rejection.txt"), "w", encoding="utf-8") as f:
         f.write(eph_content)
     print("  [PASS] kyverno-ephemeral-container-rejection.txt captured.")
+
+    # Cleanup base pod
+    run_cmd(["kubectl", "delete", "pod", base_pod_name, "-n", "forgeops-g09-kyverno", "--grace-period=0", "--force"])
 
     # Kyverno Positive Compliant Pod
     print("  Testing positive compliant fixture: pass-compliant-workload.yaml...")

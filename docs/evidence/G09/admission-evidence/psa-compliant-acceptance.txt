@@ -1,7 +1,7 @@
 # ForgeOps Gate G09.4 Live Admission Evidence: PSA Restricted Workload Compliant Acceptance
 Fixture: tests/fixtures/security/admission/psa/pass-restricted-workload.yaml
 Namespace: forgeops-g09-psa
-Date: 2026-11-18 06:52:01 UTC
+Date: 2026-11-18 07:28:50 UTC
 Exit Code: 0 (Admission Accepted & Executed)
 
 --- Command Executed ---
@@ -9,7 +9,7 @@ kubectl create -f tests/fixtures/security/admission/psa/pass-restricted-workload
 
 --- Pod Execution Status ---
 NAME                       READY   STATUS      RESTARTS   AGE   IP            NODE                                  NOMINATED NODE   READINESS GATES
-test-psa-pass-restricted   0/1     Completed   0          8s    10.244.0.22   forgeops-g09-security-control-plane   <none>           <none>
+test-psa-pass-restricted   0/1     Completed   0          7s    10.244.0.35   forgeops-g09-security-control-plane   <none>           <none>
 
 
 --- Pod Logs ---
@@ -22,18 +22,18 @@ Namespace:        forgeops-g09-psa
 Priority:         0
 Service Account:  default
 Node:             forgeops-g09-security-control-plane/172.18.0.2
-Start Time:       Wed, 18 Nov 2026 12:21:54 +0530
+Start Time:       Wed, 18 Nov 2026 12:58:43 +0530
 Labels:           app.kubernetes.io/name=test-psa-pass-restricted
                   forgeops.dev/fixture=positive
 Annotations:      <none>
 Status:           Running
 SeccompProfile:   RuntimeDefault
-IP:               10.244.0.22
+IP:               10.244.0.35
 IPs:
-  IP:  10.244.0.22
+  IP:  10.244.0.35
 Containers:
   test-container:
-    Container ID:  containerd://a702e95a9bcc5cccf131c434f5f214ec707578c76252f381f2e1e97b71bd8026
+    Container ID:  containerd://02e96ac8ac06eeaa3a5ed2c455fbc98ff8d2d3190c0be2095acd53ff5f9995e3
     Image:         alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     Image ID:      docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     Port:          <none>
@@ -42,22 +42,25 @@ Containers:
       sh
       -c
       echo 'PSA Restricted workload compliant' && sleep 5
-    State:          Running
-      Started:      Wed, 18 Nov 2026 12:21:55 +0530
-    Ready:          True
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 18 Nov 2026 12:58:43 +0530
+      Finished:     Wed, 18 Nov 2026 12:58:48 +0530
+    Ready:          False
     Restart Count:  0
     Environment:    <none>
     Mounts:
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-j5v5n (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-ggn6l (ro)
 Conditions:
   Type                        Status
   PodReadyToStartContainers   True 
   Initialized                 True 
-  Ready                       True 
-  ContainersReady             True 
+  Ready                       False 
+  ContainersReady             False 
   PodScheduled                True 
 Volumes:
-  kube-api-access-j5v5n:
+  kube-api-access-ggn6l:
     Type:                    Projected (a volume that contains injected data from multiple sources)
     TokenExpirationSeconds:  3607
     ConfigMapName:           kube-root-ca.crt
@@ -72,6 +75,6 @@ Events:
   ----    ------     ----  ----               -------
   Normal  Scheduled  6s    default-scheduler  Successfully assigned forgeops-g09-psa/test-psa-pass-restricted to forgeops-g09-security-control-plane
   Normal  Pulled     6s    kubelet            Container image "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc" already present on machine
-  Normal  Created    5s    kubelet            Created container: test-container
-  Normal  Started    5s    kubelet            Started container test-container
+  Normal  Created    6s    kubelet            Created container: test-container
+  Normal  Started    6s    kubelet            Started container test-container
 

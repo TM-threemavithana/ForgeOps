@@ -1,35 +1,80 @@
-# ForgeOps Gate G09.4 Live Admission Evidence: Ephemeral Container Policy Rejection
+# ForgeOps Gate G09.4 Live Admission Evidence: Ephemeral Container Security Enforcement
 Fixture: tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
-Description: Ephemeral container policy enforcement & Kubernetes API constraint analysis
 Namespace: forgeops-g09-kyverno
-Date: 2026-11-18 06:52:13 UTC
+Target Subresource: pods/ephemeralcontainers
+Date: 2026-11-18 07:29:06 UTC
 
---- Kyverno Policy Engine Static & Pre-Admission Evaluation ---
+===================================================================
+=== Section 1: Static Kyverno Policy Engine Evaluation (CLI)    ===
+===================================================================
 Command: kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml --warnings-as-errors
 Exit Code: 1 (Policy Rejection Enforced)
 Output:
-
 Applying 4 policy rule(s) to 1 resource(s)...
 policy disallow-privileged-workloads -> resource forgeops-g09-kyverno/Pod/test-kyverno-fail-ephemeral-container failed:
 1 -  Privilege escalation is strictly forbidden (allowPrivilegeEscalation must be false).
 policy require-restricted-security-context -> resource forgeops-g09-kyverno/Pod/test-kyverno-fail-ephemeral-container failed:
 1 -  Workloads must enforce runAsNonRoot=true at the pod level or across all containers, initContainers, and ephemeralContainers, and non-root cannot be disabled.
 
-pass: 2, fail: 2, warn: 0, error: 0, skip: 0 
+pass: 2, fail: 2, warn: 0, error: 0, skip: 0
 
-
---- Kubernetes Core API Manifest Creation Semantics ---
+===================================================================
+=== Section 2: Kubernetes API Core Creation Restriction         ===
+===================================================================
 Command: kubectl create -f tests/fixtures/security/admission/kyverno/fail-ephemeral-container.yaml
-Exit Code: 1 (API Server Rejection)
+Exit Code: 1 (API Server Schema Rejection)
 Output:
 The Pod "test-kyverno-fail-ephemeral-container" is invalid: spec.ephemeralContainers: Forbidden: cannot be set on create
+Technical Note: The Kubernetes API server strictly forbids setting 'spec.ephemeralContainers' during initial Pod creation ('Forbidden: cannot be set on create'). Ephemeral containers can only be attached to running pods via the '/ephemeralcontainers' subresource.
 
+===================================================================
+=== Section 3: Live Subresource Dynamic Webhook Rejection       ===
+===================================================================
+Target Pod: test-kyverno-ephemeral-base (Status: Running)
+Subresource: pods/ephemeralcontainers
+Webhook Config: kyverno-resource-validating-webhook-cfg (rule: pods/ephemeralcontainers -> UPDATE)
 
---- Technical Architecture Analysis ---
-1. Kyverno Policy-as-Code Evaluation: The Kyverno policy engine evaluates 'spec.ephemeralContainers' and strictly blocks violations of 'allowPrivilegeEscalation=false' and 'runAsNonRoot=true'.
-2. Kubernetes Workload Creation Invariant: Standard Kubernetes API servers forbid 'spec.ephemeralContainers' directly in Pod creation manifests; ephemeral containers can only be attached to active pods via the '/ephemeralcontainers' subresource (e.g. via 'kubectl debug').
-3. Defense-in-Depth: Both the Kubernetes API schema and Kyverno dynamic admission webhook enforce fail-closed rejection.
+--> Negative Test A: Insecure Security Context (allowPrivilegeEscalation=true, runAsNonRoot=false)
+Command: kubectl patch pod test-kyverno-ephemeral-base --subresource=ephemeralcontainers --type=strategic -p '<insecure-sec-context>'
+Exit Code: 1 (Dynamic Admission Webhook Denied)
+Raw Webhook Response:
+Error from server: admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-privileged-workloads failed: Privilege escalation is strictly forbidden (allowPrivilegeEscalation must be false).; Policy require-restricted-security-context failed: Workloads must enforce runAsNonRoot=true at the pod level or across all containers, initContainers, and ephemeralContainers, and non-root cannot be disabled.
 
---- Zero-Pod-Leakage Verification ---
+--> Negative Test B: Insecure Image Reference (Mutable Tag 'alpine:3.20')
+Command: kubectl patch pod test-kyverno-ephemeral-base --subresource=ephemeralcontainers --type=strategic -p '<mutable-tag-image>'
+Exit Code: 1 (Dynamic Admission Webhook Denied)
+Raw Webhook Response:
+Error from server: admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest failed: An immutable SHA-256 image digest (sha256:...) is required for all containers, initContainers, and ephemeralContainers.
+
+--> Negative Test C: Insecure Image Reference (Non-SHA256 Digest 'alpine:3.20@sha512:...')
+Command: kubectl patch pod test-kyverno-ephemeral-base --subresource=ephemeralcontainers --type=strategic -p '<non-sha256-image>'
+Exit Code: 1 (Dynamic Admission Webhook Denied)
+Raw Webhook Response:
+Error from server: admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest error: error: could not parse reference: alpine:3.20@sha512:cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+
+--> Integrity Check: Confirming Target Pod Remains Intact
+Command: kubectl get pod test-kyverno-ephemeral-base -o jsonpath='{.spec.ephemeralContainers}'
+Output: '' (Zero Insecure Ephemeral Containers Admitted)
+
+===================================================================
+=== Section 4: Live Compliant Ephemeral-Container Update        ===
+===================================================================
+Compliant Spec: Image pinned to SHA-256 digest, runAsNonRoot=true, allowPrivilegeEscalation=false, seccomp RuntimeDefault, drop ALL.
+Command: kubectl patch pod test-kyverno-ephemeral-base --subresource=ephemeralcontainers --type=strategic -p '<compliant-ephemeral-container>'
+Exit Code: 0 (Dynamic Admission Webhook Accepted & Patched)
+Raw Output:
+pod/test-kyverno-ephemeral-base patched
+
+--> Admitted Pod Specification Verification:
+spec.ephemeralContainers:
+compliant-debug
+
+--> Containerd Runtime Execution Status (Distinguishing Admission from Runtime):
+status.ephemeralContainerStatuses:
+[{"containerID":"containerd://55b9f560900af2cea5414450a89367bb9d2e8164ade7090f967986077ac37cd0","image":"docker.io/library/alpine:3.20","imageID":"docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc","lastState":{},"name":"compliant-debug","ready":false,"resources":{},"restartCount":0,"state":{"running":{"startedAt":"2026-11-18T07:29:03Z"}},"user":{"linux":{"gid":10001,"supplementalGroups":[10001],"uid":10001}}}]
+
+--- Zero-Workload-Leakage Verification ---
 Pods in forgeops-g09-kyverno:
+NAME                          READY   STATUS    RESTARTS   AGE
+test-kyverno-ephemeral-base   1/1     Running   0          8s
 

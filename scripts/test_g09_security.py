@@ -630,6 +630,7 @@ def test_kyverno_g09_cli_fixtures():
         "fail-initcontainer-seccomp.yaml",
         "fail-ephemeral-container.yaml",
         "fail-fake-digest-image.yaml",
+        "fail-non-sha256-digest-image.yaml",
     ]
     for nfix in negative_fixtures:
         res = subprocess.run([kyverno_bin, "apply", pol_dir, "--resource", os.path.join(fix_dir, nfix), "--warnings-as-errors"],
@@ -685,7 +686,8 @@ def test_live_admission_evidence():
         ("kyverno-initcontainer-nonroot-rejection.txt", ["denied the request", "require-restricted-security-context"]),
         ("kyverno-initcontainer-seccomp-rejection.txt", ["denied the request", "require-restricted-security-context"]),
         ("kyverno-fake-digest-rejection.txt", ["denied the request", "require-image-digest"]),
-        ("kyverno-ephemeral-container-rejection.txt", ["fail-ephemeral-container.yaml", "Kyverno Policy-as-Code Evaluation"]),
+        ("kyverno-non-sha256-digest-rejection.txt", ["denied the request", "require-image-digest"]),
+        ("kyverno-ephemeral-container-rejection.txt", ["Section 1: Static Kyverno Policy Engine Evaluation", "Section 2: Kubernetes API Core Creation Restriction", "Section 3: Live Subresource Dynamic Webhook Rejection", "Section 4: Live Compliant Ephemeral-Container Update"]),
         ("kyverno-compliant-acceptance.txt", ["Exit Code: 0", "test-kyverno-pass-compliant"]),
         ("kyverno-deployment-rejection.txt", ["denied the request", "fail-deployment-insecure.yaml"]),
         ("kyverno-deployment-acceptance.txt", ["Exit Code: 0", "deployment"]),

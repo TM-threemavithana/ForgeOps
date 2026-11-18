@@ -1,32 +1,32 @@
 # ForgeOps G09.4 Kyverno Admission Controller & Webhook Readiness
-Date: 2026-11-18 06:51:49 UTC
+Date: 2026-11-18 07:28:39 UTC
 Cluster: forgeops-g09-security
 Context: kind-forgeops-g09-security
 
 === Kyverno Admission Controller Pods (namespace: kyverno) ===
 NAME                                          READY   STATUS    RESTARTS   AGE   IP           NODE                                  NOMINATED NODE   READINESS GATES
-kyverno-admission-controller-dcd9957d-l2px5   1/1     Running   0          36m   10.244.0.6   forgeops-g09-security-control-plane   <none>           <none>
+kyverno-admission-controller-dcd9957d-l2px5   1/1     Running   0          72m   10.244.0.6   forgeops-g09-security-control-plane   <none>           <none>
 
 
 === ValidatingWebhookConfigurations ===
 NAME                                            WEBHOOKS   AGE
-kyverno-cel-exception-validating-webhook-cfg    1          104m
-kyverno-exception-validating-webhook-cfg        1          104m
-kyverno-global-context-validating-webhook-cfg   1          104m
-kyverno-policy-validating-webhook-cfg           1          104m
-kyverno-resource-validating-webhook-cfg         2          104m
+kyverno-cel-exception-validating-webhook-cfg    1          141m
+kyverno-exception-validating-webhook-cfg        1          141m
+kyverno-global-context-validating-webhook-cfg   1          141m
+kyverno-policy-validating-webhook-cfg           1          141m
+kyverno-resource-validating-webhook-cfg         2          141m
 
 
 === NamespacedValidatingPolicy Resources (namespace: forgeops-g09-kyverno) ===
 NAME                                  AGE   READY
-disallow-hostpath                     29m   true
-disallow-privileged-workloads         29m   true
-require-image-digest                  29m   true
-require-restricted-security-context   29m   true
+disallow-hostpath                     65m   true
+disallow-privileged-workloads         65m   true
+require-image-digest                  65m   true
+require-restricted-security-context   65m   true
 
 
 === Kyverno Service Endpoints ===
 NAME                  ENDPOINTS         AGE
-kyverno-svc           10.244.0.6:9443   107m
-kyverno-svc-metrics   10.244.0.6:8000   107m
+kyverno-svc           10.244.0.6:9443   144m
+kyverno-svc-metrics   10.244.0.6:8000   144m
 

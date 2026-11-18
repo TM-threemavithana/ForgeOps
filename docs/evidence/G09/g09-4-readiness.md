@@ -101,11 +101,11 @@ Kyverno v1.19.2 was deployed via Helm chart v3.9.2 using [`security/admission/ky
 ### 5.2 Modern CEL-Based Policy Migration (`policies.kyverno.io/v1`)
 All 4 G09.4 policies were migrated from the deprecated `kyverno.io/v1` `Policy` API to `policies.kyverno.io/v1` `NamespacedValidatingPolicy`:
 
-1. **Policy A — Immutable Image Digest:**
+1. **Policy A — Immutable SHA-256 Image Digest:**
    - File: [`security/admission/kyverno/policies/policy-a-immutable-digest.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-a-immutable-digest.yaml)
    - Rule Name: `require-image-digest`
-   - Scope: `pods` and `deployments` in `forgeops-g09-kyverno`
-   - CEL Expression: Enforces `image(c.image).containsDigest()` across containers, initContainers, and ephemeralContainers, ensuring true OCI digest validation rather than substring matching.
+   - Scope: `pods` (CREATE, UPDATE), `pods/ephemeralcontainers` (UPDATE), and `deployments` (CREATE, UPDATE) in `forgeops-g09-kyverno`
+   - CEL Expression: Enforces `image(c.image).containsDigest() && image(c.image).digest().startsWith('sha256:')` across containers, initContainers, and ephemeralContainers, ensuring authentic SHA-256 OCI digest validation rather than substring matching or non-SHA256 algorithms.
 2. **Policy B — Disallow hostPath Volumes:**
    - File: [`security/admission/kyverno/policies/policy-b-disallow-hostpath.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-b-disallow-hostpath.yaml)
    - Rule Name: `disallow-hostpath`
@@ -114,18 +114,18 @@ All 4 G09.4 policies were migrated from the deprecated `kyverno.io/v1` `Policy` 
 3. **Policy C — Disallow Privileged Containers & Privilege Escalation:**
    - File: [`security/admission/kyverno/policies/policy-c-disallow-privileged.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-c-disallow-privileged.yaml)
    - Rule Name: `disallow-privileged-workloads`
-   - Scope: `pods` and `deployments` in `forgeops-g09-kyverno`
+   - Scope: `pods` (CREATE, UPDATE), `pods/ephemeralcontainers` (UPDATE), and `deployments` (CREATE, UPDATE) in `forgeops-g09-kyverno`
    - CEL Expression: Enforces `privileged == false` and `allowPrivilegeEscalation == false` across containers, initContainers, and ephemeralContainers.
 4. **Policy D — Enforce Restricted Security Context:**
    - File: [`security/admission/kyverno/policies/policy-d-restricted-security-context.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-d-restricted-security-context.yaml)
    - Rule Name: `require-restricted-security-context`
-   - Scope: `pods` and `deployments` in `forgeops-g09-kyverno`
+   - Scope: `pods` (CREATE, UPDATE), `pods/ephemeralcontainers` (UPDATE), and `deployments` (CREATE, UPDATE) in `forgeops-g09-kyverno`
    - CEL Expression: Consistently enforces `runAsNonRoot == true` (at pod level or on all containers, initContainers, and ephemeralContainers), `seccompProfile.type == 'RuntimeDefault'` (at pod level or across all containers, initContainers, and ephemeralContainers), `allowPrivilegeEscalation == false`, and `capabilities.drop.exists(d, d == 'ALL')`.
 
-### 5.3 Live Admission Webhook Rejection Evidence (Pods & Workload Controllers)
+### 5.3 Live Admission Webhook Rejection Evidence (Pods, Controllers & Ephemeral Subresource)
 All fixtures are stored in [`tests/fixtures/security/admission/kyverno/`](file:///c:/Project/ForgeOps/tests/fixtures/security/admission/kyverno/):
 
-| Test Case | Kind | Fixture | Target Violation | Live Admission Result | Repository Evidence Artifact |
+| Test Case | Kind / Target | Fixture | Target Violation | Live Admission Result | Repository Evidence Artifact |
 |---|---|---|---|---|---|
 | **KYV-01** | Pod | `fail-mutable-tag.yaml` | Mutable image tag (`alpine:3.20` without digest) | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest failed` | [`kyverno-mutable-tag-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-mutable-tag-rejection.txt) |
 | **KYV-02** | Pod | `fail-hostpath.yaml` | Mounts host filesystem via `hostPath` | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-hostpath failed` | [`kyverno-hostpath-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-hostpath-rejection.txt) |
@@ -137,7 +137,8 @@ All fixtures are stored in [`tests/fixtures/security/admission/kyverno/`](file:/
 | **KYV-08** | Pod | `fail-initcontainer-nonroot.yaml` | InitContainer violates non-root (`runAsNonRoot: false`) | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-restricted-security-context failed` | [`kyverno-initcontainer-nonroot-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-initcontainer-nonroot-rejection.txt) |
 | **KYV-09** | Pod | `fail-initcontainer-seccomp.yaml` | InitContainer violates seccomp (`type: Unconfined`) | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-restricted-security-context failed` | [`kyverno-initcontainer-seccomp-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-initcontainer-seccomp-rejection.txt) |
 | **KYV-10** | Pod | `fail-fake-digest-image.yaml` | Image containing substring `@sha256:` but not an OCI digest | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest error: could not parse reference` | [`kyverno-fake-digest-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-fake-digest-rejection.txt) |
-| **KYV-11** | Pod | `fail-ephemeral-container.yaml` | EphemeralContainer violates securityContext (`privileged: true`) | **REJECTED**: Kyverno CLI blocks policy violation; K8s API server blocks initial creation manifest (`Forbidden: cannot be set on create`) | [`kyverno-ephemeral-container-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-ephemeral-container-rejection.txt) |
+| **KYV-11** | Pod | `fail-non-sha256-digest-image.yaml` | Image using valid non-SHA256 digest (`alpine:3.20@sha512:...`) | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest error: could not parse reference` | [`kyverno-non-sha256-digest-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-non-sha256-digest-rejection.txt) |
+| **KYV-12** | Subresource (`pods/ephemeralcontainers`) | `fail-ephemeral-container.yaml` / Strategic Patch | EphemeralContainer violates security context (escalation/root) and image digest (mutable/non-SHA256) | **REJECTED (Dynamic Subresource Denial)**: Webhook denies PATCH to `/ephemeralcontainers`. Original running pod remains intact. Compliant ephemeral patch is admitted and executed. | [`kyverno-ephemeral-container-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-ephemeral-container-rejection.txt) |
 
 **Verification of Zero Workload Leakage:**
 `kubectl get deployments,pods -n forgeops-g09-kyverno` confirms exactly 0 rejected deployments or pods were created.
@@ -167,16 +168,16 @@ pass: 4, fail: 0, warn: 0, error: 0, skip: 0
 
 ### 7.1 Standalone Admission Test Runner
 Implemented in [`scripts/test_g09_admission.py`](file:///c:/Project/ForgeOps/scripts/test_g09_admission.py) with dual-mode semantics:
-- **`--mode live`:** Requires a reachable cluster context (`kind-forgeops-g09-security`). Executes live API server and webhook tests against Pods and Deployments. Fails with non-zero exit code if cluster is absent.
-- **`--mode evidence`:** Validates repository-preserved evidence artifacts (17 files), verifies content assertions, and clearly reports `LIVE ADMISSION TESTS NOT EXECUTED` in evidence-only environments like standard CI runners.
+- **`--mode live`:** Requires a reachable cluster context (`kind-forgeops-g09-security`). Executes live API server, webhook tests against Pods and Deployments, and live subresource patches against `pods/ephemeralcontainers`. Fails with non-zero exit code if cluster is absent.
+- **`--mode evidence`:** Validates repository-preserved evidence artifacts (18 files), verifies content assertions, and clearly reports `LIVE ADMISSION TESTS NOT EXECUTED` in evidence-only environments like standard CI runners.
 
 ### 7.2 Unified Security Suite
 Updated [`scripts/test_g09_security.py`](file:///c:/Project/ForgeOps/scripts/test_g09_security.py):
 - Tests 1–16: G09.1, G09.2, and G09.3 security checks (Trivy, Checkov, Hadolint, Semgrep, Gitleaks, CSRF).
 - Test 17: Kyverno CEL policy syntax and `policies.kyverno.io/v1` schema validation.
-- Test 18: Kyverno CLI synthetic rejection & compliant acceptance with `--warnings-as-errors` across Pods and Deployments.
+- Test 18: Kyverno CLI synthetic rejection & compliant acceptance with `--warnings-as-errors` across Pods, InitContainers, EphemeralContainers, and Workload Controllers.
 - Test 19: PSA namespace labels (pinned to `v1.34`) and fixture validation.
-- Test 20: Repository-preserved admission evidence artifact verification (17 files).
+- Test 20: Repository-preserved admission evidence artifact verification (18 files).
 - Result: **20/20 checks PASSED (100%)**.
 
 ### 7.3 CI Workflow Integration
