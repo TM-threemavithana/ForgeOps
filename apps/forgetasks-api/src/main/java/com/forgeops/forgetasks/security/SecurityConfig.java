@@ -58,6 +58,11 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CookieCsrfTokenRepository csrfTokenRepository() {
+        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         CsrfTokenRequestAttributeHandler csrfRequestHandler = new CsrfTokenRequestAttributeHandler() {
             @Override
@@ -77,7 +82,7 @@ public class SecurityConfig {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(csrfTokenRepository())
                         .csrfTokenRequestHandler(csrfRequestHandler)
                         .ignoringRequestMatchers(request -> {
                                 String uri = request.getRequestURI();
@@ -191,13 +196,9 @@ public class SecurityConfig {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
 
-            String detail = (accessDeniedException != null && accessDeniedException.getMessage() != null)
-                    ? accessDeniedException.getClass().getSimpleName() + ": " + accessDeniedException.getMessage()
-                    : "You do not possess the required permissions to access this resource.";
-
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.FORBIDDEN,
-                    detail
+                    "You do not possess the required permissions to access this resource."
             );
             problem.setTitle("Forbidden");
             problem.setType(URI.create("https://forgeops.local/errors/forbidden"));

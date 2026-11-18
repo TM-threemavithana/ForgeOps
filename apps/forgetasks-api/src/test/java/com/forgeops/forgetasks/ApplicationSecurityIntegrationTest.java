@@ -4,21 +4,40 @@ import tools.jackson.databind.JsonNode;
 import com.forgeops.forgetasks.account.dto.AccountRegistrationRequest;
 import com.forgeops.forgetasks.project.dto.ProjectCreateRequest;
 import com.forgeops.forgetasks.project.dto.ProjectUpdateRequest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.test.web.support.WebTestUtils;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
+
+    @Autowired
+    private CookieCsrfTokenRepository csrfTokenRepository;
+
+    @Autowired
+    private WebApplicationContext webApplicationContext;
+
+    @BeforeEach
+    void resetCsrfTokenRepository() {
+        if (webApplicationContext != null && webApplicationContext.getServletContext() != null) {
+            MockHttpServletRequest request = new MockHttpServletRequest(webApplicationContext.getServletContext());
+            WebTestUtils.setCsrfTokenRepository(request, csrfTokenRepository);
+        }
+    }
 
     @Test
     @DisplayName("AppSec: HTTP Security Headers are properly set on API responses (CSP, HSTS/Frame/Sniff/Referrer/Permissions)")
@@ -293,6 +312,12 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.headerName").exists())
                 .andReturn();
 
+        // Restore CookieCsrfTokenRepository on the test filter in case previous tests with .with(csrf()) replaced it
+        WebTestUtils.setCsrfTokenRepository(
+                csrfResult.getRequest(),
+                csrfTokenRepository
+        );
+
         JsonNode csrfNode = objectMapper.readTree(csrfResult.getResponse().getContentAsString());
         String csrfToken = csrfNode.get("token").asText();
         String headerName = csrfNode.get("headerName").asText();
@@ -305,12 +330,9 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, auth)
                         .header(headerName, csrfToken)
                         .header("X-XSRF-TOKEN", csrfToken)
-                        .header(HttpHeaders.COOKIE, "XSRF-TOKEN=" + csrfToken)
                         .cookie(xsrfCookie)
-                        .cookie(new jakarta.servlet.http.Cookie("XSRF-TOKEN", csrfToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("API Client Project", "Created via CSRF flow"))))
-                .andDo(print())
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("API Client Project"));
     }
