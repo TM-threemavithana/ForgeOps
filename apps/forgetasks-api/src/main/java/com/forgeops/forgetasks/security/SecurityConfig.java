@@ -59,11 +59,25 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        CsrfTokenRequestAttributeHandler csrfRequestHandler = new CsrfTokenRequestAttributeHandler() {
+            @Override
+            public String resolveCsrfTokenValue(HttpServletRequest request, CsrfToken csrfToken) {
+                String token = super.resolveCsrfTokenValue(request, csrfToken);
+                if (token == null) {
+                    token = request.getHeader("X-XSRF-TOKEN");
+                }
+                if (token == null) {
+                    token = request.getHeader("X-CSRF-TOKEN");
+                }
+                return token;
+            }
+        };
+
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .csrfTokenRequestHandler(csrfRequestHandler)
                         .ignoringRequestMatchers(request -> {
                                 String uri = request.getRequestURI();
                                 String method = request.getMethod();

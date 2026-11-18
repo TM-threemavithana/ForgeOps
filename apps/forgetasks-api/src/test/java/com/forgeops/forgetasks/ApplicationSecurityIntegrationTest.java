@@ -303,6 +303,7 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/projects")
                         .header(HttpHeaders.AUTHORIZATION, auth)
                         .header(headerName, csrfToken)
+                        .header("X-XSRF-TOKEN", csrfToken)
                         .cookie(xsrfCookie)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("API Client Project", "Created via CSRF flow"))))
