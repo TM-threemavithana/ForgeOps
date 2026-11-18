@@ -93,8 +93,8 @@ public class SecurityConfig {
                                 if ("POST".equalsIgnoreCase(method) && "/api/v1/accounts".equals(uri)) {
                                     return true;
                                 }
-                                // 2. Observability & infrastructure probes
-                                return uri != null && uri.startsWith("/actuator");
+                                // 2. Observability & infrastructure probes (strictly read-only GET requests)
+                                return uri != null && uri.startsWith("/actuator") && "GET".equalsIgnoreCase(method);
                         })
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -198,9 +198,7 @@ public class SecurityConfig {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
 
-            String detail = (accessDeniedException != null && accessDeniedException.getMessage() != null)
-                    ? accessDeniedException.getClass().getSimpleName() + ": " + accessDeniedException.getMessage()
-                    : "You do not possess the required permissions to access this resource.";
+            String detail = "You do not possess the required permissions to access this resource.";
 
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.FORBIDDEN,

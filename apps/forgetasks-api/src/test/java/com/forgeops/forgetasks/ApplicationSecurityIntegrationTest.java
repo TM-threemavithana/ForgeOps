@@ -219,7 +219,10 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("CSRF Project", "Malicious"))))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Forbidden"));
+                .andExpect(jsonPath("$.title").value("Forbidden"))
+                .andExpect(jsonPath("$.detail").value("You do not possess the required permissions to access this resource."))
+                .andExpect(jsonPath("$.type").value("https://forgeops.local/errors/forbidden"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Exception"))));
     }
 
     @Test
@@ -343,5 +346,19 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("API Client Project", "Created via CSRF flow"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("API Client Project"));
+    }
+
+    @Test
+    @DisplayName("AppSec: CSRF Protection - State-changing requests to /actuator are not exempted from CSRF protection")
+    void shouldEnforceCsrfOnStateChangingActuatorRequests() throws Exception {
+        // Attempt state-changing POST to /actuator endpoint without CSRF token
+        mockMvc.perform(post("/actuator/loggers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Forbidden"))
+                .andExpect(jsonPath("$.detail").value("You do not possess the required permissions to access this resource."))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Exception"))));
     }
 }
