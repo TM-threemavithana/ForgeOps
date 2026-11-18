@@ -1,0 +1,75 @@
+# ForgeOps Gate G09: Static Application Security Testing (SAST) Ruleset
+# High-confidence rules for Java and Spring Boot applications
+rules:
+  - id: forgeops.java.security.sql-injection
+    languages: [java]
+    message: "Detected potential SQL/JPQL injection via dynamic string concatenation in query construction. Use parameterized queries or typed JPA criteria queries."
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $STMT.executeQuery($X + $Y)
+          - pattern: $STMT.executeUpdate($X + $Y)
+          - pattern: $EM.createQuery($X + $Y)
+          - pattern: $EM.createNativeQuery($X + $Y)
+          - pattern: $EM.createQuery($X + $Y, $CLZ)
+          - pattern: $EM.createNativeQuery($X + $Y, $CLZ)
+
+  - id: forgeops.java.security.command-injection
+    languages: [java]
+    message: "Detected invocation of system command execution via Runtime.getRuntime().exec() or ProcessBuilder with dynamic arguments. Avoid invoking OS shells directly."
+    severity: ERROR
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: Runtime.getRuntime().exec($CMD + $ARG)
+          - pattern: Runtime.getRuntime().exec(new String[] {..., $CMD + $ARG, ...})
+          - pattern: new ProcessBuilder($CMD + $ARG, ...)
+
+  - id: forgeops.java.security.weak-crypto
+    languages: [java]
+    message: "Detected usage of broken or deprecated cryptographic algorithm (DES, RC4, Blowfish). Use AES-GCM (e.g., 'AES/GCM/NoPadding') with secure key sizes."
+    severity: ERROR
+    metadata:
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+    patterns:
+      - pattern: Cipher.getInstance($ALG, ...)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: ".*(DES|DESede|RC4|Blowfish).*"
+
+  - id: forgeops.java.security.insecure-hash
+    languages: [java]
+    message: "Detected usage of weak or deprecated hash algorithm (MD5, SHA-1). Use SHA-256 or SHA-512 for digest operations, or BCrypt/Argon2 for passwords."
+    severity: ERROR
+    metadata:
+      cwe: "CWE-328: Use of Weak Hash"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+    patterns:
+      - pattern: MessageDigest.getInstance($ALG, ...)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: ".*(MD5|SHA-1|SHA1).*"
+
+  - id: forgeops.java.security.path-traversal
+    languages: [java]
+    message: "Detected unvalidated filesystem path creation from concatenated input. Validate and normalize paths against a canonical base directory."
+    severity: ERROR
+    metadata:
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: new File($BASE + $INPUT)
+          - pattern: Paths.get($BASE + $INPUT)
+          - pattern: Path.of($BASE + $INPUT)

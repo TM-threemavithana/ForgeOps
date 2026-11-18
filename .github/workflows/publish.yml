@@ -129,7 +129,7 @@ jobs:
           echo "semver_tag=$CLEAN_SEMVER" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository master
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: master
           fetch-depth: 0
@@ -243,17 +243,17 @@ jobs:
 
     steps:
       - name: Checkout verified commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ needs.validate-release.outputs.validated_sha }}
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.9.0
 
       - name: Extract Docker metadata (tags and labels)
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
           images: ${{ needs.validate-release.outputs.canonical_image }}
           tags: |
@@ -269,7 +269,7 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
 
       - name: Build candidate container image (build once, load locally)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         id: build-candidate
         with:
           context: apps/forgetasks-api
@@ -301,7 +301,7 @@ jobs:
           echo "============================================================"
 
       - name: Run Trivy security gate on candidate image (CRITICAL & HIGH block)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: forgetasks-api:candidate-${{ github.run_id }}
           format: table
@@ -311,7 +311,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Generate Trivy SARIF report for candidate image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         if: always()
         with:
           image-ref: forgetasks-api:candidate-${{ github.run_id }}
@@ -322,7 +322,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Upload pre-publish SARIF to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
         if: always()
         with:
           sarif_file: trivy-candidate.sarif
@@ -330,21 +330,21 @@ jobs:
         continue-on-error: true
 
       - name: Generate CycloneDX SBOM for candidate image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: forgetasks-api:candidate-${{ github.run_id }}
           format: cyclonedx
           output: forgetasks-api-sbom.cdx.json
 
       - name: Upload candidate SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: sbom-cyclonedx-${{ needs.validate-release.outputs.short_sha }}
           path: forgetasks-api-sbom.cdx.json
           retention-days: 30
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -504,7 +504,7 @@ jobs:
           echo "  ${CANONICAL_IMAGE}@${PRIMARY_DIGEST}"
 
       - name: Attest build provenance (SLSA)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
         with:
           subject-name: ${{ needs.validate-release.outputs.canonical_image }}
           subject-digest: ${{ steps.publish-digest.outputs.digest }}
