@@ -160,20 +160,20 @@ Gate **G09.3 — Application Security & DAST** establishes application-level sec
 - **Gate G14 Kyverno Policy-as-Code**: 7/7 test suites passed.
 - **Gate G14 SOPS + age Encrypted Secrets**: 6/6 test suites passed.
 
-### 4.3 Remote CI Verification (GitHub Actions Run 44129292040 on PR #60)
-All 12 CI jobs executed and passed 100% on Pull Request [#60](https://github.com/TM-threemavithana/ForgeOps/pull/60) (Commit: [`4e492bb`](https://github.com/TM-threemavithana/ForgeOps/commit/4e492bb)):
-- **Build and Test (Java 21)**: `pass` (51s) — Surefire unit/integration tests and JaCoCo line/branch coverage gates (including 10 AppSec tests).
-- **Docker Build Validation**: `pass` (1m7s) — Multi-stage build and non-root execution verification.
-- **Secret Leak Detection (Gitleaks)**: `pass` (10s) — Clean scan across full Git history.
-- **Trivy Security Scan**: `pass` (1m45s) — Zero HIGH/CRITICAL vulnerabilities in container filesystem.
-- **Maven Dependency Scan (Trivy)**: `pass` (44s) — Zero vulnerable library dependencies.
-- **Semgrep SAST Security Scan**: `pass` (1m4s) — Zero security violations across application source.
-- **Checkov IaC Security Scan**: `pass` (45s) — Zero blocking findings on Terraform modules.
+### 4.3 Remote CI Verification (GitHub Actions Run 44230769615 on PR #60)
+All 12 CI jobs executed and passed 100% on Pull Request [#60](https://github.com/TM-threemavithana/ForgeOps/pull/60) (Commit: [`cb66b3d`](https://github.com/TM-threemavithana/ForgeOps/commit/cb66b3d)):
+- **Build and Test (Java 21)**: `pass` (58s) — Surefire unit/integration tests and JaCoCo line/branch coverage gates (including 12 AppSec tests verifying headers, CORS, fail-closed CSRF, and BOLA/IDOR).
+- **Docker Build Validation**: `pass` (54s) — Multi-stage build and non-root execution verification.
+- **Secret Leak Detection (Gitleaks)**: `pass` (6s) — Clean scan across full Git history.
+- **Trivy Security Scan**: `pass` (1m41s) — Zero HIGH/CRITICAL vulnerabilities in container filesystem.
+- **Maven Dependency Scan (Trivy)**: `pass` (30s) — Zero vulnerable library dependencies.
+- **Semgrep SAST Security Scan**: `pass` (1m16s) — Zero security violations across application source.
+- **Checkov IaC Security Scan**: `pass` (38s) — Zero blocking findings on Terraform modules.
 - **Hadolint Dockerfile Linter**: `pass` (6s) — Strict container best-practice compliance.
 - **SRE & DR Hardening Validation**: `pass` (24s) — G12 and G13 automation suites.
-- **Security Policy & Secrets Validation**: `pass` (27s) — Kyverno CLI and SOPS/age decryption test suites.
-- **OWASP ZAP Baseline DAST Scan**: `pass` (2m5s) — Ephemeral PostgreSQL + API + ZAP container scan in Safe Mode (`-S`) with OpenAPI 3.0.3 route discovery, fail-closed report integrity validation, and 0 HIGH/MEDIUM alerts.
-- **CI Gate**: `pass` (4s) — Aggregated status gate permitting pull request merge.
+- **Security Policy & Secrets Validation**: `pass` (25s) — Kyverno CLI and SOPS/age decryption test suites.
+- **OWASP ZAP Baseline DAST Scan**: `pass` (1m58s) — Ephemeral PostgreSQL + API + ZAP container scan in Safe Mode (`-S`) with OpenAPI 3.0.3 route discovery, fail-closed report integrity validation, and 0 HIGH/MEDIUM alerts.
+- **CI Gate**: `pass` (2s) — Aggregated status gate permitting pull request merge.
 
 ---
 
@@ -181,7 +181,7 @@ All 12 CI jobs executed and passed 100% on Pull Request [#60](https://github.com
 
 | Rule ID | Alert Description | ZAP Risk Code | Action in ForgeOps | Technical Justification |
 | :---: | :--- | :---: | :---: | :--- |
-| `10020` | Anti-CSRF Tokens Check | Medium | `IGNORE` | ForgeTasks API is a stateless REST API using HTTP Basic and Authorization headers. It does not issue session cookies or stateful browser sessions, rendering CSRF attacks inapplicable. |
+| `10020` | Anti-CSRF Tokens Check | Medium | `IGNORE` | ForgeTasks API enforces fail-closed double-submit cookie CSRF validation (`CookieCsrfTokenRepository` with `GET /api/v1/csrf`) for all state-changing operations across browser clients and SPAs. In ZAP passive API baseline crawling, unauthenticated GET endpoints do not require anti-CSRF tokens, and ambient browser sessions (`JSESSIONID`) are disabled (`SessionCreationPolicy.STATELESS`), with `WWW-Authenticate: Basic` suppressed to prevent browser credential caching. Active CSRF defense is verified by `ApplicationSecurityIntegrationTest`. |
 | `10021` | X-Content-Type-Options Header Missing | Low | `FAIL` | Enforced `nosniff` via Spring Security header writer. Prevents MIME-sniffing attacks. |
 | `10038` | Content Security Policy (CSP) Header Not Set | Medium | `FAIL` | Enforced strict `default-src 'self'; frame-ancestors 'none'; object-src 'none'` in `SecurityConfig.java`. Mitigates XSS and UI redress. |
 | `10049` | Storable and Cacheable Content | Low | `IGNORE` | API responses include resource-specific cache semantics (e.g. ETag and versioning). Static global no-cache on all endpoints conflicts with HTTP conditional validation. |
