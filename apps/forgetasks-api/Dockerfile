@@ -3,9 +3,9 @@
 # Aligned with ForgeOps Gate G02 Containerization and Security Baseline
 
 # ------------------------------------------------------------------------------
-# Stage 1: Build stage
+# Stage 1: Build stage (pinned immutable multi-arch digest)
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM eclipse-temurin:21-jdk-alpine@sha256:82801f9dcdcbad5a05082aba8c86d1da5b72ccb498e71318b1f91b5a477887b3 AS builder
 
 WORKDIR /build
 
@@ -24,9 +24,9 @@ COPY src/ src/
 RUN ./mvnw clean package -DskipTests -B
 
 # ------------------------------------------------------------------------------
-# Stage 2: Minimal hardened runtime stage
+# Stage 2: Minimal hardened runtime stage (pinned immutable multi-arch digest)
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:21-jre-alpine@sha256:ac05c3c42b7c2f1a52c9bd52f01041fa1958231b15ebeae7420429cbc5baf474 AS runtime
 
 # OCI Image Annotations (Standardized Metadata)
 LABEL org.opencontainers.image.title="ForgeTasks API" \
