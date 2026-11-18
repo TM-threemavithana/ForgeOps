@@ -5,7 +5,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Build stage (pinned immutable multi-arch digest)
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-alpine@sha256:82801f9dcdcbad5a05082aba8c86d1da5b72ccb498e71318b1f91b5a477887b3 AS builder
+FROM eclipse-temurin:25-jdk-alpine@sha256:c7c3d0bdf7f2bbc5a05a6712ed334d198360105634ea9adf76fca94f381b1e3f AS builder
 
 WORKDIR /build
 
@@ -26,7 +26,7 @@ RUN ./mvnw clean package -DskipTests -B
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal hardened runtime stage (pinned immutable multi-arch digest)
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine@sha256:ac05c3c42b7c2f1a52c9bd52f01041fa1958231b15ebeae7420429cbc5baf474 AS runtime
+FROM eclipse-temurin:25-jre-alpine@sha256:e1898fd6a11fc965a994d8ace186fd3585aeb636cf8f05f47a723fcfee0b0918 AS runtime
 
 # OCI Image Annotations (Standardized Metadata)
 LABEL org.opencontainers.image.title="ForgeTasks API" \
