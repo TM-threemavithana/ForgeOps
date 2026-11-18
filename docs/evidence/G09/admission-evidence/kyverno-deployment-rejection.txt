@@ -1,0 +1,19 @@
+# ForgeOps Gate G09.4 Live Admission Evidence: Controller-Level (Deployment) Admission Rejection
+Fixture: tests/fixtures/security/admission/kyverno/fail-deployment-insecure.yaml
+Description: Deliberately insecure Deployment with mutable image tag and missing security context
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 06:25:06 UTC
+Exit Code: 1 (Admission Webhook Denied)
+
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/fail-deployment-insecure.yaml
+
+--- Raw Webhook Response ---
+Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-deployment-insecure.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest failed: An immutable image digest (@sha256:...) is required for all containers.; Policy disallow-privileged-workloads failed: Privilege escalation is strictly forbidden (allowPrivilegeEscalation must be false).; Policy require-restricted-security-context failed: Workloads must enforce runAsNonRoot=true at the pod or container securityContext.
+
+
+--- Zero-Workload-Leakage Verification ---
+Deployments in forgeops-g09-kyverno:
+
+Pods in forgeops-g09-kyverno:
+

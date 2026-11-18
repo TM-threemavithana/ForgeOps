@@ -1,19 +1,80 @@
-$ kubectl apply -f tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
-pod/test-kyverno-pass-compliant created
+# ForgeOps Gate G09.4 Live Admission Evidence: Kyverno Compliant Pod Acceptance
+Fixture: tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 06:25:04 UTC
+Exit Code: 0 (Admission Webhook Accepted & Executed)
 
-$ kubectl get pod test-kyverno-pass-compliant -n forgeops-g09-kyverno -o wide --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml
+
+--- Pod Execution Status ---
 NAME                          READY   STATUS      RESTARTS   AGE   IP           NODE                                  NOMINATED NODE   READINESS GATES
-test-kyverno-pass-compliant   0/1     Completed   0          29s   10.244.0.8   forgeops-g09-security-control-plane   <none>           <none>
+test-kyverno-pass-compliant   0/1     Completed   0          7s    10.244.0.8   forgeops-g09-security-control-plane   <none>           <none>
 
-$ kubectl logs test-kyverno-pass-compliant -n forgeops-g09-kyverno --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+
+--- Pod Logs ---
 Kyverno compliant workload admitted and running
 
-$ kubectl get pod test-kyverno-pass-compliant -n forgeops-g09-kyverno -o jsonpath='{.spec.securityContext}' --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
-{"fsGroup":10001,"runAsGroup":10001,"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}}
 
-Exit Code: 0
-Workload Created: True
-Workload Status: Completed (Exit code 0)
-Workload Output: Kyverno compliant workload admitted and running
-Policy Layer: Kyverno Admission Webhook (validate.kyverno.svc-fail)
-Verification: Admitted via webhook, executed as non-root UID 10001 with seccomp RuntimeDefault, allowPrivilegeEscalation=false, capabilities.drop=[ALL], immutable image digest verified.
+--- Pod Describe Details ---
+Name:             test-kyverno-pass-compliant
+Namespace:        forgeops-g09-kyverno
+Priority:         0
+Service Account:  default
+Node:             forgeops-g09-security-control-plane/172.18.0.2
+Start Time:       Wed, 18 Nov 2026 11:54:57 +0530
+Labels:           app.kubernetes.io/name=test-kyverno-pass-compliant
+                  forgeops.dev/fixture=positive
+Annotations:      <none>
+Status:           Running
+SeccompProfile:   RuntimeDefault
+IP:               10.244.0.8
+IPs:
+  IP:  10.244.0.8
+Containers:
+  test-container:
+    Container ID:  containerd://b4ccdbe91474cae675f991ac6a2be67d73957ce1975732fb8dab7ba83ad03e71
+    Image:         alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+    Image ID:      docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo 'Kyverno compliant workload admitted and running' && sleep 5
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 18 Nov 2026 11:54:58 +0530
+      Finished:     Wed, 18 Nov 2026 11:55:03 +0530
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-5x49p (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-5x49p:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  6s    default-scheduler  Successfully assigned forgeops-g09-kyverno/test-kyverno-pass-compliant to forgeops-g09-security-control-plane
+  Normal  Pulled     6s    kubelet            Container image "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc" already present on machine
+  Normal  Created    6s    kubelet            Created container: test-container
+  Normal  Started    6s    kubelet            Started container test-container
+

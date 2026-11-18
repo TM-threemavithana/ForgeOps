@@ -1,5 +1,5 @@
-apiVersion: kyverno.io/v1
-kind: Policy
+apiVersion: policies.kyverno.io/v1
+kind: NamespacedValidatingPolicy
 metadata:
   name: require-restricted-security-context
   namespace: forgeops-g09-kyverno
@@ -7,29 +7,48 @@ metadata:
     policies.kyverno.io/title: Require Restricted Security Context
     policies.kyverno.io/category: Pod Security Standards (Restricted)
     policies.kyverno.io/severity: high
-    policies.kyverno.io/description: Workloads must run as non-root, drop ALL Linux capabilities, and enable RuntimeDefault seccomp.
+    policies.kyverno.io/description: Workloads must run as non-root, drop ALL Linux capabilities, disable privilege escalation, and enable RuntimeDefault seccomp.
 spec:
-  validationFailureAction: Enforce
-  background: false
-  rules:
-    - name: check-security-context
-      match:
-        any:
-          - resources:
-              kinds:
-                - Pod
-      validate:
-        message: "Workloads must run as non-root with capabilities dropped to ALL and seccomp RuntimeDefault."
-        pattern:
-          spec:
-            =(securityContext):
-              runAsNonRoot: true
-              =(seccompProfile):
-                type: "RuntimeDefault"
-            containers:
-              - securityContext:
-                  allowPrivilegeEscalation: false
-                  runAsNonRoot: true
-                  capabilities:
-                    drop:
-                      - ALL
+  validationActions:
+    - Deny
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - deployments
+  variables:
+    - name: podSpec
+      expression: "object.kind == 'Pod' ? object.spec : object.spec.template.spec"
+  validations:
+    - expression: >-
+        ((has(variables.podSpec.securityContext) && variables.podSpec.securityContext != null && has(variables.podSpec.securityContext.runAsNonRoot) && variables.podSpec.securityContext.runAsNonRoot == true) ||
+         variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot == true))
+      message: "Workloads must enforce runAsNonRoot=true at the pod or container securityContext."
+    - expression: >-
+        ((has(variables.podSpec.securityContext) && variables.podSpec.securityContext != null && has(variables.podSpec.securityContext.seccompProfile) && variables.podSpec.securityContext.seccompProfile != null && variables.podSpec.securityContext.seccompProfile.type == 'RuntimeDefault') ||
+         variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.seccompProfile) && c.securityContext.seccompProfile != null && c.securityContext.seccompProfile.type == 'RuntimeDefault'))
+      message: "Workloads must set seccompProfile.type=RuntimeDefault at the pod or container securityContext."
+    - expression: >-
+        variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false) &&
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false))
+      message: "Containers must disable privilege escalation (allowPrivilegeEscalation=false)."
+    - expression: >-
+        variables.podSpec.containers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.capabilities) && c.securityContext.capabilities != null && has(c.securityContext.capabilities.drop) && c.securityContext.capabilities.drop.exists(d, d == 'ALL')) &&
+        (!has(variables.podSpec.initContainers) || variables.podSpec.initContainers == null || variables.podSpec.initContainers.all(c, has(c.securityContext) && c.securityContext != null && has(c.securityContext.capabilities) && c.securityContext.capabilities != null && has(c.securityContext.capabilities.drop) && c.securityContext.capabilities.drop.exists(d, d == 'ALL')))
+      message: "Containers must explicitly drop ALL Linux capabilities (capabilities.drop: [ALL])."

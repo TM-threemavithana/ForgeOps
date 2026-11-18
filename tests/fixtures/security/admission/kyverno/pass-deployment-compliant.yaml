@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-kyverno-pass-deployment
+  namespace: forgeops-g09-kyverno
+  labels:
+    app.kubernetes.io/name: test-kyverno-pass-deployment
+    forgeops.dev/fixture: positive-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-kyverno-pass-deployment
+  template:
+    metadata:
+      labels:
+        app: test-kyverno-pass-deployment
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          command: ["sh", "-c", "echo 'Kyverno compliant deployment running' && sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL

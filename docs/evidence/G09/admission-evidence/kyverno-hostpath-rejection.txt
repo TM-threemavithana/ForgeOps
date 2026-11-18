@@ -1,13 +1,18 @@
-$ kubectl apply -f tests/fixtures/security/admission/kyverno/fail-hostpath.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
-Error from server: error when creating "tests/fixtures/security/admission/kyverno/fail-hostpath.yaml": admission webhook "validate.kyverno.svc-fail" denied the request: 
+# ForgeOps Gate G09.4 Live Admission Evidence: Kyverno CEL Webhook Rejection
+Policy: disallow-hostpath
+Fixture: tests/fixtures/security/admission/kyverno/fail-hostpath.yaml
+Description: Admission Rejection of hostPath Volume Mount
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 06:24:54 UTC
+Exit Code: 1 (Admission Webhook Denied)
 
-resource Pod/forgeops-g09-kyverno/test-kyverno-fail-hostpath was blocked due to the following policies 
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/fail-hostpath.yaml
 
-disallow-hostpath:
-  check-hostpath-volumes: 'validation error: HostPath volume mounts are disallowed for security isolation. rule check-hostpath-volumes failed at path /spec/volumes/0/hostPath/'
+--- Raw Webhook Response ---
+Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-hostpath.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-hostpath failed: hostPath volumes are prohibited in ForgeOps.
 
-Exit Code: 1
-Workload Created: False
-Policy Responsible: disallow-hostpath (Rule: check-hostpath-volumes)
-Admission Controller: Kyverno Admission Webhook (validate.kyverno.svc-fail)
-Enforcement Mode: Enforce (Blocking admission)
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-kyverno:
+

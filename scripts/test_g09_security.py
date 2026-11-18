@@ -576,7 +576,7 @@ def test_appsec_configuration_and_headers():
     print("  [PASS] Application security configuration, security headers, CORS, and BOLA/IDOR tests verified.")
 
 def test_kyverno_g09_policies_syntax():
-    print("--> Test 17: Validating Kyverno G09.4 namespaced policies syntax and schema...")
+    print("--> Test 17: Validating Kyverno G09.4 namespaced policies syntax and schema (CEL API)...")
     pol_dir = os.path.join(REPO_ROOT, "security", "admission", "kyverno", "policies")
     assert os.path.isdir(pol_dir), f"Missing {pol_dir}"
     policies = [f for f in os.listdir(pol_dir) if f.endswith(".yaml") or f.endswith(".yml")]
@@ -596,20 +596,21 @@ def test_kyverno_g09_policies_syntax():
             docs = list(yaml.safe_load_all(f))
         assert len(docs) > 0, f"Empty policy {pf}"
         doc = docs[0]
-        assert doc.get("apiVersion") == "kyverno.io/v1", f"{pf} missing apiVersion kyverno.io/v1"
-        assert doc.get("kind") in ["Policy", "ClusterPolicy"], f"{pf} invalid kind"
+        assert doc.get("apiVersion") == "policies.kyverno.io/v1", f"{pf} missing apiVersion policies.kyverno.io/v1"
+        assert doc.get("kind") in ["NamespacedValidatingPolicy", "ValidatingPolicy"], f"{pf} invalid kind {doc.get('kind')}"
         name = doc.get("metadata", {}).get("name")
         found_names.add(name)
-        assert doc.get("spec", {}).get("validationFailureAction") == "Enforce", f"{pf} must Enforce"
-        assert len(doc.get("spec", {}).get("rules", [])) > 0, f"{pf} missing rules"
+        val_actions = doc.get("spec", {}).get("validationActions", [])
+        assert "Deny" in val_actions, f"{pf} must include 'Deny' in validationActions"
+        assert len(doc.get("spec", {}).get("validations", [])) > 0, f"{pf} missing validations"
 
     for req_name in required_policies:
         assert req_name in found_names, f"Missing required policy {req_name}"
 
-    print(f"  [PASS] All {len(found_names)} G09.4 Kyverno policies validated with Enforce failure action.")
+    print(f"  [PASS] All {len(found_names)} G09.4 Kyverno policies validated under policies.kyverno.io/v1 (CEL).")
 
 def test_kyverno_g09_cli_fixtures():
-    print("--> Test 18: Verifying Kyverno CLI synthetic rejection & compliant acceptance...")
+    print("--> Test 18: Verifying Kyverno CLI synthetic rejection & compliant acceptance with zero deprecation warnings...")
     kyverno_bin = resolve_bin("kyverno", ["~/.local/bin/kyverno"])
     if not kyverno_bin:
         print("  [WARN] kyverno CLI binary not available. Marking live CLI scan as UNVERIFIED locally.")
@@ -618,30 +619,32 @@ def test_kyverno_g09_cli_fixtures():
     pol_dir = os.path.join(REPO_ROOT, "security", "admission", "kyverno", "policies")
     fix_dir = os.path.join(REPO_ROOT, "tests", "fixtures", "security", "admission", "kyverno")
 
-    # Negative fixtures
+    # Negative fixtures (Pods and Controller)
     negative_fixtures = [
         "fail-mutable-tag.yaml",
         "fail-hostpath.yaml",
         "fail-privileged.yaml",
         "fail-security-context.yaml",
+        "fail-deployment-insecure.yaml",
     ]
     for nfix in negative_fixtures:
-        res = subprocess.run([kyverno_bin, "apply", pol_dir, "--resource", os.path.join(fix_dir, nfix)],
+        res = subprocess.run([kyverno_bin, "apply", pol_dir, "--resource", os.path.join(fix_dir, nfix), "--warnings-as-errors"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         assert res.returncode != 0, f"Expected rejection for {nfix}, but passed!"
-        assert "fail: 1" in res.stdout or "fail: 2" in res.stdout, f"Unexpected result for {nfix}: {res.stdout}"
+        assert "fail: 1" in res.stdout or "fail: 2" in res.stdout or "fail: 3" in res.stdout, f"Unexpected result for {nfix}: {res.stdout}"
 
-    # Positive fixture
-    pass_fix = os.path.join(fix_dir, "pass-compliant-workload.yaml")
-    res = subprocess.run([kyverno_bin, "apply", pol_dir, "--resource", pass_fix],
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    assert res.returncode == 0, f"Expected acceptance for {pass_fix}: {res.stderr}\n{res.stdout}"
-    assert "fail: 0" in res.stdout and "pass: 4" in res.stdout, f"Unexpected result: {res.stdout}"
+    # Positive compliant fixtures (Pod and Controller)
+    for pass_fix_name in ["pass-compliant-workload.yaml", "pass-deployment-compliant.yaml"]:
+        pass_fix = os.path.join(fix_dir, pass_fix_name)
+        res = subprocess.run([kyverno_bin, "apply", pol_dir, "--resource", pass_fix, "--warnings-as-errors"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        assert res.returncode == 0, f"Expected acceptance for {pass_fix}: {res.stderr}\n{res.stdout}"
+        assert "fail: 0" in res.stdout and "pass: 4" in res.stdout, f"Unexpected result: {res.stdout}"
 
-    print("  [PASS] Kyverno CLI synthetic rejection and positive compliant acceptance verified.")
+    print("  [PASS] Kyverno CLI synthetic rejection, controller-level rejection, and positive compliant acceptance verified (zero deprecation warnings).")
 
 def test_psa_fixtures_and_namespaces():
-    print("--> Test 19: Validating Pod Security Admission (PSA) Restricted namespace & fixtures...")
+    print("--> Test 19: Validating Pod Security Admission (PSA) Restricted namespace & fixtures (pinned v1.34)...")
     psa_ns = os.path.join(REPO_ROOT, "security", "admission", "namespaces", "psa-namespace.yaml")
     assert os.path.isfile(psa_ns), f"Missing {psa_ns}"
     with open(psa_ns, "r", encoding="utf-8") as f:
@@ -650,36 +653,45 @@ def test_psa_fixtures_and_namespaces():
     assert labels.get("pod-security.kubernetes.io/enforce") == "restricted", "PSA enforce must be restricted"
     assert labels.get("pod-security.kubernetes.io/warn") == "restricted", "PSA warn must be restricted"
     assert labels.get("pod-security.kubernetes.io/audit") == "restricted", "PSA audit must be restricted"
+    assert labels.get("pod-security.kubernetes.io/enforce-version") == "v1.34", "PSA enforce-version must be v1.34"
+    assert labels.get("pod-security.kubernetes.io/warn-version") == "v1.34", "PSA warn-version must be v1.34"
+    assert labels.get("pod-security.kubernetes.io/audit-version") == "v1.34", "PSA audit-version must be v1.34"
 
     psa_fix_dir = os.path.join(REPO_ROOT, "tests", "fixtures", "security", "admission", "psa")
     for fix_name in ["fail-privileged.yaml", "fail-host-namespaces.yaml", "fail-hostpath.yaml", "fail-missing-security-context.yaml", "pass-restricted-workload.yaml"]:
         p = os.path.join(psa_fix_dir, fix_name)
         assert os.path.isfile(p), f"Missing PSA fixture {fix_name}"
 
-    print("  [PASS] PSA namespace labels and fixtures schema verified.")
+    print("  [PASS] PSA namespace labels (pinned v1.34) and fixtures schema verified.")
 
 def test_live_admission_evidence():
     print("--> Test 20: Validating recorded live admission evidence files...")
     ev_dir = os.path.join(REPO_ROOT, "docs", "evidence", "G09", "admission-evidence")
-    expected_files = [
-        "webhook-readiness.txt",
-        "psa-privileged-rejection.txt",
-        "psa-host-namespaces-rejection.txt",
-        "psa-hostpath-rejection.txt",
-        "psa-missing-context-rejection.txt",
-        "psa-compliant-acceptance.txt",
-        "kyverno-mutable-tag-rejection.txt",
-        "kyverno-hostpath-rejection.txt",
-        "kyverno-privileged-rejection.txt",
-        "kyverno-security-context-rejection.txt",
-        "kyverno-compliant-acceptance.txt",
+    expected_evidence = [
+        ("webhook-readiness.txt", ["Kyverno Admission Controller Pods", "NamespacedValidatingPolicy"]),
+        ("psa-privileged-rejection.txt", ["violates PodSecurity", "restricted"]),
+        ("psa-host-namespaces-rejection.txt", ["violates PodSecurity", "restricted"]),
+        ("psa-hostpath-rejection.txt", ["violates PodSecurity", "restricted"]),
+        ("psa-missing-context-rejection.txt", ["violates PodSecurity", "restricted"]),
+        ("psa-compliant-acceptance.txt", ["Exit Code: 0", "Completed"]),
+        ("kyverno-mutable-tag-rejection.txt", ["denied the request", "require-image-digest"]),
+        ("kyverno-hostpath-rejection.txt", ["denied the request", "disallow-hostpath"]),
+        ("kyverno-privileged-rejection.txt", ["denied the request", "disallow-privileged-workloads"]),
+        ("kyverno-security-context-rejection.txt", ["denied the request", "require-restricted-security-context"]),
+        ("kyverno-compliant-acceptance.txt", ["Exit Code: 0", "Completed"]),
+        ("kyverno-deployment-rejection.txt", ["denied the request", "fail-deployment-insecure.yaml"]),
+        ("kyverno-deployment-acceptance.txt", ["Exit Code: 0", "deployment"]),
     ]
-    for ef in expected_files:
+    for ef, snippets in expected_evidence:
         path = os.path.join(ev_dir, ef)
         assert os.path.isfile(path), f"Missing admission evidence file {ef}"
-        assert os.path.getsize(path) > 50, f"Evidence file {ef} too small"
+        assert os.path.getsize(path) > 100, f"Evidence file {ef} too small"
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        for snip in snippets:
+            assert snip in content, f"Evidence file {ef} missing expected snippet '{snip}'"
 
-    print("  [PASS] All 11 live admission evidence artifacts verified.")
+    print(f"  [PASS] All {len(expected_evidence)} live admission evidence artifacts verified.")
 
 def main():
     print("===================================================================")

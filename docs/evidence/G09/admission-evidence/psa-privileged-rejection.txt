@@ -1,5 +1,17 @@
-$ kubectl apply -f tests/fixtures/security/admission/psa/fail-privileged.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
-Error from server (Forbidden): error when creating "tests/fixtures/security/admission/psa/fail-privileged.yaml": pods "test-psa-fail-privileged" is forbidden: violates PodSecurity "restricted:latest": privileged (container "test-container" must not set securityContext.privileged=true), allowPrivilegeEscalation != false (container "test-container" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "test-container" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "test-container" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "test-container" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
-Exit Code: 1
-Workload Created: False
-Policy Layer: Kubernetes Built-in Pod Security Admission (PSA Restricted)
+# ForgeOps Gate G09.4 Live Admission Evidence: PSA Restricted Rejection
+Fixture: tests/fixtures/security/admission/psa/fail-privileged.yaml
+Description: Rejection of Privileged & Privilege Escalation
+Namespace: forgeops-g09-psa
+Date: 2026-11-18 06:24:42 UTC
+Exit Code: 1 (Admission Rejected)
+
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/psa/fail-privileged.yaml
+
+--- Raw API Server Response ---
+Error from server (Forbidden): error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/psa/fail-privileged.yaml": pods "test-psa-fail-privileged" is forbidden: violates PodSecurity "restricted:v1.34": privileged (container "test-container" must not set securityContext.privileged=true), allowPrivilegeEscalation != false (container "test-container" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "test-container" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "test-container" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "test-container" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-psa:
+

@@ -594,19 +594,21 @@ jobs:
             echo "[PASS] Privilege escalation correctly rejected by policy."
           fi
 
-      - name: Run Gate G09.4 Admission Validation Suite
-        run: python3 scripts/test_g09_admission.py
+      - name: Run Gate G09.4 Admission Validation Suite (Evidence Mode)
+        run: python3 scripts/test_g09_admission.py --mode evidence
 
-      - name: Demonstrate Gate G09.4 Kyverno Policy-as-Code Acceptance & Rejection
+      - name: Demonstrate Gate G09.4 Kyverno Policy-as-Code Acceptance & Rejection (Zero Deprecations)
         run: |
-          echo "=== Verifying Gate G09.4 Compliant Workload Acceptance ==="
-          kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml
-          echo "=== Verifying Gate G09.4 Negative Workload Rejections ==="
-          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-mutable-tag.yaml
-          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-hostpath.yaml
-          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-privileged.yaml
-          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-security-context.yaml
-          echo "[PASS] Gate G09.4 policy acceptance and rejections verified."
+          echo "=== Verifying Gate G09.4 Compliant Workload Acceptance (Pods & Deployments) ==="
+          kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml --warnings-as-errors
+          kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/pass-deployment-compliant.yaml --warnings-as-errors
+          echo "=== Verifying Gate G09.4 Negative Workload Rejections (Pods & Deployments) ==="
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-mutable-tag.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-hostpath.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-privileged.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-security-context.yaml --warnings-as-errors
+          ! kyverno apply security/admission/kyverno/policies/ --resource tests/fixtures/security/admission/kyverno/fail-deployment-insecure.yaml --warnings-as-errors
+          echo "[PASS] Gate G09.4 CEL policy acceptance and rejections verified with zero deprecation warnings."
 
   # ---------------------------------------------------------------------------
   # Job 11: OWASP ZAP Baseline DAST Scan (Gate G09.3)

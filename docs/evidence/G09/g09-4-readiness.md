@@ -12,13 +12,16 @@
 
 ## 1. Executive Summary
 
-Gate G09.4 establishes production-grade Kubernetes admission security controls in ForgeOps, proving that insecure workloads are rejected **at admission time** by the Kubernetes API server and dynamic admission webhooks, rather than merely relying on static linting or pre-commit checks.
+Gate G09.4 establishes production-inspired Kubernetes admission security controls in ForgeOps, proving that insecure workloads are rejected **at admission time** by the Kubernetes API server and dynamic admission webhooks, rather than merely relying on static linting or pre-commit checks.
 
 The implementation introduces two complementary security enforcement layers:
-1. **Kubernetes Pod Security Admission (PSA):** In-tree admission controller enforcing the Kubernetes `restricted` Pod Security Standard profile.
-2. **Kyverno Admission Controller & Dynamic Webhooks:** Production-grade Kubernetes-native policy engine (v1.19.2) deployed via Helm (chart v3.9.2), enforcing 4 custom namespaced security policies via `ValidatingWebhookConfiguration`.
+1. **Kubernetes Pod Security Admission (PSA):** In-tree admission controller enforcing the Kubernetes `restricted` Pod Security Standard profile pinned to Kubernetes version `v1.34` (`enforce-version: v1.34`, `warn-version: v1.34`, `audit-version: v1.34`) in the isolated namespace `forgeops-g09-psa`.
+2. **Kyverno Admission Controller & Dynamic Webhooks (CEL-based):** Production-oriented local policy engine (v1.19.2) deployed via Helm (chart v3.9.2), enforcing 4 custom namespaced security policies under the modern, non-deprecated CEL-based API (`policies.kyverno.io/v1`, kind `NamespacedValidatingPolicy`) via `ValidatingWebhookConfiguration` on namespace `forgeops-g09-kyverno`.
 
-All negative fixtures were definitively rejected at admission time (0 pods created), and compliant positive workloads were admitted and executed cleanly to completion (`ExitCode: 0`, status `Completed`).
+### Verification Scope Separation
+- **Local Runtime Verification:** Verified against the isolated local cluster `forgeops-g09-security` running Kubernetes v1.34.11 and the live Kyverno validating admission webhook. All 4 negative Pod fixtures and the negative Deployment fixture were blocked by live admission webhooks (0 workloads created), while compliant Pod and Deployment workloads were admitted, launched, and completed/readied successfully.
+- **CI Verification (GitHub Actions):** Enforces policy-as-code linting with `--warnings-as-errors` (confirming zero Kyverno legacy-policy deprecation warnings), fixture compliance matrix validation, and repository-preserved evidence artifact integrity. CI explicitly reports `LIVE ADMISSION TESTS NOT EXECUTED` in runner environments lacking a live cluster.
+- **Repository-Preserved Evidence:** Authentic captured command logs and API/webhook admission responses recorded directly from the isolated local cluster.
 
 ---
 
@@ -32,16 +35,16 @@ All admission controls were tested and verified against a dedicated disposable l
 | **kind** | v0.33.0 | API server loopback bind: `127.0.0.1:6444` |
 | **Kyverno Helm Chart** | v3.9.2 | Official chart repository `https://kyverno.github.io/kyverno/` |
 | **Kyverno App Engine** | v1.19.2 | Image: `ghcr.io/kyverno/kyverno:v1.19.2` |
-| **Kyverno CLI** | v1.19.2 | Go 1.24.0, Linux amd64 |
+| **Kyverno Policy API** | `policies.kyverno.io/v1` | `NamespacedValidatingPolicy` (CEL-based, zero deprecation warnings) |
+| **Kyverno CLI** | v1.19.2 | Go 1.24.0, Linux amd64 (`--warnings-as-errors` verified clean) |
 | **kubectl** | v1.34.11 | Client & Server compatible |
-| **Helm** | v3.19.5 | Helm 3 client |
 | **Compliant Workload Image**| `alpine:3.20` | `docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc` |
 
 ---
 
 ## 3. Dedicated Cluster Configuration & Isolation Architecture
 
-To adhere to the ForgeOps boundary protection rules, the admission security testing used a dedicated cluster defined in [`platform/kind/cluster-config-g09-security.yaml`](file:///c:/Project/ForgeOps/platform/kind/cluster-config-g09-security.yaml):
+To adhere strictly to ForgeOps boundary protection rules, admission security testing was conducted on a dedicated cluster defined in [`platform/kind/cluster-config-g09-security.yaml`](file:///c:/Project/ForgeOps/platform/kind/cluster-config-g09-security.yaml):
 - Cluster Name: `forgeops-g09-security`
 - Kubeconfig Path: `~/.kube/config-g09-security`
 - Context: `kind-forgeops-g09-security`
@@ -55,7 +58,7 @@ To adhere to the ForgeOps boundary protection rules, the admission security test
 
 ## 4. Layer 1: Kubernetes Pod Security Admission (PSA)
 
-### 4.1 Namespace Configuration
+### 4.1 Namespace Configuration (Explicitly Pinned to v1.34)
 The PSA namespace is declared in [`security/admission/namespaces/psa-namespace.yaml`](file:///c:/Project/ForgeOps/security/admission/namespaces/psa-namespace.yaml):
 ```yaml
 apiVersion: v1
@@ -64,80 +67,87 @@ metadata:
   name: forgeops-g09-psa
   labels:
     pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/enforce-version: v1.34
     pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/audit-version: v1.34
     pod-security.kubernetes.io/warn: restricted
-    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/warn-version: v1.34
 ```
 
 ### 4.2 Test Fixtures & Live Admission Rejection Evidence
 All fixtures are stored in [`tests/fixtures/security/admission/psa/`](file:///c:/Project/ForgeOps/tests/fixtures/security/admission/psa/):
 
-| Test Case | Fixture | Target Violation | Live Admission Result | Evidence File |
+| Test Case | Fixture | Target Violation | Live Admission Result | Repository Evidence Artifact |
 |---|---|---|---|---|
-| **PSA-01** | `fail-privileged.yaml` | `privileged: true`, `allowPrivilegeEscalation: true` | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:latest": privileged, allowPrivilegeEscalation != false` | [`psa-privileged-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-privileged-rejection.txt) |
-| **PSA-02** | `fail-host-namespaces.yaml` | `hostNetwork: true`, `hostPID: true`, `hostIPC: true` | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:latest": host namespaces (hostNetwork, hostPID, hostIPC)` | [`psa-host-namespaces-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-host-namespaces-rejection.txt) |
-| **PSA-03** | `fail-hostpath.yaml` | `hostPath` volume mount | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:latest": hostPath volumes (volume "host-volume")` | [`psa-hostpath-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-hostpath-rejection.txt) |
-| **PSA-04** | `fail-missing-security-context.yaml` | Missing `runAsNonRoot`, `seccompProfile`, `drop: [ALL]` | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false, unrestricted capabilities, runAsNonRoot != true, seccompProfile` | [`psa-missing-context-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-missing-context-rejection.txt) |
-| **PSA-05** | `pass-restricted-workload.yaml` | Fully compliant restricted workload (`runAsUser: 10001`, `RuntimeDefault`, `drop: [ALL]`, `readOnlyRootFilesystem: true`) | **ADMITTED & EXECUTED**: Pod created, completed cleanly (`Status: Succeeded`, `ExitCode: 0`, log: `"PSA Restricted workload compliant"`) | [`psa-compliant-acceptance.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-compliant-acceptance.txt) |
+| **PSA-01** | `fail-privileged.yaml` | `privileged: true`, `allowPrivilegeEscalation: true` | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:v1.34": privileged, allowPrivilegeEscalation != false` | [`psa-privileged-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-privileged-rejection.txt) |
+| **PSA-02** | `fail-host-namespaces.yaml` | `hostNetwork: true`, `hostPID: true`, `hostIPC: true` | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:v1.34": host namespaces (hostNetwork, hostPID, hostIPC)` | [`psa-host-namespaces-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-host-namespaces-rejection.txt) |
+| **PSA-03** | `fail-hostpath.yaml` | `hostPath` volume mount | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:v1.34": hostPath volumes (volume "host-volume")` | [`psa-hostpath-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-hostpath-rejection.txt) |
+| **PSA-04** | `fail-missing-security-context.yaml` | Missing `runAsNonRoot`, `seccompProfile`, `drop: [ALL]` | **REJECTED (HTTP 403 Forbidden)**: `violates PodSecurity "restricted:v1.34": allowPrivilegeEscalation != false, unrestricted capabilities, runAsNonRoot != true, seccompProfile` | [`psa-missing-context-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-missing-context-rejection.txt) |
+| **PSA-05** | `pass-restricted-workload.yaml` | Fully compliant restricted workload (`runAsUser: 10001`, `RuntimeDefault`, `drop: [ALL]`, `readOnlyRootFilesystem: true`) | **ADMITTED & EXECUTED**: Pod created, completed cleanly (`Status: Completed`, `ExitCode: 0`, log: `"PSA Restricted workload compliant"`) | [`psa-compliant-acceptance.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/psa-compliant-acceptance.txt) |
 
-**Verification of Zero Pod Leakage:**
+**Verification of Zero Workload Leakage:**
 `kubectl get pods -n forgeops-g09-psa` confirms exactly 0 rejected pods were created.
 
 ---
 
-## 5. Layer 2: Kyverno Admission Controller & Policies
+## 5. Layer 2: Kyverno Admission Controller & CEL-Based Policies
 
 ### 5.1 Deployment & Helm Configuration
 Kyverno v1.19.2 was deployed via Helm chart v3.9.2 using [`security/admission/kyverno/helm/values-dev.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/helm/values-dev.yaml):
 - **Resource Efficiency:** Single admission controller replica with 500m CPU / 512Mi memory limit.
-- **Background/Cleanup/Reports Controllers:** Disabled to prevent background reconciliation overhead on developer workstations.
-- **Webhook Status:** Webhook configuration `kyverno-resource-validating-webhook-cfg` registered and servicing endpoints at `10.244.0.6:9443` with `failurePolicy: Fail`. Evidence recorded in [`webhook-readiness.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/webhook-readiness.txt).
+- **Controller Scoping:** Background, cleanup, and reports controllers disabled to minimize host footprint.
+- **Webhook Status:** Webhook configuration `kyverno-resource-validating-webhook-cfg` registered and active on port 9443 with `failurePolicy: Fail`. Evidence recorded in [`webhook-readiness.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/webhook-readiness.txt).
 
-### 5.2 Namespaced Security Policies
-Deployed to namespace `forgeops-g09-kyverno` defined in [`security/admission/namespaces/kyverno-namespace.yaml`](file:///c:/Project/ForgeOps/security/admission/namespaces/kyverno-namespace.yaml):
+### 5.2 Modern CEL-Based Policy Migration (`policies.kyverno.io/v1`)
+All 4 G09.4 policies were migrated from the deprecated `kyverno.io/v1` `Policy` API to `policies.kyverno.io/v1` `NamespacedValidatingPolicy`:
 
 1. **Policy A — Immutable Image Digest:**
    - File: [`security/admission/kyverno/policies/policy-a-immutable-digest.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-a-immutable-digest.yaml)
-   - Rule: `require-image-digest`
-   - Enforcement: Pattern match `image: "*@sha256:*"` on all containers and initContainers.
+   - Rule Name: `require-image-digest`
+   - Scope: `pods` and `deployments` in `forgeops-g09-kyverno`
+   - CEL Expression: Enforces `c.image.contains('@sha256:')` across containers, initContainers, and ephemeralContainers.
 2. **Policy B — Disallow hostPath Volumes:**
    - File: [`security/admission/kyverno/policies/policy-b-disallow-hostpath.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-b-disallow-hostpath.yaml)
-   - Rule: `disallow-hostpath`
-   - Enforcement: Exclusion pattern `=(volumes): [ { X(hostPath): "*" } ]` strictly rejecting any pod referencing host filesystem storage.
-3. **Policy C — Disallow Privileged Containers & Escalation:**
+   - Rule Name: `disallow-hostpath`
+   - Scope: `pods` and `deployments` in `forgeops-g09-kyverno`
+   - CEL Expression: Enforces `!has(v.hostPath) || v.hostPath == null` across all volumes.
+3. **Policy C — Disallow Privileged Containers & Privilege Escalation:**
    - File: [`security/admission/kyverno/policies/policy-c-disallow-privileged.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-c-disallow-privileged.yaml)
-   - Rule: `disallow-privileged-and-escalation`
-   - Enforcement: Enforces `privileged: false` and `allowPrivilegeEscalation: false`.
+   - Rule Name: `disallow-privileged-workloads`
+   - Scope: `pods` and `deployments` in `forgeops-g09-kyverno`
+   - CEL Expression: Enforces `privileged == false` and `allowPrivilegeEscalation == false`.
 4. **Policy D — Enforce Restricted Security Context:**
    - File: [`security/admission/kyverno/policies/policy-d-restricted-security-context.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-d-restricted-security-context.yaml)
-   - Rule: `enforce-restricted-security-context`
-   - Enforcement: Enforces `runAsNonRoot: true`, `drop: [ALL]`, and `seccompProfile.type: RuntimeDefault`.
+   - Rule Name: `require-restricted-security-context`
+   - Scope: `pods` and `deployments` in `forgeops-g09-kyverno`
+   - CEL Expression: Enforces `runAsNonRoot == true`, `seccompProfile.type == 'RuntimeDefault'`, `allowPrivilegeEscalation == false`, and `capabilities.drop.exists(d, d == 'ALL')`.
 
-### 5.3 Live Admission Webhook Rejection Evidence
+### 5.3 Live Admission Webhook Rejection Evidence (Pods & Workload Controllers)
 All fixtures are stored in [`tests/fixtures/security/admission/kyverno/`](file:///c:/Project/ForgeOps/tests/fixtures/security/admission/kyverno/):
 
-| Test Case | Fixture | Target Violation | Live Admission Result | Evidence File |
-|---|---|---|---|---|
-| **KYV-01** | `fail-mutable-tag.yaml` | Mutable image tag (`alpine:3.20` without digest) | **REJECTED (Webhook Denial)**: `admission webhook "validate.kyverno.svc-fail" denied the request: [require-image-digest] An immutable image digest (@sha256:...) is required.` | [`kyverno-mutable-tag-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-mutable-tag-rejection.txt) |
-| **KYV-02** | `fail-hostpath.yaml` | Mounts host filesystem via `hostPath` | **REJECTED (Webhook Denial)**: `admission webhook "validate.kyverno.svc-fail" denied the request: [disallow-hostpath] hostPath volumes are prohibited in ForgeOps.` | [`kyverno-hostpath-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-hostpath-rejection.txt) |
-| **KYV-03** | `fail-privileged.yaml` | `privileged: true` | **REJECTED (Webhook Denial)**: `admission webhook "validate.kyverno.svc-fail" denied the request: [disallow-privileged-and-escalation] Privileged mode and privilege escalation are strictly forbidden.` | [`kyverno-privileged-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-privileged-rejection.txt) |
-| **KYV-04** | `fail-security-context.yaml` | Missing `drop: [ALL]`, missing `runAsNonRoot`, missing seccomp | **REJECTED (Webhook Denial)**: `admission webhook "validate.kyverno.svc-fail" denied the request: [enforce-restricted-security-context] Pods must enforce runAsNonRoot=true, drop all capabilities, and set seccomp RuntimeDefault.` | [`kyverno-security-context-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-security-context-rejection.txt) |
-| **KYV-05** | `pass-compliant-workload.yaml` | Pinned digest `@sha256:*`, non-root UID 10001, `readOnlyRootFilesystem`, seccomp `RuntimeDefault`, capabilities dropped | **ADMITTED & EXECUTED**: Pod created, completed cleanly (`Status: Succeeded`, `ExitCode: 0`, log: `"Kyverno compliant workload admitted and running"`) | [`kyverno-compliant-acceptance.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-compliant-acceptance.txt) |
+| Test Case | Kind | Fixture | Target Violation | Live Admission Result | Repository Evidence Artifact |
+|---|---|---|---|---|---|
+| **KYV-01** | Pod | `fail-mutable-tag.yaml` | Mutable image tag (`alpine:3.20` without digest) | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest failed` | [`kyverno-mutable-tag-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-mutable-tag-rejection.txt) |
+| **KYV-02** | Pod | `fail-hostpath.yaml` | Mounts host filesystem via `hostPath` | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-hostpath failed` | [`kyverno-hostpath-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-hostpath-rejection.txt) |
+| **KYV-03** | Pod | `fail-privileged.yaml` | `privileged: true` | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-privileged-workloads failed` | [`kyverno-privileged-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-privileged-rejection.txt) |
+| **KYV-04** | Pod | `fail-security-context.yaml` | Missing `drop: [ALL]`, missing `runAsNonRoot`, missing seccomp | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-restricted-security-context failed` | [`kyverno-security-context-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-security-context-rejection.txt) |
+| **KYV-05** | Pod | `pass-compliant-workload.yaml` | Pinned digest `@sha256:*`, non-root UID 10001, `readOnlyRootFilesystem`, seccomp `RuntimeDefault`, capabilities dropped | **ADMITTED & EXECUTED**: Pod created, completed cleanly (`Status: Completed`, `ExitCode: 0`, log: `"Kyverno compliant workload admitted and running"`) | [`kyverno-compliant-acceptance.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-compliant-acceptance.txt) |
+| **KYV-06** | Deployment | `fail-deployment-insecure.yaml` | Insecure Deployment: mutable tag & missing security context | **REJECTED (Webhook Denial)**: `admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy require-image-digest failed; Policy disallow-privileged-workloads failed; Policy require-restricted-security-context failed` | [`kyverno-deployment-rejection.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-deployment-rejection.txt) |
+| **KYV-07** | Deployment | `pass-deployment-compliant.yaml` | Compliant Deployment: pinned digest, non-root 10001, seccomp RuntimeDefault, drop ALL | **ADMITTED & EXECUTED**: Deployment admitted, rollout succeeded, pod reached `1/1 Running & Ready` | [`kyverno-deployment-acceptance.txt`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/kyverno-deployment-acceptance.txt) |
 
-**Verification of Zero Pod Leakage:**
-`kubectl get pods -n forgeops-g09-kyverno` confirms exactly 0 rejected pods were created.
+**Verification of Zero Workload Leakage:**
+`kubectl get deployments,pods -n forgeops-g09-kyverno` confirms exactly 0 rejected deployments or pods were created.
 
 ---
 
-## 6. Static Analysis & CLI Policy Validation
+## 6. Deprecation Analysis & Static Policy Validation
 
-In addition to live dynamic admission testing, all Kyverno policies were statically validated using the pinned `kyverno` CLI v1.19.2:
+All 4 migrated `NamespacedValidatingPolicy` definitions were evaluated using the pinned `kyverno` CLI v1.19.2 with `--warnings-as-errors`:
 
 ```bash
 kyverno apply security/admission/kyverno/policies/ \
-  --resource tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml
+  --resource tests/fixtures/security/admission/kyverno/pass-compliant-workload.yaml \
+  --warnings-as-errors
 ```
 Output:
 ```text
@@ -145,31 +155,30 @@ Applying 4 policy rule(s) to 1 resource(s)...
 pass: 4, fail: 0, warn: 0, error: 0, skip: 0
 ```
 
-Each negative fixture was evaluated against the CLI engine and demonstrated expected policy violations prior to live cluster execution.
+**Deprecation Result:** Exactly **0 deprecation warnings** produced. The migration away from legacy `kyverno.io/v1` `Policy` to `policies.kyverno.io/v1` `NamespacedValidatingPolicy` completely eliminated all legacy-policy deprecation warnings.
 
 ---
 
 ## 7. Test Automation & CI Integration
 
-### 7.1 Dedicated Admission Test Runner
-Created [`scripts/test_g09_admission.py`](file:///c:/Project/ForgeOps/scripts/test_g09_admission.py):
-- Verifies integrity and authenticity of admission evidence files.
-- Automatically tests live PSA and Kyverno admission against the cluster when reachable.
-- Result: **10/10 suites PASSED (100%)**.
+### 7.1 Standalone Admission Test Runner
+Implemented in [`scripts/test_g09_admission.py`](file:///c:/Project/ForgeOps/scripts/test_g09_admission.py) with dual-mode semantics:
+- **`--mode live`:** Requires a reachable cluster context (`kind-forgeops-g09-security`). Executes live API server and webhook tests against Pods and Deployments. Fails with non-zero exit code if cluster is absent.
+- **`--mode evidence`:** Validates repository-preserved evidence artifacts (13 files), verifies content assertions, and clearly reports `LIVE ADMISSION TESTS NOT EXECUTED` in evidence-only environments like standard CI runners.
 
 ### 7.2 Unified Security Suite
 Updated [`scripts/test_g09_security.py`](file:///c:/Project/ForgeOps/scripts/test_g09_security.py):
 - Tests 1–16: G09.1, G09.2, and G09.3 security checks (Trivy, Checkov, Hadolint, Semgrep, Gitleaks, CSRF).
-- Test 17: Kyverno policy manifest validation.
-- Test 18: Kyverno CLI fixture compliance verification.
-- Test 19: PSA namespace and fixture validation.
-- Test 20: Authentic live admission evidence artifact integrity.
+- Test 17: Kyverno CEL policy syntax and `policies.kyverno.io/v1` schema validation.
+- Test 18: Kyverno CLI synthetic rejection & compliant acceptance with `--warnings-as-errors` across Pods and Deployments.
+- Test 19: PSA namespace labels (pinned to `v1.34`) and fixture validation.
+- Test 20: Repository-preserved admission evidence artifact verification (13 files).
 - Result: **20/20 checks PASSED (100%)**.
 
-### 7.3 GitHub Actions Workflow Integration
+### 7.3 CI Workflow Integration
 Updated [`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml):
-- Enhanced job `security-policy-validate` to run `scripts/test_g09_admission.py` and Kyverno CLI evaluations.
-- Preserved all 53 pinned action SHAs and least-privilege security permissions.
+- Job `security-policy-validate` executes `test_g09_admission.py --mode evidence` and Kyverno CLI evaluations with `--warnings-as-errors`.
+- Preserved all 53 action SHAs and least-privilege security permissions.
 
 ---
 
@@ -188,9 +197,9 @@ Full regression testing across prior gates confirmed zero platform degradation:
 
 ---
 
-## 9. Cluster Teardown / Cleanup Instructions
+## 9. Safe Teardown Instructions (Post-Review)
 
-In accordance with gate instructions, the cluster `forgeops-g09-security` was **not automatically destroyed** to facilitate independent inspection and audit. When the evaluation is complete, operators may safely tear down the disposable resources with the following commands:
+In accordance with gate instructions, the cluster `forgeops-g09-security` was **not automatically destroyed**, allowing for operator verification. When evaluation is concluded, operators may safely tear down the disposable resources with the following commands:
 
 ```bash
 # Delete the dedicated G09.4 admission cluster
@@ -206,14 +215,16 @@ rm -f ~/.kube/config-g09-security
 
 | Requirement | Implementation Artifact | Verification Evidence | Status |
 |---|---|---|---|
-| Dedicated security cluster | [`platform/kind/cluster-config-g09-security.yaml`](file:///c:/Project/ForgeOps/platform/kind/cluster-config-g09-security.yaml) | Cluster running on `127.0.0.1:6444` | **PASSED** |
-| Pod Security Admission Restricted | [`security/admission/namespaces/psa-namespace.yaml`](file:///c:/Project/ForgeOps/security/admission/namespaces/psa-namespace.yaml) | Live HTTP 403 rejection logs | **PASSED** |
-| Kyverno admission controller | [`security/admission/kyverno/helm/values-dev.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/helm/values-dev.yaml) | Validating webhook active on 9443 | **PASSED** |
-| Kyverno Policy A (Image digest) | [`security/admission/kyverno/policies/policy-a-immutable-digest.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-a-immutable-digest.yaml) | `kyverno-mutable-tag-rejection.txt` | **PASSED** |
-| Kyverno Policy B (hostPath denial)| [`security/admission/kyverno/policies/policy-b-disallow-hostpath.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-b-disallow-hostpath.yaml) | `kyverno-hostpath-rejection.txt` | **PASSED** |
-| Kyverno Policy C (Privileged denial)| [`security/admission/kyverno/policies/policy-c-disallow-privileged.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-c-disallow-privileged.yaml) | `kyverno-privileged-rejection.txt` | **PASSED** |
-| Kyverno Policy D (SecurityContext) | [`security/admission/kyverno/policies/policy-d-restricted-security-context.yaml`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/policy-d-restricted-security-context.yaml) | `kyverno-security-context-rejection.txt` | **PASSED** |
-| Live PSA test suite | [`tests/fixtures/security/admission/psa/`](file:///c:/Project/ForgeOps/tests/fixtures/security/admission/psa/) | 4 negative rejected, 1 positive completed | **PASSED** |
-| Live Kyverno test suite | [`tests/fixtures/security/admission/kyverno/`](file:///c:/Project/ForgeOps/tests/fixtures/security/admission/kyverno/) | 4 negative rejected, 1 positive completed | **PASSED** |
-| Python test runners | [`scripts/test_g09_admission.py`](file:///c:/Project/ForgeOps/scripts/test_g09_admission.py), [`scripts/test_g09_security.py`](file:///c:/Project/ForgeOps/scripts/test_g09_security.py) | 10/10 and 20/20 suites passed | **PASSED** |
-| CI Pipeline checks | [`.github/workflows/ci.yml`](file:///c:/Project/ForgeOps/.github/workflows/ci.yml) | Integrated into `security-policy-validate` | **PASSED** |
+| PSA version explicitly pinned to `v1.34` | [`security/admission/namespaces/psa-namespace.yaml`](file:///c:/Project/ForgeOps/security/admission/namespaces/psa-namespace.yaml) | Verified in `test_g09_security.py` & live cluster | **PASSED** |
+| Kyverno CEL migration (`NamespacedValidatingPolicy`) | [`security/admission/kyverno/policies/`](file:///c:/Project/ForgeOps/security/admission/kyverno/policies/) | Applied in `forgeops-g09-kyverno`, zero deprecations | **PASSED** |
+| Zero Kyverno deprecation warnings | Policies under `policies.kyverno.io/v1` | `kyverno apply --warnings-as-errors` passed clean | **PASSED** |
+| Live PSA negative rejections | [`tests/fixtures/security/admission/psa/`](file:///c:/Project/ForgeOps/tests/fixtures/security/admission/psa/) | 4/4 rejected with HTTP 403 Forbidden | **PASSED** |
+| Live PSA compliant workload | `pass-restricted-workload.yaml` | Admitted, ran, exited 0 | **PASSED** |
+| Live Kyverno negative rejections (Pods) | [`tests/fixtures/security/admission/kyverno/`](file:///c:/Project/ForgeOps/tests/fixtures/security/admission/kyverno/) | 4/4 rejected by admission webhook | **PASSED** |
+| Live Kyverno compliant Pod | `pass-compliant-workload.yaml` | Admitted, ran, exited 0 | **PASSED** |
+| Insecure Deployment rejection | `fail-deployment-insecure.yaml` | Rejected by webhook at admission time | **PASSED** |
+| Compliant Deployment acceptance | `pass-deployment-compliant.yaml` | Admitted, rolled out, 1/1 Ready | **PASSED** |
+| Explicit test runner modes | [`scripts/test_g09_admission.py`](file:///c:/Project/ForgeOps/scripts/test_g09_admission.py) | `--mode live` and `--mode evidence` supported | **PASSED** |
+| Evidence regenerated post-migration | [`docs/evidence/G09/admission-evidence/`](file:///c:/Project/ForgeOps/docs/evidence/G09/admission-evidence/) | 13 updated evidence files | **PASSED** |
+| Platform regressions clean | G09, G12, G13, G14 test suites | All suites passed 100% | **PASSED** |
+| Main infrastructure untouched | `kind-forgeops` & PostgreSQL PVs | Verified intact | **PASSED** |

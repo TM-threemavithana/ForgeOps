@@ -1,0 +1,64 @@
+# ForgeOps Gate G09.4 Live Admission Evidence: Controller-Level (Deployment) Compliant Acceptance
+Fixture: tests/fixtures/security/admission/kyverno/pass-deployment-compliant.yaml
+Description: Compliant Deployment with immutable image digest and restricted security context
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 06:25:11 UTC
+Exit Code: 0 (Admission Webhook Accepted & Rollout Succeeded)
+
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/pass-deployment-compliant.yaml
+
+--- Rollout Status ---
+Waiting for deployment "test-kyverno-pass-deployment" rollout to finish: 0 of 1 updated replicas are available...
+deployment "test-kyverno-pass-deployment" successfully rolled out
+
+--- Deployment Status ---
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                                                                SELECTOR
+test-kyverno-pass-deployment   1/1     1            1           4s    app          alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc   app=test-kyverno-pass-deployment
+
+
+--- Running Pod Status (1/1 Ready) ---
+NAME                                           READY   STATUS    RESTARTS   AGE   IP           NODE                                  NOMINATED NODE   READINESS GATES
+test-kyverno-pass-deployment-848785f8c-fjnvn   1/1     Running   0          4s    10.244.0.9   forgeops-g09-security-control-plane   <none>           <none>
+
+
+--- Deployment Describe ---
+Name:                   test-kyverno-pass-deployment
+Namespace:              forgeops-g09-kyverno
+CreationTimestamp:      Wed, 18 Nov 2026 11:55:07 +0530
+Labels:                 app.kubernetes.io/name=test-kyverno-pass-deployment
+                        forgeops.dev/fixture=positive-controller
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=test-kyverno-pass-deployment
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=test-kyverno-pass-deployment
+  Containers:
+   app:
+    Image:      alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+    Port:       <none>
+    Host Port:  <none>
+    Command:
+      sh
+      -c
+      echo 'Kyverno compliant deployment running' && sleep 3600
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   test-kyverno-pass-deployment-848785f8c (1/1 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  4s    deployment-controller  Scaled up replica set test-kyverno-pass-deployment-848785f8c from 0 to 1
+

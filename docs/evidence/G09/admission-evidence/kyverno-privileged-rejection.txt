@@ -1,15 +1,18 @@
-$ kubectl apply -f tests/fixtures/security/admission/kyverno/fail-privileged.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
-Error from server: error when creating "tests/fixtures/security/admission/kyverno/fail-privileged.yaml": admission webhook "validate.kyverno.svc-fail" denied the request: 
+# ForgeOps Gate G09.4 Live Admission Evidence: Kyverno CEL Webhook Rejection
+Policy: disallow-privileged-workloads
+Fixture: tests/fixtures/security/admission/kyverno/fail-privileged.yaml
+Description: Admission Rejection of Privileged Container
+Namespace: forgeops-g09-kyverno
+Date: 2026-11-18 06:24:55 UTC
+Exit Code: 1 (Admission Webhook Denied)
 
-resource Pod/forgeops-g09-kyverno/test-kyverno-fail-privileged was blocked due to the following policies 
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/kyverno/fail-privileged.yaml
 
-disallow-privileged-workloads:
-  check-privileged-and-escalation: 'validation error: Privileged containers and allowPrivilegeEscalation=true are strictly prohibited. rule check-privileged-and-escalation failed at path /spec/containers/0/securityContext/privileged/'
-require-restricted-security-context:
-  check-security-context: 'validation error: Workloads must run as non-root with capabilities dropped to ALL and seccomp RuntimeDefault. rule check-security-context failed at path /spec/securityContext/runAsNonRoot/'
+--- Raw Webhook Response ---
+Error from server: error when creating "/mnt/c/Project/ForgeOps/tests/fixtures/security/admission/kyverno/fail-privileged.yaml": admission webhook "nvpol.validate.kyverno.svc-fail" denied the request: Policy disallow-privileged-workloads failed: Privileged containers are strictly forbidden in ForgeOps.; Policy require-restricted-security-context failed: Workloads must enforce runAsNonRoot=true at the pod or container securityContext.
 
-Exit Code: 1
-Workload Created: False
-Policy Responsible: disallow-privileged-workloads & require-restricted-security-context
-Admission Controller: Kyverno Admission Webhook (validate.kyverno.svc-fail)
-Enforcement Mode: Enforce (Blocking admission)
+
+--- Zero-Pod-Leakage Verification ---
+Pods in forgeops-g09-kyverno:
+

@@ -1,19 +1,80 @@
-$ kubectl apply -f tests/fixtures/security/admission/psa/pass-restricted-workload.yaml --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
-pod/test-psa-pass-restricted created
+# ForgeOps Gate G09.4 Live Admission Evidence: PSA Restricted Workload Compliant Acceptance
+Fixture: tests/fixtures/security/admission/psa/pass-restricted-workload.yaml
+Namespace: forgeops-g09-psa
+Date: 2026-11-18 06:24:52 UTC
+Exit Code: 0 (Admission Accepted & Executed)
 
-$ kubectl get pod test-psa-pass-restricted -n forgeops-g09-psa -o wide --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+--- Command Executed ---
+kubectl create -f tests/fixtures/security/admission/psa/pass-restricted-workload.yaml
+
+--- Pod Execution Status ---
 NAME                       READY   STATUS      RESTARTS   AGE   IP           NODE                                  NOMINATED NODE   READINESS GATES
-test-psa-pass-restricted   0/1     Completed   0          16s   10.244.0.5   forgeops-g09-security-control-plane   <none>           <none>
+test-psa-pass-restricted   0/1     Completed   0          7s    10.244.0.7   forgeops-g09-security-control-plane   <none>           <none>
 
-$ kubectl logs test-psa-pass-restricted -n forgeops-g09-psa --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
+
+--- Pod Logs ---
 PSA Restricted workload compliant
 
-$ kubectl get pod test-psa-pass-restricted -n forgeops-g09-psa -o jsonpath='{.spec.securityContext}' --kubeconfig ~/.kube/config-g09-security --context kind-forgeops-g09-security
-{"fsGroup":10001,"runAsGroup":10001,"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}}
 
-Exit Code: 0
-Workload Created: True
-Workload Status: Completed (Exit code 0)
-Workload Output: PSA Restricted workload compliant
-Policy Layer: Kubernetes Built-in Pod Security Admission (PSA Restricted)
-Verification: Admitted, healthy non-root execution with seccomp RuntimeDefault, allowPrivilegeEscalation=false, capabilities.drop=[ALL].
+--- Pod Describe Details ---
+Name:             test-psa-pass-restricted
+Namespace:        forgeops-g09-psa
+Priority:         0
+Service Account:  default
+Node:             forgeops-g09-security-control-plane/172.18.0.2
+Start Time:       Wed, 18 Nov 2026 11:54:45 +0530
+Labels:           app.kubernetes.io/name=test-psa-pass-restricted
+                  forgeops.dev/fixture=positive
+Annotations:      <none>
+Status:           Running
+SeccompProfile:   RuntimeDefault
+IP:               10.244.0.7
+IPs:
+  IP:  10.244.0.7
+Containers:
+  test-container:
+    Container ID:  containerd://2742559256edb94c98056308836a8386fb378e2e28cbd8a9fb694ab03a6b568d
+    Image:         alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+    Image ID:      docker.io/library/alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo 'PSA Restricted workload compliant' && sleep 5
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 18 Nov 2026 11:54:46 +0530
+      Finished:     Wed, 18 Nov 2026 11:54:51 +0530
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-87j6j (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-87j6j:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  6s    default-scheduler  Successfully assigned forgeops-g09-psa/test-psa-pass-restricted to forgeops-g09-security-control-plane
+  Normal  Pulled     5s    kubelet            Container image "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc" already present on machine
+  Normal  Created    5s    kubelet            Created container: test-container
+  Normal  Started    5s    kubelet            Started container test-container
+
