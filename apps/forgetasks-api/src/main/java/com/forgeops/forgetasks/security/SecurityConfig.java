@@ -72,6 +72,7 @@ public class SecurityConfig {
                 return token;
             }
         };
+        csrfRequestHandler.setCsrfRequestAttributeName(null);
 
         http
                 .cors(Customizer.withDefaults())
@@ -190,9 +191,13 @@ public class SecurityConfig {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
 
+            String detail = (accessDeniedException != null && accessDeniedException.getMessage() != null)
+                    ? accessDeniedException.getClass().getSimpleName() + ": " + accessDeniedException.getMessage()
+                    : "You do not possess the required permissions to access this resource.";
+
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.FORBIDDEN,
-                    "You do not possess the required permissions to access this resource."
+                    detail
             );
             problem.setTitle("Forbidden");
             problem.setType(URI.create("https://forgeops.local/errors/forbidden"));

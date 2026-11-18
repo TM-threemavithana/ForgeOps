@@ -15,6 +15,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
@@ -304,9 +305,12 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, auth)
                         .header(headerName, csrfToken)
                         .header("X-XSRF-TOKEN", csrfToken)
+                        .header(HttpHeaders.COOKIE, "XSRF-TOKEN=" + csrfToken)
                         .cookie(xsrfCookie)
+                        .cookie(new jakarta.servlet.http.Cookie("XSRF-TOKEN", csrfToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("API Client Project", "Created via CSRF flow"))))
+                .andDo(print())
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("API Client Project"));
     }
