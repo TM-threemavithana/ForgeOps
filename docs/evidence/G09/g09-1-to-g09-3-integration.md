@@ -118,7 +118,7 @@ Because ForgeTasks API enforces fail-closed CSRF protection:
 2. **Obtaining a Token**: Call `GET /api/v1/csrf`. The response contains JSON metadata and sets the `XSRF-TOKEN` cookie:
    ```json
    {
-     "token": "495f2425-91f8-45e0-91a6-...",
+     "token": "<sample-csrf-uuid>",
      "headerName": "X-XSRF-TOKEN",
      "parameterName": "_csrf"
    }
