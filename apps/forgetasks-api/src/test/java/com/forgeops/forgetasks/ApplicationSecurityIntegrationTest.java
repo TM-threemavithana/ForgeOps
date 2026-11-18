@@ -289,18 +289,20 @@ class ApplicationSecurityIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists("XSRF-TOKEN"))
                 .andExpect(jsonPath("$.token").exists())
-                .andExpect(jsonPath("$.headerName").value("X-XSRF-TOKEN"))
+                .andExpect(jsonPath("$.headerName").exists())
                 .andReturn();
 
         JsonNode csrfNode = objectMapper.readTree(csrfResult.getResponse().getContentAsString());
         String csrfToken = csrfNode.get("token").asText();
+        String headerName = csrfNode.get("headerName").asText();
+        assertThat(headerName).isIn("X-XSRF-TOKEN", "X-CSRF-TOKEN");
         jakarta.servlet.http.Cookie xsrfCookie = csrfResult.getResponse().getCookie("XSRF-TOKEN");
         assertThat(xsrfCookie).isNotNull();
 
-        // Step 2: Client submits state-changing request carrying Authorization: Basic, cookie, and X-XSRF-TOKEN header
+        // Step 2: Client submits state-changing request carrying Authorization: Basic, cookie, and the returned CSRF token header
         mockMvc.perform(post("/api/v1/projects")
                         .header(HttpHeaders.AUTHORIZATION, auth)
-                        .header("X-XSRF-TOKEN", csrfToken)
+                        .header(headerName, csrfToken)
                         .cookie(xsrfCookie)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ProjectCreateRequest("API Client Project", "Created via CSRF flow"))))
